@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="blueskyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0085FF" />
+    </linearGradient>
+    <linearGradient id="threadsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C084FC" />
+      <stop offset="100%" stop-color="#A855F7" />
+    </linearGradient>
+    <linearGradient id="crossBridge" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#0085FF" />
+      <stop offset="50%" stop-color="#EC4899" />
+      <stop offset="100%" stop-color="#A855F7" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded rectangle -->
+  <rect width="64" height="64" rx="16" fill="url(#bgGrad)" stroke="#334155" stroke-width="1.5" />
+
+  <!-- Left: Bluesky Wing Motif -->
+  <path d="M 28 32 C 26 21, 14 17, 12 24 C 10 31, 20 37, 28 34 C 20 39, 11 46, 15 52 C 19 56, 26 50, 29 37 Z" 
+        fill="url(#blueskyGrad)" 
+        filter="url(#glow)"
+        opacity="0.95" />
+
+  <!-- Right: Threads Spiral / Loop Motif -->
+  <path d="M 36 32 C 38 21, 50 17, 52 24 C 54 31, 44 37, 36 34 C 44 39, 53 46, 49 52 C 45 56, 38 50, 35 37 Z" 
+        fill="url(#threadsGrad)" 
+        filter="url(#glow)"
+        opacity="0.95" />
+
+  <!-- Center Cross-Connecting Pulse -->
+  <circle cx="32" cy="33" r="4.5" fill="url(#crossBridge)" filter="url(#glow)" />
+  <circle cx="32" cy="33" r="2" fill="#FFFFFF" />
+</svg>

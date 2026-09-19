@@ -1,0 +1,4 @@
+# CrossPost Desktop Studio (Bluesky & Threads)
+# デスクトップ専用GUI用パッケージ（推奨）
+# ※ インストールなしでもPython標準ライブラリのみで起動可能です
+pywebview>=5.0.0

@@ -1,0 +1,8 @@
+{
+  "name": "Remix Bluesky \u0026 Threads Cross-Poster",
+  "description": "Bluesky と Threads への同時投稿Webスタジオ。文字数自動分割（ツリー投稿）、画像添付、Bluesky/Threadsリアルタイムプレビューパネル、下書き自動一時保存機能。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+:root {
+  --accent-primary: #0284c7;
+  --accent-hover: #0369a1;
+  --accent-light: #38bdf8;
+  --accent-subtle-bg: rgba(2, 132, 199, 0.12);
+  --accent-subtle-border: rgba(56, 189, 248, 0.3);
+  --accent-glow: rgba(2, 132, 199, 0.4);
+  --accent-gradient: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  --accent-badge-bg: rgba(2, 132, 199, 0.15);
+  --accent-badge-text: #38bdf8;
+}
+
+/* アクセントカラー対応の動的ユーティリティクラス */
+.btn-accent {
+  background: var(--accent-gradient);
+  color: #ffffff;
+  box-shadow: 0 4px 20px var(--accent-glow);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-accent:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 24px var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.btn-accent:active:not(:disabled) {
+  transform: translateY(0px);
+}
+
+.border-accent {
+  border-color: var(--accent-subtle-border);
+}
+
+.border-accent-primary {
+  border-color: var(--accent-primary);
+}
+
+.bg-accent-subtle {
+  background-color: var(--accent-subtle-bg);
+}
+
+.text-accent-light {
+  color: var(--accent-light);
+}
+
+.text-accent-primary {
+  color: var(--accent-primary);
+}
+
+.badge-accent {
+  background-color: var(--accent-badge-bg);
+  color: var(--accent-badge-text);
+  border: 1px solid var(--accent-subtle-border);
+}
+
+.focus-ring-accent:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* カスタムスクロールバー */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090a0f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}
