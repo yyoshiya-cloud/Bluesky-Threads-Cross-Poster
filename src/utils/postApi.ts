@@ -1589,11 +1589,13 @@ export async function sendThreadsPost(
           throw new Error(`動画「${img.name || '添付動画'}」のサーバー転送に失敗しました。メディアファイルへの参照が切れている可能性があるため、動画を一度削除して再添付の上でお試しください。`);
         }
         const hasMediaId = Boolean(uploadResult.mediaId);
+        const hasPublicUrl = Boolean(uploadResult.publicUrl && isTrulyPublicCdnUrl(uploadResult.publicUrl));
         return {
           name: img.name,
           mediaId: uploadResult.mediaId,
-          dataUrl: img.dataUrl || undefined,
-          publicUrl: (uploadResult.publicUrl && isTrulyPublicCdnUrl(uploadResult.publicUrl)) ? uploadResult.publicUrl : undefined,
+          // mediaIdまたはpublicUrlがある場合は巨大なBase64 dataUrlを省略してHTTPリクエストペイロードを軽量化 (エッジ/プロキシの4.5MB制限による404/413防止)
+          dataUrl: (hasMediaId || hasPublicUrl) ? undefined : img.dataUrl,
+          publicUrl: hasPublicUrl ? uploadResult.publicUrl : undefined,
           thumbnailUrl: img.thumbnailUrl,
           mediaType: img.mediaType || (img.dataUrl?.startsWith('data:video') ? 'video' : 'image'),
           mimeType: img.mimeType,
