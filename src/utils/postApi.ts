@@ -1585,8 +1585,8 @@ export async function sendThreadsPost(
         }
         const isVideo = img.mediaType === 'video' || (img.dataUrl?.startsWith('data:video'));
         const uploadResult = await uploadMediaItem(img, signal);
-        if (isVideo && !uploadResult.mediaId && !img.file) {
-          throw new Error(`動画「${img.name || '添付動画'}」の本体ファイルが見つかりません。ページの再読み込み等で動画ファイルへの参照が切れているため、動画を一度削除して再添付してください。`);
+        if (isVideo && !uploadResult.mediaId) {
+          throw new Error(`動画「${img.name || '添付動画'}」のサーバー転送に失敗しました。メディアファイルへの参照が切れている可能性があるため、動画を一度削除して再添付の上でお試しください。`);
         }
         const hasMediaId = Boolean(uploadResult.mediaId);
         return {
@@ -1627,36 +1627,25 @@ export async function sendThreadsPost(
     if (contentType.includes('application/json')) {
       data = await res.json().catch(() => ({}));
     } else {
-      console.warn('Non-JSON response from /api/threads/post. Falling back to direct Meta Graph API (with media)...');
-      return await directPostToThreads(credentials, posts, images, topic, signal);
+      const nonJsonText = await res.text().catch(() => '');
+      const errMsg = `サーバーエラー (${res.status}): ${nonJsonText.slice(0, 150) || '無効なレスポンス形式'}`;
+      recordCommError({
+        platform: 'Threads',
+        action: 'Threadsスレッド投稿',
+        endpoint: '/api/threads/post',
+        httpStatus: res.status,
+        errorMessage: errMsg,
+        requestSummary: `スレッド数: ${posts.length}件, ${formatMediaSummary(images)}, トピック: ${topic ? `#${topic}` : 'なし'}`,
+      });
+      return {
+        success: false,
+        error: errMsg,
+      };
     }
 
     if (!res.ok || !data.success) {
-      // サーバーが具体的なエラーメッセージ（Meta APIエラーなど）を返している場合は、その正確なエラーを報告
+      // サーバーが返した具体的なエラーメッセージ（Meta APIエラー・メディア欠落警告等）を報告
       const errMsg = data.error || `Threads投稿に失敗しました (${res.status})`;
-      
-      // 404 (エンドポイント自体が見つからない) の場合のみブラウザ直接通信へフォールバック
-      if (res.status === 404) {
-        console.warn(`[Threads Post] Backend endpoint 404. Falling back to direct Meta Graph API...`);
-        try {
-          return await directPostToThreads(credentials, posts, images, topic, signal);
-        } catch (directErr: any) {
-          if (signal?.aborted) throw directErr;
-          const directMsg = directErr.message || errMsg;
-          recordCommError({
-            platform: 'Threads',
-            action: 'Threadsスレッド投稿',
-            endpoint: '/api/threads/post',
-            httpStatus: res.status,
-            errorMessage: directMsg,
-            requestSummary: `スレッド数: ${posts.length}件, ${formatMediaSummary(images)}, トピック: ${topic ? `#${topic}` : 'なし'}`,
-          });
-          return {
-            success: false,
-            error: directMsg,
-          };
-        }
-      }
 
       recordCommError({
         platform: 'Threads',
@@ -1692,23 +1681,17 @@ export async function sendThreadsPost(
     if (signal?.aborted) {
       throw err;
     }
-    console.warn('[Threads Post] Backend fetch exception. Falling back to direct Meta Graph API (with media):', err);
-    try {
-      return await directPostToThreads(credentials, posts, images, topic, signal);
-    } catch (directErr: any) {
-      if (signal?.aborted) throw directErr;
-      const errMsg = `Threads通信エラー: ${directErr.message || err.message || '送信できませんでした'}`;
-      recordCommError({
-        platform: 'Threads',
-        action: 'Threadsスレッド投稿',
-        endpoint: '/api/threads/post',
-        errorMessage: errMsg,
-        requestSummary: `スレッド数: ${posts.length}件, ${formatMediaSummary(images)}, トピック: ${topic ? `#${topic}` : 'なし'}`,
-      });
-      return {
-        success: false,
-        error: errMsg,
-      };
-    }
+    const errMsg = `Threads通信エラー: ${err.message || '送信できませんでした'}`;
+    recordCommError({
+      platform: 'Threads',
+      action: 'Threadsスレッド投稿',
+      endpoint: '/api/threads/post',
+      errorMessage: errMsg,
+      requestSummary: `スレッド数: ${posts.length}件, ${formatMediaSummary(images)}, トピック: ${topic ? `#${topic}` : 'なし'}`,
+    });
+    return {
+      success: false,
+      error: errMsg,
+    };
   }
 }

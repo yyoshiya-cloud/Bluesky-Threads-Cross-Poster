@@ -141,10 +141,10 @@ const mediaStorage = new Map<string, CachedMedia>();
 /**
  * 送信されたメディア情報（mediaIdまたはBase64 dataUrl）からバイナリBufferを取得
  */
-function resolveMediaBuffer(item: { mediaId?: string; dataUrl?: string; mimeType?: string; name?: string; mediaType?: 'image' | 'video' }): { buffer: Buffer; mimeType: string } | null {
+function resolveMediaBuffer(item: { mediaId?: string; dataUrl?: string; mimeType?: string; name?: string; mediaType?: 'image' | 'video'; publicUrl?: string }): { buffer: Buffer; mimeType: string } | null {
   const originalName = item.name || '';
   const ext = originalName.split('.').pop()?.toLowerCase() || '';
-  const isExplicitVideo = item.mediaType === 'video' || ['mp4', 'mov', 'webm', 'm4v'].includes(ext);
+  const isExplicitVideo = item.mediaType === 'video' || (item.mimeType && isVideoMime(item.mimeType)) || ['mp4', 'mov', 'webm', 'm4v'].includes(ext);
 
   if (item.mediaId) {
     const cached = mediaStorage.get(item.mediaId);
@@ -161,7 +161,7 @@ function resolveMediaBuffer(item: { mediaId?: string; dataUrl?: string; mimeType
     const match = item.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
     if (match) {
       const mime = match[1];
-      // サムネイル画像Base64が動画実体として誤認されるのを防ぐガード
+      // サムネイル画像Base64が動画実体として誤認されるのを防ぐガード（動画の場合はdataUrlがポスター画像の可能性がある）
       if (isExplicitVideo && mime.startsWith('image/')) {
         console.warn(`[resolveMediaBuffer] dataUrl is thumbnail image for video ${originalName}, skipping as video payload`);
         return null;
@@ -2313,6 +2313,23 @@ ${cleanText}
         Array.isArray(images) ? images.slice(0, 20) : [],
         baseUrl
       );
+
+      // 添付メディア欠落・動画抜け落ち防止ガード
+      if (safeImages.length > 0 && mediaItems.length === 0) {
+        res.status(400).json({
+          success: false,
+          error: '添付された画像・動画のデータを読み取れませんでした。メディアファイルへの参照が切れている可能性があるため、メディアを一度削除して再添付した上でお試しください。',
+        });
+        return;
+      }
+      if (safeImages.length > 0 && mediaItems.length < safeImages.length) {
+        const missingCount = safeImages.length - mediaItems.length;
+        res.status(400).json({
+          success: false,
+          error: `添付されたメディア${safeImages.length}件中、${missingCount}件のデータ取得に失敗しました。画像・動画無しの状態での誤投稿を防止するため処理を中断しました。メディアを再添付してお試しください。`,
+        });
+        return;
+      }
 
       console.log(`Threads post initiated: ${posts.length} text posts, ${mediaItems.length} media items generated.`);
 
