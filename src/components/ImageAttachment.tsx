@@ -609,23 +609,24 @@ export const ImageAttachment: React.FC<ImageAttachmentProps> = ({
             currentIndex: i + 1,
           });
 
-          const { dataUrl, thumbnailUrl } = await compressImageFileWithThumbnail(file);
+          const { dataUrl, thumbnailUrl, file: jpegFile } = await compressImageFileWithThumbnail(file);
+          const standardizedFile = jpegFile || file;
           const newImgItem: AttachedImage = {
             id: `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 9)}`,
-            name: file.name,
-            size: file.size,
+            name: standardizedFile.name,
+            size: standardizedFile.size,
             dataUrl,
             thumbnailUrl,
-            file, // 生ファイルオブジェクトを保持（デスクトップアプリ/サーバーへのストリーム転送用）
+            file: standardizedFile,
             mediaType: 'image',
-            mimeType: file.type || 'image/jpeg',
+            mimeType: 'image/jpeg',
             alt: '',
             uploadStatus: 'idle',
             uploadProgress: 0,
           };
 
-          // IndexedDBにバックアップ保存
-          saveMediaBlob(newImgItem.id, file, file.name, file.type || 'image/jpeg').catch(() => {});
+          // IndexedDBに標準化JPEGをバックアップ保存
+          saveMediaBlob(newImgItem.id, standardizedFile, standardizedFile.name, 'image/jpeg').catch(() => {});
 
           processedList.push(newImgItem);
         }

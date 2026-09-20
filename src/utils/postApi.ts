@@ -743,8 +743,26 @@ export async function uploadMediaItem(
   // 5. 生ファイルオブジェクトが存在する場合、まずはパブリック外部公開エンドポイント /api/media/upload-public へ送信
   if (fileToUpload) {
     try {
+      const isVideo = img.mediaType === 'video' || (img.dataUrl && img.dataUrl.startsWith('data:video/'));
+      let safeUploadName = img.name || (isVideo ? 'video.mp4' : 'image.jpg');
+
+      // 画像の場合: JPEG / PNG 以外の形式や無拡張子を確実に .jpg に標準化
+      if (!isVideo) {
+        const lowerName = safeUploadName.toLowerCase();
+        if (!lowerName.endsWith('.jpg') && !lowerName.endsWith('.jpeg') && !lowerName.endsWith('.png')) {
+          safeUploadName = `${safeUploadName.replace(/\.[^/.]+$/, '').trim() || 'image'}.jpg`;
+        }
+        // dataUrl からの JPEG Blob 復元を優先（Canvasで既に白背景・sRGB・適正サイズに圧縮済み）
+        if (img.dataUrl && img.dataUrl.startsWith('data:image/')) {
+          const convertedJpeg = dataUrlToBlob(img.dataUrl);
+          if (convertedJpeg) {
+            fileToUpload = convertedJpeg;
+          }
+        }
+      }
+
       const formData = new FormData();
-      formData.append('file', fileToUpload, img.name || 'media');
+      formData.append('file', fileToUpload, safeUploadName);
 
       // 高速外部公開APIを優先
       const uploadRes = await fetch('/api/media/upload-public', {
@@ -1050,8 +1068,13 @@ export function isTrulyPublicCdnUrl(url?: string | null): boolean {
  */
 async function uploadToDirectPublicHost(blob: Blob, name: string, signal?: AbortSignal): Promise<string | null> {
   try {
+    const isVideo = blob.type.startsWith('video/') || ['mp4', 'mov', 'webm'].some(ext => name.toLowerCase().endsWith(`.${ext}`));
+    let safeName = name || (isVideo ? 'video.mp4' : 'image.jpg');
+    if (!isVideo && !safeName.toLowerCase().endsWith('.jpg') && !safeName.toLowerCase().endsWith('.jpeg') && !safeName.toLowerCase().endsWith('.png')) {
+      safeName = `${safeName.replace(/\.[^/.]+$/, '').trim() || 'image'}.jpg`;
+    }
     const formData = new FormData();
-    formData.append('file', blob, name);
+    formData.append('file', blob, safeName);
     const res = await fetch('https://tmpfiles.org/api/v1/upload', {
       method: 'POST',
       body: formData,

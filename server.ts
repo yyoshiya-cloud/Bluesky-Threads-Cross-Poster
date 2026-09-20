@@ -216,6 +216,70 @@ function isVideoMime(mimeType: string): boolean {
 }
 
 /**
+ * バッファのマジックバイトから画像/動画形式を厳格に判定
+ * Threads APIは 画像はJPEGおよびPNGのみ対応（WebP, GIF, HEIC, AVIF等は非対応）
+ */
+function detectMediaFormat(
+  buffer: Buffer,
+  declaredMime?: string,
+  fileName?: string
+): { mimeType: string; ext: string; isVideo: boolean; safeName: string } {
+  const isVideo =
+    isVideoMime(declaredMime || '') ||
+    ['mp4', 'mov', 'webm', 'm4v'].some((vExt) => (fileName || '').toLowerCase().endsWith(`.${vExt}`));
+
+  if (isVideo) {
+    let ext = 'mp4';
+    if (declaredMime?.includes('mov') || declaredMime?.includes('quicktime') || fileName?.toLowerCase().endsWith('.mov')) {
+      ext = 'mov';
+    } else if (declaredMime?.includes('webm') || fileName?.toLowerCase().endsWith('.webm')) {
+      ext = 'webm';
+    }
+    const rawBase = (fileName || 'video')
+      .replace(/\.[^/.]+$/, '')
+      .trim()
+      .replace(/[^a-zA-Z0-9_\-\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/g, '_')
+      .slice(0, 40) || 'video';
+    return {
+      mimeType: declaredMime && declaredMime.startsWith('video/') ? declaredMime : 'video/mp4',
+      ext,
+      isVideo: true,
+      safeName: `${rawBase}.${ext}`,
+    };
+  }
+
+  // 画像の判定: PNG または JPEG のみ許可（Threads API仕様）
+  let ext = 'jpg';
+  let mimeType = 'image/jpeg';
+
+  if (buffer && buffer.length >= 8) {
+    // PNG マジックバイト: 89 50 4E 47
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+      ext = 'png';
+      mimeType = 'image/png';
+    } else if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+      // JPEG マジックバイト: FF D8 FF
+      ext = 'jpg';
+      mimeType = 'image/jpeg';
+    }
+  }
+
+  // ファイル名から元の拡張子を取り除き、確実に .jpg または .png を付与
+  const rawBase = (fileName || 'image')
+    .replace(/\.[^/.]+$/, '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_\-\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/g, '_')
+    .slice(0, 40) || 'image';
+
+  return {
+    mimeType,
+    ext,
+    isVideo: false,
+    safeName: `${rawBase}.${ext}`,
+  };
+}
+
+/**
  * URLがMetaクローラーから認証なしで直接アクセス可能な外部CDNのURLかどうかを判定
  */
 export function isTrulyPublicCdnUrl(url?: string | null): boolean {
@@ -234,12 +298,12 @@ export function isTrulyPublicCdnUrl(url?: string | null): boolean {
 async function uploadMediaToPublicHost(
   buffer: Buffer,
   mimeType: string,
-  fileName: string
+  fileName?: string
 ): Promise<string | null> {
-  const ext = getExtensionFromMime(mimeType);
-  const safeName = (fileName || 'media').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const uploadName = `${safeName}.${ext}`;
-  const isVideo = isVideoMime(mimeType);
+  const detected = detectMediaFormat(buffer, mimeType, fileName);
+  const uploadName = detected.safeName;
+  const effectiveMime = detected.mimeType;
+  const isVideo = detected.isVideo;
   const sizeMb = (buffer.length / 1024 / 1024).toFixed(2);
 
   // 1. Catbox Litterbox (最優先: 最速レスポンス・最大1GB対応、動画・画像対応、24h保持、ダイレクトURL、Metaクローラー200確認済)
@@ -248,7 +312,7 @@ async function uploadMediaToPublicHost(
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
       formData.append('time', '24h');
-      formData.append('fileToUpload', new Blob([buffer], { type: mimeType }), uploadName);
+      formData.append('fileToUpload', new Blob([buffer], { type: effectiveMime }), uploadName);
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), isVideo ? 60000 : 20000);
@@ -261,7 +325,7 @@ async function uploadMediaToPublicHost(
 
       const text = (await res.text()).trim();
       if (res.ok && text.startsWith('http') && isTrulyPublicCdnUrl(text)) {
-        console.log(`[PublicMedia] Uploaded to Litterbox success: ${text} (${mimeType}, size: ${sizeMb}MB)`);
+        console.log(`[PublicMedia] Uploaded to Litterbox success: ${text} (${effectiveMime}, size: ${sizeMb}MB)`);
         return text;
       }
     } catch (err: any) {
@@ -276,7 +340,7 @@ async function uploadMediaToPublicHost(
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const formData = new FormData();
-      formData.append('files[]', new Blob([buffer], { type: mimeType }), uploadName);
+      formData.append('files[]', new Blob([buffer], { type: effectiveMime }), uploadName);
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), isVideo ? 60000 : 20000);
@@ -294,7 +358,7 @@ async function uploadMediaToPublicHost(
         const json = await res.json().catch(() => ({}));
         const url = json?.files?.[0]?.url;
         if (url && typeof url === 'string' && url.startsWith('http') && isTrulyPublicCdnUrl(url)) {
-          console.log(`[PublicMedia] Fast Upload to Uguu success: ${url} (${mimeType}, size: ${sizeMb}MB)`);
+          console.log(`[PublicMedia] Fast Upload to Uguu success: ${url} (${effectiveMime}, size: ${sizeMb}MB)`);
           return url;
         }
       }
@@ -309,7 +373,7 @@ async function uploadMediaToPublicHost(
   // 3. tmpfiles.org (安定した一時ファイルCDN: ダイレクトURL /dl/ 対応・field名 'file')
   try {
     const formData = new FormData();
-    formData.append('file', new Blob([buffer], { type: mimeType }), uploadName);
+    formData.append('file', new Blob([buffer], { type: effectiveMime }), uploadName);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), isVideo ? 45000 : 15000);
@@ -325,7 +389,7 @@ async function uploadMediaToPublicHost(
       const rawUrl = data?.data?.url;
       if (rawUrl && typeof rawUrl === 'string' && rawUrl.includes('tmpfiles.org/')) {
         const directUrl = rawUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-        console.log(`[PublicMedia] Uploaded to tmpfiles.org success: ${directUrl} (${mimeType}, size: ${sizeMb}MB)`);
+        console.log(`[PublicMedia] Uploaded to tmpfiles.org success: ${directUrl} (${effectiveMime}, size: ${sizeMb}MB)`);
         return directUrl;
       }
     }
@@ -1326,26 +1390,10 @@ ${cleanText}
 
       const mediaId = crypto.randomBytes(16).toString('hex');
       const originalName = req.file.originalname || 'media';
-      const ext = originalName.split('.').pop()?.toLowerCase() || '';
-      let mimeType = req.file.mimetype || 'application/octet-stream';
-
-      // 拡張子から適切なMIMEタイプを補正（ブラウザがapplication/octet-streamとして送った場合の救済）
-      if (ext === 'mp4' || ext === 'm4v') {
-        mimeType = 'video/mp4';
-      } else if (ext === 'mov') {
-        mimeType = 'video/quicktime';
-      } else if (ext === 'webm') {
-        mimeType = 'video/webm';
-      } else if (ext === 'jpg' || ext === 'jpeg') {
-        mimeType = 'image/jpeg';
-      } else if (ext === 'png') {
-        mimeType = 'image/png';
-      }
-
-      const isVideo = isVideoMime(mimeType) || ['mp4', 'mov', 'webm', 'm4v'].includes(ext);
-      if (isVideo && (!mimeType.startsWith('video/') || mimeType === 'application/octet-stream')) {
-        mimeType = 'video/mp4';
-      }
+      const detected = detectMediaFormat(req.file.buffer, req.file.mimetype, originalName);
+      const mimeType = detected.mimeType;
+      const isVideo = detected.isVideo;
+      const safeUploadName = detected.safeName;
 
       // 基準URL解決
       const proto = req.headers['x-forwarded-proto'] || 'https';
@@ -1363,7 +1411,7 @@ ${cleanText}
       });
 
       // バックグラウンドで外部CDNキャッシュを非同期ウォームアップ（レスポンスはブロックしない）
-      uploadMediaToPublicHost(req.file.buffer, mimeType, originalName).then((extUrl) => {
+      uploadMediaToPublicHost(req.file.buffer, mimeType, safeUploadName).then((extUrl) => {
         if (extUrl && isTrulyPublicCdnUrl(extUrl)) {
           const stored = mediaStorage.get(mediaId);
           if (stored) {
@@ -1400,28 +1448,13 @@ ${cleanText}
 
       const mediaId = crypto.randomBytes(16).toString('hex');
       const originalName = req.file.originalname || 'media';
-      const ext = originalName.split('.').pop()?.toLowerCase() || '';
-      let mimeType = req.file.mimetype || 'application/octet-stream';
-
-      if (ext === 'mp4' || ext === 'm4v') {
-        mimeType = 'video/mp4';
-      } else if (ext === 'mov') {
-        mimeType = 'video/quicktime';
-      } else if (ext === 'webm') {
-        mimeType = 'video/webm';
-      } else if (ext === 'jpg' || ext === 'jpeg') {
-        mimeType = 'image/jpeg';
-      } else if (ext === 'png') {
-        mimeType = 'image/png';
-      }
-
-      const isVideo = isVideoMime(mimeType) || ['mp4', 'mov', 'webm', 'm4v'].includes(ext);
-      if (isVideo && (!mimeType.startsWith('video/') || mimeType === 'application/octet-stream')) {
-        mimeType = 'video/mp4';
-      }
+      const detected = detectMediaFormat(req.file.buffer, req.file.mimetype, originalName);
+      const mimeType = detected.mimeType;
+      const isVideo = detected.isVideo;
+      const safeUploadName = detected.safeName;
 
       // 外部CDN (Litterbox / Uguu / tmpfiles.org) へ高速公開
-      let publicUrl = await uploadMediaToPublicHost(req.file.buffer, mimeType, originalName);
+      let publicUrl = await uploadMediaToPublicHost(req.file.buffer, mimeType, safeUploadName);
 
       // 基準URL解決
       const proto = req.headers['x-forwarded-proto'] || 'https';
@@ -2374,7 +2407,9 @@ ${cleanText}
         let hint = '';
         if (err.code === 36003 || err.code === 1363030 || rawMsg.toLowerCase().includes('aspect ratio') || rawMsg.toLowerCase().includes('dimension')) {
           hint = '（Threads対応のアスペクト比は 1.91:1 から 4:5 です。動画・画像のアスペクト比をご確認ください）';
-        } else if (err.code === 36001 || err.code === 36002 || rawMsg.toLowerCase().includes('size') || rawMsg.toLowerCase().includes('large')) {
+        } else if (err.code === 36001 || rawMsg.toLowerCase().includes('format is not supported') || rawMsg.toLowerCase().includes('image format')) {
+          hint = '（Meta Threads非対応の画像形式です。Threads APIはJPEGおよびPNG形式のみをサポートしています）';
+        } else if (err.code === 36002 || rawMsg.toLowerCase().includes('size') || rawMsg.toLowerCase().includes('large')) {
           hint = '（メディアファイルの容量がMetaの制限を超えています）';
         } else if (rawMsg.includes('An unknown error') || err.code === 1) {
           hint = '（Threadsアクセストークンの投稿権限 threads_content_publish が不足している可能性があります）';
