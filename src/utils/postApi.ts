@@ -1592,7 +1592,7 @@ export async function sendThreadsPost(
         return {
           name: img.name,
           mediaId: uploadResult.mediaId,
-          dataUrl: (!isVideo || !hasMediaId) ? img.dataUrl : undefined,
+          dataUrl: img.dataUrl || undefined,
           publicUrl: (uploadResult.publicUrl && isTrulyPublicCdnUrl(uploadResult.publicUrl)) ? uploadResult.publicUrl : undefined,
           thumbnailUrl: img.thumbnailUrl,
           mediaType: img.mediaType || (img.dataUrl?.startsWith('data:video') ? 'video' : 'image'),
@@ -1632,28 +1632,32 @@ export async function sendThreadsPost(
     }
 
     if (!res.ok || !data.success) {
-      if (res.status === 404 || res.status >= 500) {
-        console.warn(`[Threads Post] Backend error ${res.status}. Falling back to direct Meta Graph API (with media)...`);
+      // サーバーが具体的なエラーメッセージ（Meta APIエラーなど）を返している場合は、その正確なエラーを報告
+      const errMsg = data.error || `Threads投稿に失敗しました (${res.status})`;
+      
+      // 404 (エンドポイント自体が見つからない) の場合のみブラウザ直接通信へフォールバック
+      if (res.status === 404) {
+        console.warn(`[Threads Post] Backend endpoint 404. Falling back to direct Meta Graph API...`);
         try {
           return await directPostToThreads(credentials, posts, images, topic, signal);
         } catch (directErr: any) {
           if (signal?.aborted) throw directErr;
-          const errMsg = data.error || directErr.message || `Threads投稿に失敗しました (${res.status})`;
+          const directMsg = directErr.message || errMsg;
           recordCommError({
             platform: 'Threads',
             action: 'Threadsスレッド投稿',
             endpoint: '/api/threads/post',
             httpStatus: res.status,
-            errorMessage: errMsg,
+            errorMessage: directMsg,
             requestSummary: `スレッド数: ${posts.length}件, ${formatMediaSummary(images)}, トピック: ${topic ? `#${topic}` : 'なし'}`,
           });
           return {
             success: false,
-            error: errMsg,
+            error: directMsg,
           };
         }
       }
-      const errMsg = data.error || `Threads投稿に失敗しました (${res.status})`;
+
       recordCommError({
         platform: 'Threads',
         action: 'Threadsスレッド投稿',

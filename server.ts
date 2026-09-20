@@ -479,18 +479,18 @@ async function uploadAllMediaForThreads(
     };
   };
 
-  // 画像は並列（3並列）でアップロード、動画は順次アップロード（帯域競合・タイムアウト防止）
+  // 画像・動画ともに外部ホストのレートリミット・競合を防止するため順次アップロード
   const imageItems = itemsToUpload.filter((i) => !i.isVideo);
   const videoItems = itemsToUpload.filter((i) => i.isVideo);
 
-  // 画像の並列アップロード（バッチサイズ3）
-  const IMAGE_BATCH_SIZE = 3;
-  for (let b = 0; b < imageItems.length; b += IMAGE_BATCH_SIZE) {
-    const batch = imageItems.slice(b, b + IMAGE_BATCH_SIZE);
-    const batchUploaded = await Promise.all(batch.map((item) => uploadSingleItem(item)));
-    batch.forEach((item, bIdx) => {
-      preparedResults[item.index] = batchUploaded[bIdx];
-    });
+  // 画像の順次アップロード（短いウェイトを挟んで確実に全件成功させる）
+  for (let idx = 0; idx < imageItems.length; idx++) {
+    const item = imageItems[idx];
+    const uploaded = await uploadSingleItem(item);
+    preparedResults[item.index] = uploaded;
+    if (idx < imageItems.length - 1) {
+      await new Promise((r) => setTimeout(r, 150));
+    }
   }
 
   // 動画の順次アップロード（1本ずつ直列に確実に処理）
