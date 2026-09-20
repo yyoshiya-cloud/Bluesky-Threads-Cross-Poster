@@ -22,7 +22,11 @@ import {
   Palette,
   Settings,
   Hash,
+  Lock,
+  Unlock,
   AlertCircle,
+  Download,
+  AlertTriangle,
   FileText,
   Link as LinkIcon,
 } from 'lucide-react';
@@ -47,9 +51,11 @@ import { getThemeAccentConfig } from '../utils/themeManager';
 import { TagTopicMaintenance } from './TagTopicMaintenance';
 import { CommErrorModal } from './CommErrorModal';
 import {
+  downloadAllCommErrorLogs,
   getCommErrorLogs,
   recordCommInfo,
   recordCommSuccess,
+  recordCommError,
 } from '../utils/commErrorLogger';
 
 interface SettingsModalProps {

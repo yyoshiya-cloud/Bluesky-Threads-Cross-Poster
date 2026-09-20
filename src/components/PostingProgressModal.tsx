@@ -24,6 +24,7 @@ import {
   Activity,
   Download,
   Ban,
+  X,
 } from 'lucide-react';
 import { ApiCredentials, AttachedImage } from '../types';
 import { sendBlueskyPost, sendThreadsPost, checkIsDemoCredentials, uploadMediaItem, abortableWait } from '../utils/postApi';

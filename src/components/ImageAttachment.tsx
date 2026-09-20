@@ -12,6 +12,8 @@ import {
   Trash2,
   FileText,
   Check,
+  ChevronDown,
+  ChevronUp,
   Info,
   CheckCircle2,
   AlertOctagon,
@@ -22,11 +24,21 @@ import {
   ChevronLeft,
   ChevronRight,
   GripVertical,
+  Cloud,
+  CloudCheck,
+  CloudOff,
+  RefreshCw,
+  AlertTriangle,
+  UploadCloud,
 } from 'lucide-react';
 import { compressImageFileWithThumbnail, processVideoFile } from '../utils/draftStorage';
 import { saveMediaBlob, getMediaBlob } from '../utils/indexedMediaStorage';
+import {
+  validateVideoMetadata,
+  checkVideoAttachmentEligibility,
+} from '../utils/mediaValidation';
 import { VideoSpecsModal } from './VideoSpecsModal';
-import { dataUrlToBlob } from '../utils/postApi';
+import { uploadMediaItem, dataUrlToBlob } from '../utils/postApi';
 
 interface ImageAttachmentProps {
   images: AttachedImage[];
@@ -609,24 +621,23 @@ export const ImageAttachment: React.FC<ImageAttachmentProps> = ({
             currentIndex: i + 1,
           });
 
-          const { dataUrl, thumbnailUrl, file: jpegFile } = await compressImageFileWithThumbnail(file);
-          const standardizedFile = jpegFile || file;
+          const { dataUrl, thumbnailUrl } = await compressImageFileWithThumbnail(file);
           const newImgItem: AttachedImage = {
             id: `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 9)}`,
-            name: standardizedFile.name,
-            size: standardizedFile.size,
+            name: file.name,
+            size: file.size,
             dataUrl,
             thumbnailUrl,
-            file: standardizedFile,
+            file, // 生ファイルオブジェクトを保持（デスクトップアプリ/サーバーへのストリーム転送用）
             mediaType: 'image',
-            mimeType: 'image/jpeg',
+            mimeType: file.type || 'image/jpeg',
             alt: '',
             uploadStatus: 'idle',
             uploadProgress: 0,
           };
 
-          // IndexedDBに標準化JPEGをバックアップ保存
-          saveMediaBlob(newImgItem.id, standardizedFile, standardizedFile.name, 'image/jpeg').catch(() => {});
+          // IndexedDBにバックアップ保存
+          saveMediaBlob(newImgItem.id, file, file.name, file.type || 'image/jpeg').catch(() => {});
 
           processedList.push(newImgItem);
         }

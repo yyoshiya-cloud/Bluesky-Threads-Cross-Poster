@@ -296,3 +296,7 @@ export function splitForThreads(
     };
   });
 }
+
+// 互換性維持のためのエイリアス
+export const calculateXWeight = calculateBlueskyCharCount;
+export const splitForX = splitForBluesky;

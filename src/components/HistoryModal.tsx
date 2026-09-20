@@ -13,11 +13,13 @@ import {
   RotateCcw,
   Sparkles,
   ArrowRight,
+  BarChart3,
   Download,
   Heart,
   Repeat,
   Flame,
   AlertTriangle,
+  FileText,
 } from 'lucide-react';
 import { formatToJstString } from '../utils/scheduledStorage';
 import { getPostMediaCounts } from '../utils/mediaValidation';

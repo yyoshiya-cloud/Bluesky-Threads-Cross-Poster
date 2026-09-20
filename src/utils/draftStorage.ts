@@ -140,8 +140,6 @@ export const clearDraftFromStorage = (): void => {
 export interface ProcessedImageResult {
   dataUrl: string;
   thumbnailUrl: string;
-  file?: File;
-  blob?: Blob;
 }
 
 export const compressImageFileWithThumbnail = (
@@ -176,22 +174,17 @@ export const compressImageFileWithThumbnail = (
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           const raw = (e.target?.result as string) || '';
-          resolve({ dataUrl: raw, thumbnailUrl: raw, file });
+          resolve({ dataUrl: raw, thumbnailUrl: raw });
           return;
         }
 
-        // 白背景を描画（透明PNGの黒化を防ぐ・sRGBアルファ除去）
+        // 白背景を描画（透明PNGの黒化を防ぐ）
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
 
-        // JPEG形式で統一圧縮（Threads・Bluesky双方で完全準拠）
+        // JPEG形式で統一圧縮
         const dataUrl = canvas.toDataURL('image/jpeg', quality);
-
-        // 拡張子を確実に .jpg に統一したファイル名を生成
-        const rawBaseName = (file.name || 'image').replace(/\.[^/.]+$/, '').trim() || 'image';
-        const safeBaseName = rawBaseName.replace(/[^a-zA-Z0-9_\-\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/g, '_');
-        const safeJpegFileName = `${safeBaseName}.jpg`;
 
         // 高速・超軽量サムネイル（最大160x160、約2〜3KBでLocalStorageに安全に保持）
         let thumbW = img.width;
@@ -218,60 +211,30 @@ export const compressImageFileWithThumbnail = (
           thumbnailUrl = thumbCanvas.toDataURL('image/jpeg', 0.72);
         }
 
-        // JPEG Blob と File を確実に同期生成（フォールバック付き）
-        const createResultAndResolve = (jpegBlob: Blob) => {
-          const standardizedFile = new File([jpegBlob], safeJpegFileName, {
-            type: 'image/jpeg',
-            lastModified: Date.now(),
-          });
-
-          // Canvasメモリを明示的にクリア
-          canvas.width = 0;
-          canvas.height = 0;
-          thumbCanvas.width = 0;
-          thumbCanvas.height = 0;
-
-          resolve({
-            dataUrl,
-            thumbnailUrl,
-            file: standardizedFile,
-            blob: jpegBlob,
-          });
-        };
-
-        if (canvas.toBlob) {
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                createResultAndResolve(blob);
-              } else {
-                // toBlobがnullを返した場合はDataURLから復元
-                const bstr = atob(dataUrl.split(',')[1] || '');
-                let n = bstr.length;
-                const u8arr = new Uint8Array(n);
-                while (n--) {
-                  u8arr[n] = bstr.charCodeAt(n);
-                }
-                createResultAndResolve(new Blob([u8arr], { type: 'image/jpeg' }));
-              }
-            },
-            'image/jpeg',
-            quality
-          );
-        } else {
-          const bstr = atob(dataUrl.split(',')[1] || '');
-          let n = bstr.length;
-          const u8arr = new Uint8Array(n);
-          while (n--) {
-            u8arr[n] = bstr.charCodeAt(n);
-          }
-          createResultAndResolve(new Blob([u8arr], { type: 'image/jpeg' }));
-        }
+        resolve({ dataUrl, thumbnailUrl });
+        // Canvasメモリを明示的にクリア
+        canvas.width = 0;
+        canvas.height = 0;
+        thumbCanvas.width = 0;
+        thumbCanvas.height = 0;
       };
       img.src = e.target?.result as string;
     };
     reader.readAsDataURL(file);
   });
+};
+
+/**
+ * 互換性のための単一Base64返却関数
+ */
+export const compressImageFile = async (
+  file: File,
+  maxWidth = 1200,
+  maxHeight = 1200,
+  quality = 0.82
+): Promise<string> => {
+  const result = await compressImageFileWithThumbnail(file, maxWidth, maxHeight, quality);
+  return result.dataUrl;
 };
 
 /**

@@ -939,23 +939,16 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                           console.error('Error processing dropped video:', vErr);
                         }
                       } else {
-                        const { dataUrl, thumbnailUrl, file: jpegFile } = await compressImageFileWithThumbnail(f);
-                        const standardizedFile = jpegFile || f;
-                        const newImgItem: AttachedImage = {
+                        const { dataUrl, thumbnailUrl } = await compressImageFileWithThumbnail(f);
+                        processed.push({
                           id: `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 9)}`,
-                          name: standardizedFile.name,
-                          size: standardizedFile.size,
+                          name: f.name,
+                          size: f.size,
                           dataUrl,
                           thumbnailUrl,
-                          file: standardizedFile,
                           mediaType: 'image',
-                          mimeType: 'image/jpeg',
-                          alt: '',
-                          uploadStatus: 'idle',
-                          uploadProgress: 0,
-                        };
-                        saveMediaBlob(newImgItem.id, standardizedFile, standardizedFile.name, 'image/jpeg').catch(() => {});
-                        processed.push(newImgItem);
+                          mimeType: f.type || 'image/jpeg',
+                        });
                       }
                       await new Promise((resolve) => setTimeout(resolve, 25));
                     }
