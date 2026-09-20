@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/((?!api/|assets/|favicon|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

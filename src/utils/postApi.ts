@@ -1065,15 +1065,42 @@ export function isTrulyPublicCdnUrl(url?: string | null): boolean {
 }
 
 /**
- * クライアント直接アップロード（ブラウザから直接 Uguu 一時CDNへ送信）
+ * クライアント直接アップロード（ブラウザから直接 Litterbox / Uguu 一時CDNへ送信）
+ * VercelやGitHub Pages等のサーバーレス/静的ホスティング環境でも動作可能
  */
 async function uploadToDirectPublicHost(blob: Blob, name: string, signal?: AbortSignal): Promise<string | null> {
+  const isVideo = blob.type.startsWith('video/') || ['mp4', 'mov', 'webm'].some(ext => name.toLowerCase().endsWith(`.${ext}`));
+  const ext = (name || '').split('.').pop()?.toLowerCase() || '';
+  let safeName = name || (isVideo ? 'video.mp4' : 'image.jpg');
+  if (!isVideo && !['jpg', 'jpeg', 'png'].includes(ext)) {
+    safeName = `${safeName.replace(/\.[^/.]+$/, '').trim() || 'image'}.jpg`;
+  }
+
+  // 1. Litterbox (catbox.moe) への直接アップロード (CORS対応 / 24時間保持)
   try {
-    const isVideo = blob.type.startsWith('video/') || ['mp4', 'mov', 'webm'].some(ext => name.toLowerCase().endsWith(`.${ext}`));
-    let safeName = name || (isVideo ? 'video.mp4' : 'image.jpg');
-    if (!isVideo && !safeName.toLowerCase().endsWith('.jpg') && !safeName.toLowerCase().endsWith('.jpeg') && !safeName.toLowerCase().endsWith('.png')) {
-      safeName = `${safeName.replace(/\.[^/.]+$/, '').trim() || 'image'}.jpg`;
+    const fd = new FormData();
+    fd.append('reqtype', 'fileupload');
+    fd.append('time', '24h');
+    fd.append('fileToUpload', blob, safeName);
+    const lbRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
+      method: 'POST',
+      body: fd,
+      signal,
+    });
+    if (lbRes.ok) {
+      const text = (await lbRes.text()).trim();
+      if (text.startsWith('http') && isTrulyPublicCdnUrl(text)) {
+        console.log(`[DirectPublicUpload] Uploaded directly to Litterbox: ${text}`);
+        return text;
+      }
     }
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    console.warn('[DirectPublicUpload] Litterbox direct attempt note:', err);
+  }
+
+  // 2. Uguu への直接アップロード (フォールバック)
+  try {
     const formData = new FormData();
     formData.append('files[]', blob, safeName);
     const res = await fetch('https://uguu.se/upload', {
@@ -1093,6 +1120,7 @@ async function uploadToDirectPublicHost(blob: Blob, name: string, signal?: Abort
     if (signal?.aborted) throw err;
     console.warn('[DirectPublicUpload] Uguu note:', err);
   }
+
   return null;
 }
 
@@ -1629,23 +1657,52 @@ export async function sendThreadsPost(
     if (contentType.includes('application/json')) {
       data = await res.json().catch(() => ({}));
     } else {
-      const nonJsonText = await res.text().catch(() => '');
-      const errMsg = `サーバーエラー (${res.status}): ${nonJsonText.slice(0, 150) || '無効なレスポンス形式'}`;
-      recordCommError({
-        platform: 'Threads',
-        action: 'Threadsスレッド投稿',
-        endpoint: '/api/threads/post',
-        httpStatus: res.status,
-        errorMessage: errMsg,
-        requestSummary: `スレッド数: ${posts.length}件, ${formatMediaSummary(images)}, トピック: ${topic ? `#${topic}` : 'なし'}`,
-      });
-      return {
-        success: false,
-        error: errMsg,
-      };
+      // Vercel等の静的ホスティングでバックエンドが存在しない場合（404/HTML返却）は直接ブラウザ投稿へ自動フォールバック
+      console.warn(`[Threads Post] Backend returned non-JSON (${res.status}). Falling back to browser-direct Meta Graph API...`);
+      try {
+        return await directPostToThreads(credentials, posts, images, topic, signal);
+      } catch (directErr: any) {
+        if (signal?.aborted) throw directErr;
+        const errMsg = directErr.message || `Threads投稿に失敗しました (${res.status})`;
+        recordCommError({
+          platform: 'Threads',
+          action: 'Threadsスレッド投稿',
+          endpoint: '/api/threads/post',
+          httpStatus: res.status,
+          errorMessage: errMsg,
+          requestSummary: `スレッド数: ${posts.length}件, ${formatMediaSummary(images)}, トピック: ${topic ? `#${topic}` : 'なし'}`,
+        });
+        return {
+          success: false,
+          error: errMsg,
+        };
+      }
     }
 
     if (!res.ok || !data.success) {
+      // 404 (バックエンド未デプロイ/静的ホスティング環境) の場合はブラウザ直接投稿へフォールバック
+      if (res.status === 404) {
+        console.warn(`[Threads Post] Backend 404. Falling back to browser-direct Meta Graph API...`);
+        try {
+          return await directPostToThreads(credentials, posts, images, topic, signal);
+        } catch (directErr: any) {
+          if (signal?.aborted) throw directErr;
+          const errMsg = directErr.message || data.error || `Threads投稿に失敗しました (404)`;
+          recordCommError({
+            platform: 'Threads',
+            action: 'Threadsスレッド投稿',
+            endpoint: '/api/threads/post',
+            httpStatus: 404,
+            errorMessage: errMsg,
+            requestSummary: `スレッド数: ${posts.length}件, ${formatMediaSummary(images)}, トピック: ${topic ? `#${topic}` : 'なし'}`,
+          });
+          return {
+            success: false,
+            error: errMsg,
+          };
+        }
+      }
+
       // サーバーが返した具体的なエラーメッセージ（Meta APIエラー・メディア欠落警告等）を報告
       const errMsg = data.error || `Threads投稿に失敗しました (${res.status})`;
 
