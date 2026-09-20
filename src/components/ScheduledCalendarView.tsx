@@ -17,7 +17,6 @@ import {
   Hash,
   Send,
   X,
-  Sparkles,
 } from 'lucide-react';
 import { ScheduledPostItem, ApiCredentials, TargetPlatformCategory } from '../types';
 import {

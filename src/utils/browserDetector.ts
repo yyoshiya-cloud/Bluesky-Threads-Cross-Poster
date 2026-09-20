@@ -167,12 +167,3 @@ export function getBrowserDetails(): BrowserDetails {
 export function getBrowserSummaryString(): string {
   return getBrowserDetails().summary;
 }
-
-/**
- * 簡易表示用（バッジ等用）のブラウザ名 + メジャーバージョンを取得
- * 例: "Google Chrome 128"
- */
-export function getBrowserShortString(): string {
-  const b = getBrowserDetails();
-  return `${b.name} ${b.majorVersion}`;
-}

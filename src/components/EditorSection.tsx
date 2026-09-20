@@ -939,22 +939,102 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                           console.error('Error processing dropped video:', vErr);
                         }
                       } else {
-                        const { dataUrl, thumbnailUrl } = await compressImageFileWithThumbnail(f);
-                        processed.push({
+                        const { dataUrl, thumbnailUrl, file: jpegFile } = await compressImageFileWithThumbnail(f);
+                        const standardizedFile = jpegFile || f;
+                        const newImgItem: AttachedImage = {
                           id: `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 9)}`,
-                          name: f.name,
-                          size: f.size,
+                          name: standardizedFile.name,
+                          size: standardizedFile.size,
                           dataUrl,
                           thumbnailUrl,
+                          file: standardizedFile,
                           mediaType: 'image',
-                          mimeType: f.type || 'image/jpeg',
-                        });
+                          mimeType: 'image/jpeg',
+                          alt: '',
+                          uploadStatus: 'idle',
+                          uploadProgress: 0,
+                        };
+                        saveMediaBlob(newImgItem.id, standardizedFile, standardizedFile.name, 'image/jpeg').catch(() => {});
+                        processed.push(newImgItem);
                       }
                       await new Promise((resolve) => setTimeout(resolve, 25));
                     }
                     if (processed.length > 0) {
                       onAddImages(processed);
                     }
+                  }
+                }
+              }}
+              onPaste={async (e) => {
+                const clipboardFiles = e.clipboardData?.files ? Array.from(e.clipboardData.files) : [];
+                const mediaFiles = clipboardFiles.filter((f) => {
+                  const type = (f.type || '').toLowerCase();
+                  const ext = f.name.split('.').pop()?.toLowerCase() || '';
+                  return type.startsWith('image/') || type.startsWith('video/') || ['mp4', 'mov', 'webm'].includes(ext);
+                });
+
+                if (mediaFiles.length > 0) {
+                  const remaining = 20 - images.length;
+                  if (remaining <= 0) return;
+                  e.preventDefault();
+                  const toProcess = mediaFiles.slice(0, remaining);
+                  const processed: AttachedImage[] = [];
+
+                  for (let i = 0; i < toProcess.length; i++) {
+                    const f = toProcess[i];
+                    const isVideo = (f.type || '').startsWith('video/');
+                    if (isVideo) {
+                      try {
+                        const vRes = await processVideoFile(f);
+                        const newVideoItem: AttachedImage = {
+                          id: `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 9)}`,
+                          name: f.name,
+                          size: f.size,
+                          dataUrl: vRes.thumbnailUrl,
+                          previewUrl: vRes.previewUrl,
+                          file: vRes.file,
+                          thumbnailUrl: vRes.thumbnailUrl,
+                          mediaType: 'video',
+                          mimeType: vRes.mimeType,
+                          duration: vRes.duration,
+                          width: vRes.width,
+                          height: vRes.height,
+                        };
+                        saveMediaBlob(newVideoItem.id, f, f.name, vRes.mimeType).catch(() => {});
+                        uploadMediaItem(newVideoItem).then((res) => {
+                          if (res.mediaId) {
+                            newVideoItem.mediaId = res.mediaId;
+                            saveMediaBlob(res.mediaId, f, f.name, vRes.mimeType).catch(() => {});
+                          }
+                        }).catch(() => {});
+                        processed.push(newVideoItem);
+                      } catch (vErr) {
+                        console.error('Error processing pasted video:', vErr);
+                      }
+                    } else {
+                      const { dataUrl, thumbnailUrl, file: jpegFile } = await compressImageFileWithThumbnail(f);
+                      const standardizedFile = jpegFile || f;
+                      const newImgItem: AttachedImage = {
+                        id: `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 9)}`,
+                        name: standardizedFile.name,
+                        size: standardizedFile.size,
+                        dataUrl,
+                        thumbnailUrl,
+                        file: standardizedFile,
+                        mediaType: 'image',
+                        mimeType: 'image/jpeg',
+                        alt: '',
+                        uploadStatus: 'idle',
+                        uploadProgress: 0,
+                      };
+                      saveMediaBlob(newImgItem.id, standardizedFile, standardizedFile.name, 'image/jpeg').catch(() => {});
+                      processed.push(newImgItem);
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 25));
+                  }
+
+                  if (processed.length > 0) {
+                    onAddImages(processed);
                   }
                 }
               }}

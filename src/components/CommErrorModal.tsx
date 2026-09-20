@@ -24,7 +24,6 @@ import {
   downloadTextFile,
   generateCommErrorLogText,
   generateDailyLogFileContent,
-  formatToJstDetailedString,
   formatToJstShortString,
   groupLogsByJstDay,
   DailyLogGroup,
