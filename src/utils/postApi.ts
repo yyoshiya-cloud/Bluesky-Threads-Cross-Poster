@@ -1034,12 +1034,24 @@ async function directPostToBluesky(
 }
 
 /**
+ * URLがMetaクローラーから認証なしで直接アクセス可能な外部CDNのURLかどうかを判定
+ */
+export function isTrulyPublicCdnUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string' || !url.startsWith('http')) return false;
+  const lower = url.toLowerCase();
+  if (lower.includes('localhost') || lower.includes('127.0.0.1')) return false;
+  if (lower.includes('.run.app') || lower.includes('.internal') || lower.includes('/api/media/')) return false;
+  if (lower.includes('web.app') || lower.includes('firebaseapp.com')) return false;
+  return true;
+}
+
+/**
  * クライアント直接アップロード（ブラウザから直接 tmpfiles.org 一時CDNへ送信）
  */
 async function uploadToDirectPublicHost(blob: Blob, name: string, signal?: AbortSignal): Promise<string | null> {
   try {
     const formData = new FormData();
-    formData.append('input_file', blob, name);
+    formData.append('file', blob, name);
     const res = await fetch('https://tmpfiles.org/api/v1/upload', {
       method: 'POST',
       body: formData,
@@ -1101,8 +1113,8 @@ async function directPostToThreads(
         ['mp4', 'mov', 'webm', 'm4v'].includes(ext) ||
         (typeof img.dataUrl === 'string' && img.dataUrl.startsWith('data:video/'));
 
-      // 1-1. すでに有効な外部公開URLが存在する場合
-      if (img.publicUrl && (img.publicUrl.startsWith('http://') || img.publicUrl.startsWith('https://'))) {
+      // 1-1. すでに有効な外部公開URL（Truly Public）が存在する場合
+      if (img.publicUrl && isTrulyPublicCdnUrl(img.publicUrl)) {
         resolvedMedias.push({ url: img.publicUrl, isVideo, alt: img.alt });
         continue;
       }
@@ -1113,15 +1125,9 @@ async function directPostToThreads(
         if (upRes.mediaId) {
           img.mediaId = upRes.mediaId;
         }
-        if (upRes.publicUrl) {
+        if (upRes.publicUrl && isTrulyPublicCdnUrl(upRes.publicUrl)) {
           img.publicUrl = upRes.publicUrl;
           resolvedMedias.push({ url: upRes.publicUrl, isVideo, alt: img.alt });
-          continue;
-        }
-        if (upRes.mediaId) {
-          const origin = typeof window !== 'undefined' ? window.location.origin : '';
-          const serverUrl = `${origin}/api/media/${upRes.mediaId}`;
-          resolvedMedias.push({ url: serverUrl, isVideo, alt: img.alt });
           continue;
         }
       } catch (upErr) {
@@ -1131,6 +1137,18 @@ async function directPostToThreads(
 
       // 1-3. クライアント直接アップロード（tmpfiles.org）を試行
       let blobToUpload: Blob | null = img.file || null;
+      if (!blobToUpload && img.id) {
+        try {
+          const recovered = await getMediaBlob(img.id);
+          if (recovered) blobToUpload = recovered;
+        } catch {}
+      }
+      if (!blobToUpload && img.mediaId) {
+        try {
+          const recovered = await getMediaBlob(img.mediaId);
+          if (recovered) blobToUpload = recovered;
+        } catch {}
+      }
       if (!blobToUpload && img.dataUrl) {
         blobToUpload = dataUrlToBlob(img.dataUrl);
       }
@@ -1153,6 +1171,7 @@ async function directPostToThreads(
         const origin = typeof window !== 'undefined' ? window.location.origin : '';
         const fallbackUrl = `${origin}/api/media/${img.mediaId}`;
         resolvedMedias.push({ url: fallbackUrl, isVideo, alt: img.alt });
+        continue;
       }
     }
 
@@ -1550,7 +1569,8 @@ export async function sendThreadsPost(
         return {
           name: img.name,
           mediaId: uploadResult.mediaId,
-          dataUrl: hasMediaId ? undefined : img.dataUrl,
+          dataUrl: (!isVideo || !hasMediaId) ? img.dataUrl : undefined,
+          publicUrl: (uploadResult.publicUrl && isTrulyPublicCdnUrl(uploadResult.publicUrl)) ? uploadResult.publicUrl : undefined,
           thumbnailUrl: img.thumbnailUrl,
           mediaType: img.mediaType || (img.dataUrl?.startsWith('data:video') ? 'video' : 'image'),
           mimeType: img.mimeType,

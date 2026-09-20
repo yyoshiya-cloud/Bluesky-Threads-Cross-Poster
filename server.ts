@@ -216,8 +216,20 @@ function isVideoMime(mimeType: string): boolean {
 }
 
 /**
+ * URLがMetaクローラーから認証なしで直接アクセス可能な外部CDNのURLかどうかを判定
+ */
+export function isTrulyPublicCdnUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string' || !url.startsWith('http')) return false;
+  const lower = url.toLowerCase();
+  if (lower.includes('localhost') || lower.includes('127.0.0.1')) return false;
+  if (lower.includes('.run.app') || lower.includes('.internal') || lower.includes('/api/media/')) return false;
+  if (lower.includes('web.app') || lower.includes('firebaseapp.com')) return false;
+  return true;
+}
+
+/**
  * Meta Threads APIが直接ダウンロード可能な公開静的メディアホストへ高速アップロード
- * （Uguu 高速ホスト / Catbox Litterbox / tmpfiles.org: いずれもダイレクトURL・Byte-Range対応・Metaクローラーアクセス確認済）
+ * （Catbox Litterbox / Uguu 高速ホスト / tmpfiles.org: いずれもダイレクトURL・Metaクローラーアクセス確認済）
  */
 async function uploadMediaToPublicHost(
   buffer: Buffer,
@@ -230,42 +242,7 @@ async function uploadMediaToPublicHost(
   const isVideo = isVideoMime(mimeType);
   const sizeMb = (buffer.length / 1024 / 1024).toFixed(2);
 
-  // 1. Uguu (超高速一時ファイルホスティング: 無料・認証不要・100MBまで対応・Metaクローラー直接ダウンロード可能)
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const formData = new FormData();
-      formData.append('files[]', new Blob([buffer], { type: mimeType }), uploadName);
-
-      const controller = new AbortController();
-      // 同時投稿時の帯域競合や大容量動画を考慮して、動画は60秒、画像は20秒のタイムアウト
-      const timeout = setTimeout(() => controller.abort(), isVideo ? 60000 : 20000);
-      const res = await fetch('https://uguu.se/upload', {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ThreadsPostBot/1.0',
-        },
-      });
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const json = await res.json().catch(() => ({}));
-        const url = json?.files?.[0]?.url;
-        if (url && typeof url === 'string' && url.startsWith('http')) {
-          console.log(`[PublicMedia] Fast Upload to Uguu success: ${url} (${mimeType}, size: ${sizeMb}MB)`);
-          return url;
-        }
-      }
-    } catch (err: any) {
-      console.warn(`[PublicMedia] Uguu upload attempt #${attempt + 1} note: ${err.message}`);
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 800));
-      }
-    }
-  }
-
-  // 2. Catbox Litterbox (高信頼性一時ファイルホスティング: 最大1GB対応、動画・画像対応、24h保持、ダイレクトURL)
+  // 1. Catbox Litterbox (最優先: 最速レスポンス・最大1GB対応、動画・画像対応、24h保持、ダイレクトURL、Metaクローラー200確認済)
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const formData = new FormData();
@@ -283,22 +260,56 @@ async function uploadMediaToPublicHost(
       clearTimeout(timeout);
 
       const text = (await res.text()).trim();
-      if (res.ok && text.startsWith('http')) {
+      if (res.ok && text.startsWith('http') && isTrulyPublicCdnUrl(text)) {
         console.log(`[PublicMedia] Uploaded to Litterbox success: ${text} (${mimeType}, size: ${sizeMb}MB)`);
         return text;
       }
     } catch (err: any) {
       console.warn(`[PublicMedia] Litterbox attempt #${attempt + 1} note: ${err.message}`);
       if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 800));
+        await new Promise((r) => setTimeout(r, 600));
       }
     }
   }
 
-  // 3. tmpfiles.org (安定した一時ファイルCDN: ダイレクトURL /dl/ 対応・Metaクローラーアクセス可能)
+  // 2. Uguu (超高速一時ファイルホスティング: 無料・認証不要・100MBまで対応・Metaクローラー直接アクセス確認済)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const formData = new FormData();
+      formData.append('files[]', new Blob([buffer], { type: mimeType }), uploadName);
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), isVideo ? 60000 : 20000);
+      const res = await fetch('https://uguu.se/upload', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ThreadsPostBot/1.0',
+        },
+      });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const json = await res.json().catch(() => ({}));
+        const url = json?.files?.[0]?.url;
+        if (url && typeof url === 'string' && url.startsWith('http') && isTrulyPublicCdnUrl(url)) {
+          console.log(`[PublicMedia] Fast Upload to Uguu success: ${url} (${mimeType}, size: ${sizeMb}MB)`);
+          return url;
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[PublicMedia] Uguu upload attempt #${attempt + 1} note: ${err.message}`);
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 600));
+      }
+    }
+  }
+
+  // 3. tmpfiles.org (安定した一時ファイルCDN: ダイレクトURL /dl/ 対応・field名 'file')
   try {
     const formData = new FormData();
-    formData.append('input_file', new Blob([buffer], { type: mimeType }), uploadName);
+    formData.append('file', new Blob([buffer], { type: mimeType }), uploadName);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), isVideo ? 45000 : 15000);
@@ -337,7 +348,7 @@ export interface ThreadsMediaItem {
  * （画像は並列で高速アップロードし、動画は順次アップロードして帯域競合とタイムアウトを防止）
  */
 async function uploadAllMediaForThreads(
-  mediaList: Array<{ name?: string; dataUrl?: string; mediaId?: string; alt?: string; mediaType?: 'image' | 'video'; mimeType?: string }>,
+  mediaList: Array<{ name?: string; dataUrl?: string; mediaId?: string; alt?: string; mediaType?: 'image' | 'video'; mimeType?: string; publicUrl?: string }>,
   baseUrl: string
 ): Promise<ThreadsMediaItem[]> {
   const preparedResults: Array<ThreadsMediaItem | null> = new Array(mediaList.length).fill(null);
@@ -365,17 +376,21 @@ async function uploadAllMediaForThreads(
       ['mp4', 'mov', 'webm', 'm4v'].includes(ext) ||
       (item.dataUrl && item.dataUrl.startsWith('data:video/'));
 
-    // すでに外部公開URL（http/https）で、localhostや内部IPでなければそのまま使用
-    if (item.dataUrl && (item.dataUrl.startsWith('http://') || item.dataUrl.startsWith('https://'))) {
-      if (!item.dataUrl.includes('localhost') && !item.dataUrl.includes('127.0.0.1')) {
-        const detectedVideo = isExplicitVideo || isVideoMime(item.name || item.dataUrl);
-        preparedResults[idx] = {
-          url: item.dataUrl,
-          type: (detectedVideo ? 'VIDEO' : 'IMAGE') as 'IMAGE' | 'VIDEO',
-          alt: item.alt,
-        };
-        continue;
-      }
+    // すでに渡された publicUrl または dataUrl が真正な外部CDNであればそのまま使用
+    const explicitUrl = (item.publicUrl && isTrulyPublicCdnUrl(item.publicUrl))
+      ? item.publicUrl
+      : (item.dataUrl && isTrulyPublicCdnUrl(item.dataUrl))
+      ? item.dataUrl
+      : null;
+
+    if (explicitUrl) {
+      const detectedVideo = isExplicitVideo || isVideoMime(item.name || explicitUrl);
+      preparedResults[idx] = {
+        url: explicitUrl,
+        type: (detectedVideo ? 'VIDEO' : 'IMAGE') as 'IMAGE' | 'VIDEO',
+        alt: item.alt,
+      };
+      continue;
     }
 
     const resolved = resolveMediaBuffer(item);
@@ -388,10 +403,10 @@ async function uploadAllMediaForThreads(
     const isVideo = isExplicitVideo || isVideoMime(mimeType);
     const mediaId = item.mediaId || crypto.randomBytes(16).toString('hex');
 
-    // キャッシュ済みの公開URLがあれば即時再利用
+    // キャッシュ済みの外部公開URL（Truly Public CDN）があれば即時再利用
     const existingCached = item.mediaId ? mediaStorage.get(item.mediaId) : null;
-    if (existingCached?.publicUrl) {
-      console.log(`[uploadAllMediaForThreads] Reusing cached public URL for #${idx + 1}: ${existingCached.publicUrl}`);
+    if (existingCached?.publicUrl && isTrulyPublicCdnUrl(existingCached.publicUrl)) {
+      console.log(`[uploadAllMediaForThreads] Reusing cached truly public URL for #${idx + 1}: ${existingCached.publicUrl}`);
       preparedResults[idx] = {
         url: existingCached.publicUrl,
         fallbackUrl: `${baseUrl}/api/media/${mediaId}`,
@@ -439,16 +454,17 @@ async function uploadAllMediaForThreads(
     }
 
     const cachedItem = mediaStorage.get(mediaId);
-    if (publicUrl && cachedItem) {
+    const isPublic = isTrulyPublicCdnUrl(publicUrl);
+    if (publicUrl && isPublic && cachedItem) {
       cachedItem.publicUrl = publicUrl;
     }
 
-    if (!publicUrl) {
-      console.log(`[uploadAllMediaForThreads] Using self server URL as primary for item #${index + 1}: ${selfServerUrl}`);
+    if (!isPublic) {
+      console.warn(`[uploadAllMediaForThreads] Warning: external CDN upload did not resolve truly public URL for item #${index + 1}. Using selfServerUrl: ${selfServerUrl}`);
     }
 
     return {
-      url: publicUrl || selfServerUrl,
+      url: (isPublic && publicUrl) ? publicUrl : selfServerUrl,
       fallbackUrl: selfServerUrl,
       type: (isVideo ? 'VIDEO' : 'IMAGE') as 'IMAGE' | 'VIDEO',
       alt,
@@ -1342,12 +1358,13 @@ ${cleanText}
         buffer: req.file.buffer,
         mimeType,
         createdAt: Date.now(),
-        publicUrl: selfServerUrl,
+        // 内部URLをpublicUrlと誤認させないため、初期値はundefinedにする
+        publicUrl: undefined,
       });
 
       // バックグラウンドで外部CDNキャッシュを非同期ウォームアップ（レスポンスはブロックしない）
       uploadMediaToPublicHost(req.file.buffer, mimeType, originalName).then((extUrl) => {
-        if (extUrl) {
+        if (extUrl && isTrulyPublicCdnUrl(extUrl)) {
           const stored = mediaStorage.get(mediaId);
           if (stored) {
             stored.publicUrl = extUrl;
@@ -1403,7 +1420,7 @@ ${cleanText}
         mimeType = 'video/mp4';
       }
 
-      // 外部CDN (tmpfiles.org / Litterbox / Uguu) へ高速公開
+      // 外部CDN (Litterbox / Uguu / tmpfiles.org) へ高速公開
       let publicUrl = await uploadMediaToPublicHost(req.file.buffer, mimeType, originalName);
 
       // 基準URL解決
@@ -1413,23 +1430,22 @@ ${cleanText}
       const baseUrl = `${proto}://${cleanHost}`;
       const selfServerUrl = `${baseUrl}/api/media/${mediaId}`;
 
-      if (!publicUrl) {
-        publicUrl = selfServerUrl;
-      }
+      const trulyPublic = isTrulyPublicCdnUrl(publicUrl);
 
       mediaStorage.set(mediaId, {
         buffer: req.file.buffer,
         mimeType,
         createdAt: Date.now(),
-        publicUrl,
+        publicUrl: trulyPublic ? publicUrl : undefined,
       });
 
-      console.log(`[upload-public] Processed mediaId: ${mediaId}, publicUrl: ${publicUrl}`);
+      console.log(`[upload-public] Processed mediaId: ${mediaId}, publicUrl: ${publicUrl || selfServerUrl}, isTrulyPublic: ${trulyPublic}`);
 
       res.json({
         success: true,
         mediaId,
-        publicUrl,
+        publicUrl: trulyPublic && publicUrl ? publicUrl : selfServerUrl,
+        isTrulyPublic: trulyPublic,
         mimeType,
         size: req.file.size,
         name: req.file.originalname,

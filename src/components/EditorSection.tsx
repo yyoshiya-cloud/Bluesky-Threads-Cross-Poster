@@ -940,15 +940,21 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                         }
                       } else {
                         const { dataUrl, thumbnailUrl } = await compressImageFileWithThumbnail(f);
-                        processed.push({
+                        const newImgItem: AttachedImage = {
                           id: `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 9)}`,
                           name: f.name,
                           size: f.size,
                           dataUrl,
                           thumbnailUrl,
+                          file: f,
                           mediaType: 'image',
                           mimeType: f.type || 'image/jpeg',
-                        });
+                          alt: '',
+                          uploadStatus: 'idle',
+                          uploadProgress: 0,
+                        };
+                        saveMediaBlob(newImgItem.id, f, f.name, f.type || 'image/jpeg').catch(() => {});
+                        processed.push(newImgItem);
                       }
                       await new Promise((resolve) => setTimeout(resolve, 25));
                     }
