@@ -17,7 +17,6 @@ import {
 } from '../../types';
 import { splitForBluesky, splitForThreads } from '../../utils/textSplitter';
 import {
-  loadDraftFromStorage,
   saveDraftToStorage,
   clearDraftFromStorage,
 } from '../../utils/draftStorage';

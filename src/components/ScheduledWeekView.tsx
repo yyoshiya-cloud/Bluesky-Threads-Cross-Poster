@@ -333,8 +333,10 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
     return (
       <div
         key={item.id}
-        className={`rounded-xl p-2.5 border transition-all text-xs flex flex-col justify-between ${
-          isRowView ? 'min-w-[290px] max-w-[340px] flex-shrink-0' : 'w-full'
+        className={`rounded-xl border transition-all flex flex-col justify-between overflow-hidden ${
+          isRowView
+            ? 'min-w-[280px] max-w-[340px] flex-shrink-0 p-2.5 text-xs'
+            : 'w-full p-2 text-[11px]'
         } ${
           item.status === 'pending'
             ? rel.isSoon
@@ -346,26 +348,26 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
         }`}
       >
         {/* 上部: 時刻 & 区分バッジ */}
-        <div className="flex items-center justify-between gap-1.5 mb-1.5">
-          <span className="font-mono font-bold text-accent-light text-[11px] flex items-center gap-1">
-            <Clock className="w-3 h-3" />
+        <div className="flex items-center justify-between gap-1 mb-1 min-w-0">
+          <span className="font-mono font-bold text-accent-light text-[10px] sm:text-[11px] flex items-center gap-0.5 shrink-0">
+            <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
             <span>{timeStr}</span>
           </span>
 
           <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${catConfig.badgeClass}`}
+            className={`px-1.5 py-0.2 sm:py-0.5 rounded text-[9px] sm:text-[10px] font-bold flex items-center gap-0.5 truncate shrink-0 ${catConfig.badgeClass}`}
             title={catConfig.name}
           >
             <span>{catConfig.icon}</span>
-            <span>{catConfig.name}</span>
+            <span>{isRowView ? catConfig.name : cat === 'both' ? '同時' : cat === 'bluesky' ? 'BS' : 'TH'}</span>
           </span>
         </div>
 
         {/* 状態 / 残り時間 */}
-        <div className="mb-1.5">
+        <div className="mb-1 min-w-0">
           {item.status === 'pending' && (
             <span
-              className={`text-[9px] px-1.5 py-0.5 rounded font-bold inline-flex items-center gap-1 ${
+              className={`text-[8px] sm:text-[9px] px-1.5 py-0.2 rounded font-bold inline-flex items-center gap-0.5 truncate ${
                 rel.isSoon
                   ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
                   : 'badge-accent'
@@ -375,30 +377,30 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
             </span>
           )}
           {item.status === 'completed' && (
-            <span className="bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1">
-              <CheckCircle2 className="w-2.5 h-2.5" />
-              <span>投稿完了</span>
+            <span className="bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-bold inline-flex items-center gap-0.5">
+              <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
+              <span>完了</span>
             </span>
           )}
           {item.status === 'failed' && (
-            <span className="bg-rose-950 text-rose-300 border border-rose-800/60 px-1.5 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1">
-              <AlertTriangle className="w-2.5 h-2.5" />
-              <span>投稿失敗</span>
+            <span className="bg-rose-950 text-rose-300 border border-rose-800/60 px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-bold inline-flex items-center gap-0.5">
+              <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+              <span>失敗</span>
             </span>
           )}
         </div>
 
         {/* 本文プレビュー */}
-        <p className="text-[11px] text-slate-200 line-clamp-3 mb-2 font-sans whitespace-pre-wrap leading-relaxed bg-slate-900/80 p-2 rounded-lg border border-slate-800/60">
+        <p className="text-[10px] sm:text-[11px] text-slate-200 line-clamp-2 sm:line-clamp-3 mb-1.5 font-sans whitespace-pre-wrap leading-relaxed bg-slate-900/80 p-1.5 rounded-lg border border-slate-800/60 break-words min-w-0">
           {item.text}
         </p>
 
         {/* トピックタグ & メディアバッジ */}
-        <div className="flex items-center gap-1.5 flex-wrap mb-2">
+        <div className="flex items-center gap-1 flex-wrap mb-1.5">
           {item.threadsTopic && (
-            <span className="px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-800/60 text-[9px] font-medium flex items-center gap-0.5">
+            <span className="px-1.5 py-0.2 rounded-full bg-purple-950/90 text-purple-300 border border-purple-800/60 text-[8px] sm:text-[9px] font-medium flex items-center gap-0.5 truncate max-w-full">
               <span className="text-purple-400 font-bold">#</span>
-              <span className="truncate max-w-[120px]">{item.threadsTopic}</span>
+              <span className="truncate">{item.threadsTopic}</span>
             </span>
           )}
           {(() => {
@@ -406,13 +408,13 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
             return (
               <>
                 {counts.imageCount > 0 && (
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 text-[9px] font-medium border border-sky-900/40">
-                    📷 画像 {counts.imageCount}枚
+                  <span className="px-1 py-0.2 rounded bg-slate-800 text-sky-300 text-[8px] sm:text-[9px] font-medium border border-sky-900/40">
+                    📷 {counts.imageCount}
                   </span>
                 )}
                 {counts.videoCount > 0 && (
-                  <span className="px-1.5 py-0.5 rounded bg-purple-950/70 text-purple-300 text-[9px] font-medium border border-purple-800/50">
-                    📹 動画 {counts.videoCount}本
+                  <span className="px-1 py-0.2 rounded bg-purple-950/70 text-purple-300 text-[8px] sm:text-[9px] font-medium border border-purple-800/50">
+                    📹 {counts.videoCount}
                   </span>
                 )}
               </>
@@ -422,33 +424,33 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
 
         {/* インライン編集フォーム */}
         {isEditing && (
-          <div className="bg-slate-950 rounded-lg p-2.5 border border-slate-700 space-y-2 mb-2 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between text-[10px] text-slate-300 font-bold">
-              <span>予約変更:</span>
+          <div className="bg-slate-950 rounded-lg p-2 border border-slate-700 space-y-1.5 mb-1.5 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between text-[9px] text-slate-300 font-bold">
+              <span>日時変更:</span>
               <button
                 type="button"
                 onClick={() => setEditingItemId(null)}
                 className="text-slate-400 hover:text-slate-200 cursor-pointer"
               >
-                閉じる
+                ✕
               </button>
             </div>
 
             {/* 区分選択 */}
-            <div className="grid grid-cols-3 gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[10px]">
+            <div className="grid grid-cols-3 gap-0.5 bg-slate-900 p-0.5 rounded border border-slate-800 text-[9px]">
               <button
                 type="button"
                 onClick={() => {
                   setEditPostToBluesky(true);
                   setEditPostToThreads(true);
                 }}
-                className={`py-1 rounded text-center font-bold cursor-pointer ${
+                className={`py-0.5 rounded text-center font-bold cursor-pointer ${
                   editPostToBluesky && editPostToThreads
                     ? 'btn-accent text-white'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                🚀同時
+                🚀
               </button>
               <button
                 type="button"
@@ -456,13 +458,13 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
                   setEditPostToBluesky(true);
                   setEditPostToThreads(false);
                 }}
-                className={`py-1 rounded text-center font-bold cursor-pointer ${
+                className={`py-0.5 rounded text-center font-bold cursor-pointer ${
                   editPostToBluesky && !editPostToThreads
                     ? 'bg-[#0085ff] text-white'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                🦋BS
+                🦋
               </button>
               <button
                 type="button"
@@ -470,44 +472,75 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
                   setEditPostToBluesky(false);
                   setEditPostToThreads(true);
                 }}
-                className={`py-1 rounded text-center font-bold cursor-pointer ${
+                className={`py-0.5 rounded text-center font-bold cursor-pointer ${
                   !editPostToBluesky && editPostToThreads
                     ? 'bg-purple-700 text-white'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                🌀TH
+                🌀
               </button>
             </div>
 
             {/* 日時選択 */}
             <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 font-semibold">予約日時 (JST):</span>
+              <div className="flex items-center justify-between text-[9px]">
+                <span className="text-slate-400">日時 (JST):</span>
                 <button
                   type="button"
                   onClick={() => setEditDatetimeLocal(getJstDatetimeLocalValue(Date.now()))}
-                  className="text-[10px] text-accent-light hover:text-white flex items-center gap-0.5 font-bold cursor-pointer transition hover:underline"
-                  title="予約日時を現在の日本時間（JST）に変更します"
+                  className="text-accent-light hover:underline font-bold"
+                  title="現在の日本時間（JST）を設定"
                 >
-                  <Clock className="w-2.5 h-2.5" />
-                  <span>現在日時</span>
+                  現在
                 </button>
               </div>
-              <div className="flex items-center gap-1">
-                <input
-                  type="datetime-local"
-                  value={editDatetimeLocal}
-                  onChange={(e) => setEditDatetimeLocal(e.target.value)}
-                  className="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-100 font-mono"
-                />
+              <input
+                type="datetime-local"
+                value={editDatetimeLocal}
+                onChange={(e) => setEditDatetimeLocal(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-100 font-mono"
+              />
+              <div className="grid grid-cols-4 gap-0.5 text-[8px] font-bold">
                 <button
                   type="button"
-                  onClick={() => setEditDatetimeLocal(getJstDatetimeLocalValue(Date.now()))}
-                  className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
-                  title="現在日時に変更"
+                  onClick={() => {
+                    const cur = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+                    setEditDatetimeLocal(getJstDatetimeLocalValue(cur + 5 * 60 * 1000));
+                  }}
+                  className="py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-center cursor-pointer"
                 >
-                  <Clock className="w-3.5 h-3.5 text-accent-light" />
+                  +5m
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cur = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+                    setEditDatetimeLocal(getJstDatetimeLocalValue(cur + 15 * 60 * 1000));
+                  }}
+                  className="py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-center cursor-pointer"
+                >
+                  +15m
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cur = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+                    setEditDatetimeLocal(getJstDatetimeLocalValue(cur + 60 * 60 * 1000));
+                  }}
+                  className="py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-center cursor-pointer"
+                >
+                  +1h
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cur = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+                    setEditDatetimeLocal(getJstDatetimeLocalValue(cur + 24 * 60 * 60 * 1000));
+                  }}
+                  className="py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-center cursor-pointer"
+                >
+                  +1日
                 </button>
               </div>
             </div>
@@ -515,7 +548,7 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
             <button
               type="button"
               onClick={() => handleSaveEdit(item.id)}
-              className="w-full py-1.5 rounded-lg btn-accent text-[11px] font-bold text-white cursor-pointer shadow-xs"
+              className="w-full py-1 rounded btn-accent text-[10px] font-bold text-white cursor-pointer shadow-xs"
             >
               保存
             </button>
@@ -523,40 +556,40 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
         )}
 
         {/* クイックアクションバー */}
-        <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-800/80 text-[10px]">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-800/80 text-[10px] min-w-0">
+          <div className="flex items-center gap-1 min-w-0">
             <button
               type="button"
               onClick={() => {
                 onLoadIntoEditor(item);
                 onCloseModal();
               }}
-              className="px-2 py-1 rounded bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800 transition cursor-pointer flex items-center gap-1"
-              title="エディタで開く"
+              className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800 transition cursor-pointer flex items-center gap-0.5 text-[9px] sm:text-[10px] truncate"
+              title="エディタに復元して編集"
             >
-              <Edit3 className="w-3 h-3" />
-              <span>エディタ復元</span>
+              <Edit3 className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" />
+              <span>{isRowView ? 'エディタ復元' : '復元'}</span>
             </button>
 
             {item.status === 'pending' && !isEditing && (
               <button
                 type="button"
                 onClick={() => handleStartEdit(item)}
-                className="p-1 rounded text-slate-400 hover:text-accent-light hover:bg-slate-800 transition cursor-pointer"
+                className="p-1 rounded text-slate-400 hover:text-accent-light hover:bg-slate-800 transition cursor-pointer shrink-0"
                 title="日時・区分を変更"
               >
-                <CalendarIcon className="w-3.5 h-3.5" />
+                <CalendarIcon className="w-3 h-3" />
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 shrink-0">
             {item.status === 'pending' && (
               <button
                 type="button"
                 disabled={isExecuting}
                 onClick={() => handleExecuteNow(item)}
-                className={`px-2 py-1 rounded text-[10px] font-bold transition cursor-pointer flex items-center gap-1 disabled:opacity-50 ${
+                className={`px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold transition cursor-pointer flex items-center gap-0.5 disabled:opacity-50 ${
                   isDemoMode || credentials.isDemoMode
                     ? 'bg-sky-500/20 text-sky-200 hover:bg-sky-500/30'
                     : 'btn-accent text-white'
@@ -564,9 +597,9 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
                 title={isDemoMode || credentials.isDemoMode ? '今すぐ実行(デモ)' : '今すぐ投稿'}
               >
                 {isExecuting ? (
-                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <RefreshCw className="w-2.5 h-2.5 animate-spin" />
                 ) : (
-                  <Play className="w-3 h-3" />
+                  <Play className="w-2.5 h-2.5" />
                 )}
                 <span>実行</span>
               </button>
@@ -578,7 +611,7 @@ export const ScheduledWeekView: React.FC<ScheduledWeekViewProps> = ({
               className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition cursor-pointer"
               title="予約を解除"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="w-3 h-3" />
             </button>
           </div>
         </div>

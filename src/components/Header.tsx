@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ApiCredentials, ThemeAccentId } from '../types';
-import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3, Shield } from 'lucide-react';
+import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3 } from 'lucide-react';
 import { hasSavedAccountInVault } from '../utils/accountVault';
 import { calculateTokenExpiryInfo } from '../utils/tokenExpiry';
 import { ThemeSelector } from './ThemeSelector';
@@ -377,17 +377,17 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* 予約一覧ボタン */}
+        {/* 予約カレンダーボタン */}
         {onOpenScheduledPosts && (
           <button
             id="header-scheduled-posts-button"
             type="button"
             onClick={onOpenScheduledPosts}
             className="relative bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white p-2 sm:px-3 sm:py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium cursor-pointer"
-            title="日本時間での予約投稿一覧を表示・管理"
+            title="カレンダー形式で予約済みの投稿を表示・編集・管理"
           >
             <Clock className="w-4 h-4 text-accent-light" />
-            <span className="hidden sm:inline">予約一覧</span>
+            <span className="hidden sm:inline">予約カレンダー</span>
             {scheduledPostsCount > 0 && (
               <span className="badge-accent text-[10px] font-bold px-1.5 py-0.2 rounded-full shadow-sm">
                 {scheduledPostsCount}

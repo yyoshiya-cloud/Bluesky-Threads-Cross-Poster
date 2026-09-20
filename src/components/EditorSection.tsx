@@ -1373,15 +1373,16 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 </button>
               </div>
 
-              {/* 予約一覧モーダルボタン */}
+              {/* 予約カレンダーモーダルボタン */}
               {onOpenScheduledPosts && (
                 <button
                   type="button"
                   onClick={onOpenScheduledPosts}
-                  className="text-accent-light hover:underline text-[11px] font-semibold cursor-pointer flex items-center gap-1"
+                  className="text-accent-light hover:underline text-[11px] font-semibold cursor-pointer flex items-center gap-1 bg-slate-900/60 hover:bg-slate-900 px-2 py-1 rounded-lg border border-slate-800 transition"
+                  title="カレンダー形式で予約済みの投稿を表示・編集"
                 >
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>予約一覧 ({scheduledPostsCount}件)</span>
+                  <span>🗓️ 予約カレンダー ({scheduledPostsCount}件)</span>
                 </button>
               )}
             </div>

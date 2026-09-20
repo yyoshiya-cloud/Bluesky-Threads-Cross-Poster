@@ -225,19 +225,6 @@ export const compressImageFileWithThumbnail = (
 };
 
 /**
- * 互換性のための単一Base64返却関数
- */
-export const compressImageFile = async (
-  file: File,
-  maxWidth = 1200,
-  maxHeight = 1200,
-  quality = 0.82
-): Promise<string> => {
-  const result = await compressImageFileWithThumbnail(file, maxWidth, maxHeight, quality);
-  return result.dataUrl;
-};
-
-/**
  * 動画ファイル（MP4 / MOV / WebM）を処理し、メタデータ（duration, width, height, サムネイル）を抽出するヘルパー
  */
 export interface ProcessedVideoResult {

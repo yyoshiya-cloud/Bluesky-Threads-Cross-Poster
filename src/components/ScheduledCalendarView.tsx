@@ -13,6 +13,10 @@ import {
   CalendarDays,
   Film,
   Image as ImageIcon,
+  Plus,
+  Hash,
+  Send,
+  X,
 } from 'lucide-react';
 import { ScheduledPostItem, ApiCredentials, TargetPlatformCategory } from '../types';
 import {
@@ -22,6 +26,7 @@ import {
   parseJstDatetimeLocal,
   updateScheduledPost,
   deleteScheduledPost,
+  addScheduledPost,
 } from '../utils/scheduledStorage';
 import {
   getPlatformCategory,
@@ -123,12 +128,22 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
   // 投稿区分フィルター ('all' | TargetPlatformCategory)
   const [filterCategory, setFilterCategory] = useState<'all' | TargetPlatformCategory>('all');
 
-  // インライン編集状態
+  // 編集モーダル・インライン編集状態
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editDatetimeLocal, setEditDatetimeLocal] = useState<string>('');
+  const [editText, setEditText] = useState<string>('');
+  const [editThreadsTopic, setEditThreadsTopic] = useState<string>('');
   const [editPostToBluesky, setEditPostToBluesky] = useState<boolean>(true);
   const [editPostToThreads, setEditPostToThreads] = useState<boolean>(true);
   const [executingId, setExecutingId] = useState<string | null>(null);
+
+  // 新規予約作成ダイアログ
+  const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
+  const [newPostText, setNewPostText] = useState<string>('');
+  const [newPostDatetimeLocal, setNewPostDatetimeLocal] = useState<string>('');
+  const [newPostToBluesky, setNewPostToBluesky] = useState<boolean>(true);
+  const [newPostToThreads, setNewPostToThreads] = useState<boolean>(true);
+  const [newPostThreadsTopic, setNewPostThreadsTopic] = useState<string>('');
 
   // フィルタリングされた予約投稿
   const filteredPosts = useMemo(() => {
@@ -187,15 +202,12 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
 
   // カレンダーグリッドの日付セルデータ計算
   const calendarCells = useMemo(() => {
-    // 1日のDate（ローカル）
     const firstDay = new Date(viewYear, viewMonth - 1, 1);
     const startingDayOfWeek = firstDay.getDay(); // 0:日, 1:月, ... 6:土
 
-    // 当月の日数
     const lastDay = new Date(viewYear, viewMonth, 0);
     const daysInMonth = lastDay.getDate();
 
-    // 前月の日数
     const prevMonthLastDay = new Date(viewYear, viewMonth - 1, 0);
     const daysInPrevMonth = prevMonthLastDay.getDate();
 
@@ -252,7 +264,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
       const mStr = nextM < 10 ? `0${nextM}` : `${nextM}`;
       const dStr = d < 10 ? `0${d}` : `${d}`;
       const key = `${nextY}-${mStr}-${dStr}`;
-      const dayOfWeek = (cells.length) % 7;
+      const dayOfWeek = cells.length % 7;
       cells.push({
         dateNumber: d,
         dateKey: key,
@@ -285,7 +297,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
     return postsByDateMap.get(selectedDateKey) || [];
   }, [selectedDateKey, postsByDateMap]);
 
-  // 選択中の日付の読みやすいフォーマット (例: 2026年9月8日 (火))
+  // 選択中の日付のフォーマット (例: 2026年9月20日 (日))
   const selectedDateFormatted = useMemo(() => {
     if (!selectedDateKey) return '';
     const [y, m, d] = selectedDateKey.split('-').map((v) => parseInt(v, 10));
@@ -295,15 +307,27 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
     return `${y}年${m}月${d}日 (${dayNames[dt.getDay()]})${isT ? ' 【本日】' : ''}`;
   }, [selectedDateKey, todayKey]);
 
-  // アクションハンドラ
+  // 編集開始
   const handleStartEdit = (item: ScheduledPostItem) => {
     setEditingItemId(item.id);
     setEditDatetimeLocal(getJstDatetimeLocalValue(item.scheduledAt));
+    setEditText(item.text);
+    setEditThreadsTopic(item.threadsTopic || '');
     setEditPostToBluesky(item.postToBluesky);
     setEditPostToThreads(item.postToThreads);
   };
 
+  // 編集保存
   const handleSaveEdit = (id: string) => {
+    if (!editText.trim()) {
+      onNotify({
+        type: 'error',
+        title: '投稿本文が空です',
+        message: '投稿するテキストを入力してください。',
+      });
+      return;
+    }
+
     const newTimestamp = parseJstDatetimeLocal(editDatetimeLocal);
     if (newTimestamp <= Date.now()) {
       onNotify({
@@ -324,6 +348,8 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
     }
 
     updateScheduledPost(id, {
+      text: editText.trim(),
+      threadsTopic: editThreadsTopic.trim() || undefined,
       scheduledAt: newTimestamp,
       postToBluesky: editPostToBluesky,
       postToThreads: editPostToThreads,
@@ -338,6 +364,76 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
     });
   };
 
+  // 新規予約の作成開始（特定の日付または選択日付）
+  const handleOpenNewPost = (dateKey?: string) => {
+    const targetDate = dateKey || selectedDateKey || todayKey;
+    // デフォルトでその日の午前10:00（または現在から1時間後）
+    const now = Date.now();
+    const defaultTime = `${targetDate}T10:00`;
+    const parsed = parseJstDatetimeLocal(defaultTime);
+    if (parsed > now) {
+      setNewPostDatetimeLocal(defaultTime);
+    } else {
+      setNewPostDatetimeLocal(getJstDatetimeLocalValue(now + 60 * 60 * 1000));
+    }
+    setNewPostText('');
+    setNewPostThreadsTopic('');
+    setNewPostToBluesky(true);
+    setNewPostToThreads(true);
+    setIsCreatingNew(true);
+  };
+
+  // 新規予約保存
+  const handleSaveNewPost = () => {
+    if (!newPostText.trim()) {
+      onNotify({
+        type: 'error',
+        title: '投稿本文が空です',
+        message: '予約するテキストを入力してください。',
+      });
+      return;
+    }
+
+    const timestamp = parseJstDatetimeLocal(newPostDatetimeLocal);
+    if (timestamp <= Date.now()) {
+      onNotify({
+        type: 'error',
+        title: '無効な日時',
+        message: '予約日時は現在時刻（日本時間）より未来の日時を指定してください。',
+      });
+      return;
+    }
+
+    if (!newPostToBluesky && !newPostToThreads) {
+      onNotify({
+        type: 'error',
+        title: '投稿先が未選択',
+        message: 'Bluesky または Threads のいずれかを選択してください。',
+      });
+      return;
+    }
+
+    addScheduledPost({
+      text: newPostText.trim(),
+      scheduledAt: timestamp,
+      postToBluesky: newPostToBluesky,
+      postToThreads: newPostToThreads,
+      threadsTopic: newPostThreadsTopic.trim() || undefined,
+      images: [],
+      autoSplit: false,
+      includeNumbering: false,
+    });
+
+    setIsCreatingNew(false);
+    onRefreshScheduledPosts();
+    onNotify({
+      type: 'success',
+      title: '予約投稿を作成しました',
+      message: `日本時間 ${formatToJstString(timestamp)} に配信予約しました。`,
+    });
+  };
+
+  // 予約削除
   const handleDelete = (id: string) => {
     deleteScheduledPost(id);
     onRefreshScheduledPosts();
@@ -348,6 +444,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
     });
   };
 
+  // 即時投稿
   const handleExecuteNow = async (item: ScheduledPostItem) => {
     setExecutingId(item.id);
     try {
@@ -370,6 +467,13 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
     }
   };
 
+  // クイック日時オフセット付与
+  const addHoursToEdit = (hours: number) => {
+    const current = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+    const next = current + hours * 60 * 60 * 1000;
+    setEditDatetimeLocal(getJstDatetimeLocalValue(next));
+  };
+
   const weekDayHeaders = [
     { label: '日', isSun: true, isSat: false },
     { label: '月', isSun: false, isSat: false },
@@ -383,9 +487,9 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
   return (
     <div className="flex flex-col h-full min-h-0 space-y-3 animate-in fade-in duration-150">
       {/* カレンダーコントロールバー */}
-      <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 bg-slate-950/60 p-2.5 rounded-2xl border border-slate-800">
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 bg-slate-950/70 p-2.5 rounded-2xl border border-slate-800 shadow-sm">
         {/* 月切り替え */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <button
             type="button"
             onClick={handlePrevMonth}
@@ -395,13 +499,13 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
             <ChevronLeft className="w-4 h-4" />
           </button>
 
-          <div className="flex items-center gap-2 px-2">
+          <div className="flex items-center gap-1.5 px-1.5 sm:px-2">
             <CalendarIcon className="w-4 h-4 text-accent-light" />
             <span className="text-sm font-bold text-slate-100 font-mono">
               {viewYear}年 {viewMonth}月
             </span>
-            <span className="badge-accent px-2 py-0.5 rounded-full text-[10px] font-bold">
-              {currentMonthPostsCount}件の予定
+            <span className="badge-accent px-2 py-0.5 rounded-full text-[10px] font-bold font-mono">
+              {currentMonthPostsCount}件
             </span>
           </div>
 
@@ -417,7 +521,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
           <button
             type="button"
             onClick={handleGoToday}
-            className="ml-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-accent-light border border-slate-700 text-xs font-medium transition cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-accent-light border border-slate-700 text-xs font-medium transition cursor-pointer"
             title="現在の日本時間の月に戻る"
           >
             今月へ
@@ -427,20 +531,30 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
             <button
               type="button"
               onClick={onSwitchToWeekView}
-              className="ml-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition cursor-pointer flex items-center gap-1"
-              title="週間カレンダーに切り替え"
+              className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition cursor-pointer flex items-center gap-1"
+              title="週間タイムラインカレンダーに切り替え"
             >
               <CalendarDays className="w-3.5 h-3.5 text-accent-light" />
-              <span>週間表示</span>
+              <span className="hidden sm:inline">週間表示</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => handleOpenNewPost(selectedDateKey)}
+            className="px-2.5 py-1 rounded-lg btn-accent text-white text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-sm"
+            title="選択した日付で新規予約を作成"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>新規予約</span>
+          </button>
         </div>
 
         {/* フィルター群 */}
         <div className="flex items-center gap-2 flex-wrap text-xs">
           {/* 区分フィルター */}
           <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
-            <span className="text-[10px] text-slate-400 font-medium px-1">区分:</span>
+            <span className="text-[10px] text-slate-400 font-medium px-1 hidden sm:inline">区分:</span>
             <button
               type="button"
               onClick={() => setFilterCategory('all')}
@@ -458,7 +572,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
               }`}
             >
               <span>🚀</span>
-              <span>同時</span>
+              <span className="hidden sm:inline">同時</span>
             </button>
             <button
               type="button"
@@ -468,7 +582,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
               }`}
             >
               <span>🦋</span>
-              <span>BS</span>
+              <span className="hidden sm:inline">BS</span>
             </button>
             <button
               type="button"
@@ -478,7 +592,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
               }`}
             >
               <span>🌀</span>
-              <span>TH</span>
+              <span className="hidden sm:inline">TH</span>
             </button>
           </div>
 
@@ -528,7 +642,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
       </div>
 
       {/* カレンダー本体グリッド */}
-      <div className="shrink-0 bg-slate-950/80 rounded-2xl border border-slate-800 p-2.5 shadow-inner">
+      <div className="shrink-0 bg-slate-950/80 rounded-2xl border border-slate-800 p-2 sm:p-3 shadow-inner">
         {/* 曜日ヘッダー */}
         <div className="grid grid-cols-7 gap-1 pb-1.5 border-b border-slate-800 text-center font-bold text-xs">
           {weekDayHeaders.map((h, i) => (
@@ -553,15 +667,15 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
               <div
                 key={cell.dateKey}
                 onClick={() => setSelectedDateKey(cell.dateKey)}
-                className={`min-h-[52px] sm:min-h-[60px] p-1 rounded-xl border transition-all cursor-pointer flex flex-col justify-between select-none ${
+                className={`min-h-[58px] sm:min-h-[66px] p-1 sm:p-1.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between select-none ${
                   isSelected
                     ? 'border-accent ring-2 ring-accent/30 bg-accent-subtle/40 shadow-md'
                     : cell.isCurrentMonth
                     ? 'border-slate-800/80 bg-slate-900/60 hover:bg-slate-900 hover:border-slate-700'
-                    : 'border-slate-900 bg-slate-950/30 text-slate-600 hover:bg-slate-900/40'
+                    : 'border-slate-900/60 bg-slate-950/30 text-slate-600 hover:bg-slate-900/40'
                 }`}
               >
-                {/* セル上部: 日付とバッジ */}
+                {/* セル上部: 日付とバッジ & 追加ボタン */}
                 <div className="flex items-center justify-between">
                   <span
                     className={`inline-flex items-center justify-center text-xs font-bold font-mono rounded-full w-5 h-5 ${
@@ -577,11 +691,13 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
                     {cell.dateNumber}
                   </span>
 
-                  {hasPosts && (
-                    <span className="text-[10px] px-1.5 py-0.2 font-bold rounded-full bg-slate-800 text-accent-light border border-accent/40 font-mono">
-                      {cell.posts.length}件
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {hasPosts && (
+                      <span className="text-[10px] px-1.5 py-0.2 font-bold rounded-full bg-slate-800 text-accent-light border border-accent/40 font-mono">
+                        {cell.posts.length}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* セル下部: 投稿プレビューバッジ */}
@@ -602,7 +718,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
                         }`}
                         title={`${timeStr} [${catConfig.name}] - ${p.text}`}
                       >
-                        <span className="shrink-0">{catConfig.icon}</span>
+                        <span className="shrink-0 text-[10px]">{catConfig.icon}</span>
                         <span className="font-bold shrink-0">{timeStr}</span>
                         <span className="truncate opacity-90">{p.text}</span>
                       </div>
@@ -621,6 +737,227 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
         </div>
       </div>
 
+      {/* 新規予約作成オーバーレイモーダル */}
+      {isCreatingNew && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-2xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-accent-subtle text-accent-light border border-accent flex items-center justify-center">
+                  <Plus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-100">新規予約投稿を作成</h3>
+                  <p className="text-[11px] text-slate-400">日本時間（JST）を指定して投稿を予約します</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreatingNew(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* 投稿先プラットフォーム */}
+              <div className="space-y-1.5">
+                <span className="text-xs font-semibold text-slate-300">投稿先プラットフォーム:</span>
+                <div className="grid grid-cols-3 gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPostToBluesky(true);
+                      setNewPostToThreads(true);
+                    }}
+                    className={`px-2 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      newPostToBluesky && newPostToThreads
+                        ? 'btn-accent text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <span>🚀</span>
+                    <span>同時投稿</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPostToBluesky(true);
+                      setNewPostToThreads(false);
+                    }}
+                    className={`px-2 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      newPostToBluesky && !newPostToThreads
+                        ? 'bg-[#0085ff] text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <span>🦋</span>
+                    <span>Bluesky</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPostToBluesky(false);
+                      setNewPostToThreads(true);
+                    }}
+                    className={`px-2 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      !newPostToBluesky && newPostToThreads
+                        ? 'bg-purple-700 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <span>🌀</span>
+                    <span>Threads</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 予約日時 */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-300">予約日時 (JST):</span>
+                  <div className="flex items-center gap-1 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setNewPostDatetimeLocal(getJstDatetimeLocalValue(Date.now()))}
+                      className="text-accent-light hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
+                      title="現在の日本時間（JST）を設定"
+                    >
+                      <Clock className="w-2.5 h-2.5" />
+                      <span>現在の時間</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
+                  <input
+                    type="datetime-local"
+                    value={newPostDatetimeLocal}
+                    onChange={(e) => setNewPostDatetimeLocal(e.target.value)}
+                    className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus-ring-accent font-mono"
+                  />
+                  <div className="flex items-center gap-1 flex-wrap sm:flex-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = parseJstDatetimeLocal(newPostDatetimeLocal) || Date.now();
+                        setNewPostDatetimeLocal(getJstDatetimeLocalValue(cur + 5 * 60 * 1000));
+                      }}
+                      className="flex-1 sm:flex-initial px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold transition shrink-0 cursor-pointer text-center"
+                      title="5分加算"
+                    >
+                      +5m
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = parseJstDatetimeLocal(newPostDatetimeLocal) || Date.now();
+                        setNewPostDatetimeLocal(getJstDatetimeLocalValue(cur + 10 * 60 * 1000));
+                      }}
+                      className="flex-1 sm:flex-initial px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold transition shrink-0 cursor-pointer text-center"
+                      title="10分加算"
+                    >
+                      +10m
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = parseJstDatetimeLocal(newPostDatetimeLocal) || Date.now();
+                        setNewPostDatetimeLocal(getJstDatetimeLocalValue(cur + 15 * 60 * 1000));
+                      }}
+                      className="flex-1 sm:flex-initial px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold transition shrink-0 cursor-pointer text-center"
+                      title="15分加算"
+                    >
+                      +15m
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = parseJstDatetimeLocal(newPostDatetimeLocal) || Date.now();
+                        setNewPostDatetimeLocal(getJstDatetimeLocalValue(cur + 30 * 60 * 1000));
+                      }}
+                      className="flex-1 sm:flex-initial px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold transition shrink-0 cursor-pointer text-center"
+                      title="30分加算"
+                    >
+                      +30m
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = parseJstDatetimeLocal(newPostDatetimeLocal) || Date.now();
+                        setNewPostDatetimeLocal(getJstDatetimeLocalValue(cur + 60 * 60 * 1000));
+                      }}
+                      className="flex-1 sm:flex-initial px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold transition shrink-0 cursor-pointer text-center"
+                      title="1時間加算"
+                    >
+                      +1h
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = parseJstDatetimeLocal(newPostDatetimeLocal) || Date.now();
+                        setNewPostDatetimeLocal(getJstDatetimeLocalValue(cur + 24 * 60 * 60 * 1000));
+                      }}
+                      className="flex-1 sm:flex-initial px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold transition shrink-0 cursor-pointer text-center"
+                      title="1日加算"
+                    >
+                      +1日
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 本文入力 */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-300">投稿本文:</span>
+                  <span className="text-[10px] text-slate-400 font-mono">{newPostText.length} 文字</span>
+                </div>
+                <textarea
+                  rows={4}
+                  value={newPostText}
+                  onChange={(e) => setNewPostText(e.target.value)}
+                  placeholder="予約投稿する本文を入力してください..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 focus-ring-accent font-sans leading-relaxed resize-none"
+                />
+              </div>
+
+              {/* Threads トピック (Threadsが有効な場合) */}
+              {newPostToThreads && (
+                <div className="flex items-center gap-2 bg-slate-950/80 p-2.5 rounded-xl border border-purple-900/40">
+                  <Hash className="w-4 h-4 text-purple-400 shrink-0" />
+                  <input
+                    type="text"
+                    value={newPostThreadsTopic}
+                    onChange={(e) => setNewPostThreadsTopic(e.target.value)}
+                    placeholder="Threads トピックタグ（任意、例: 写真部、開発日記）"
+                    className="flex-1 bg-transparent border-none text-xs text-purple-200 placeholder:text-purple-400/40 focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsCreatingNew(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveNewPost}
+                className="px-5 py-2 rounded-xl btn-accent text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md transition"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>予約を登録する</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 選択された日付の予約詳細パネル (明細行のみ縦スクロール) */}
       <div className="flex-1 min-h-0 bg-slate-950/90 rounded-2xl border border-slate-800 p-3.5 flex flex-col">
         <div className="shrink-0 flex items-center justify-between pb-2 border-b border-slate-800 mb-2.5">
@@ -633,15 +970,29 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
               ({selectedDatePosts.length}件の予約)
             </span>
           </div>
+
+          <button
+            type="button"
+            onClick={() => handleOpenNewPost(selectedDateKey)}
+            className="text-xs font-semibold text-accent-light hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>この日に予約を作成</span>
+          </button>
         </div>
 
         {selectedDatePosts.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center py-6 text-slate-500 text-xs space-y-1">
-            <Clock className="w-6 h-6 mx-auto opacity-40 text-slate-400" />
-            <p>この日（{selectedDateFormatted}）に設定された予約投稿はありません。</p>
-            <p className="text-[11px] text-slate-600">
-              エディタで「⏰ 予約投稿」を選択し、この日付を指定して予約できます。
-            </p>
+          <div className="flex-1 flex flex-col items-center justify-center py-6 text-slate-500 text-xs space-y-2">
+            <Clock className="w-7 h-7 mx-auto opacity-40 text-slate-400" />
+            <p className="font-medium text-slate-400">この日（{selectedDateFormatted}）に設定された予約投稿はありません。</p>
+            <button
+              type="button"
+              onClick={() => handleOpenNewPost(selectedDateKey)}
+              className="mt-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-accent-light border border-accent/30 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>この日に予約を追加する</span>
+            </button>
           </div>
         ) : (
           <div className="flex-1 min-h-0 space-y-2.5 overflow-y-auto pr-1">
@@ -732,13 +1083,15 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
                     </div>
                   </div>
 
-                  {/* 本文 */}
-                  <div className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed max-h-24 overflow-y-auto bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60 font-sans">
-                    {item.text}
-                  </div>
+                  {/* 本文（非編集時） */}
+                  {!isEditing && (
+                    <div className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed max-h-28 overflow-y-auto bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60 font-sans">
+                      {item.text}
+                    </div>
+                  )}
 
                   {/* 画像・動画プレビュー */}
-                  {item.images.length > 0 && (
+                  {item.images.length > 0 && !isEditing && (
                     <div className="flex flex-wrap items-center gap-1.5">
                       {item.images.map((img, idx) => {
                         const src = img.thumbnailUrl || img.dataUrl;
@@ -794,17 +1147,18 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
                     </div>
                   )}
 
-                  {/* 日時・区分変更インラインフォーム */}
+                  {/* 本文・日時・区分 総合インライン編集フォーム */}
                   {isEditing && (
-                    <div className="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-2.5 animate-in fade-in duration-150">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-200">
-                          予約日時および投稿区分の変更:
+                    <div className="bg-slate-950 rounded-xl p-3.5 border border-accent/60 space-y-3 animate-in fade-in duration-150 shadow-lg">
+                      <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+                        <span className="text-xs font-bold text-accent-light flex items-center gap-1.5">
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>予約投稿内容の編集</span>
                         </span>
                         <button
                           type="button"
                           onClick={() => setEditingItemId(null)}
-                          className="text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
+                          className="text-slate-400 hover:text-slate-200 text-xs cursor-pointer font-medium"
                         >
                           キャンセル
                         </button>
@@ -812,7 +1166,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
 
                       {/* 投稿区分切り替え */}
                       <div className="space-y-1">
-                        <span className="text-[10px] font-semibold text-slate-400">投稿区分:</span>
+                        <span className="text-[11px] font-semibold text-slate-300">投稿先プラットフォーム:</span>
                         <div className="grid grid-cols-3 gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
                           <button
                             type="button"
@@ -862,45 +1216,140 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
                         </div>
                       </div>
 
+                      {/* 本文編集 */}
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-semibold text-slate-400">予約日時 (JST):</span>
+                          <span className="text-[11px] font-semibold text-slate-300">投稿本文:</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{editText.length} 文字</span>
+                        </div>
+                        <textarea
+                          rows={3}
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-100 focus-ring-accent font-sans leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Threadsトピック (Threadsが有効な場合) */}
+                      {editPostToThreads && (
+                        <div className="flex items-center gap-2 bg-slate-900/80 p-2 rounded-lg border border-purple-900/40">
+                          <Hash className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                          <input
+                            type="text"
+                            value={editThreadsTopic}
+                            onChange={(e) => setEditThreadsTopic(e.target.value)}
+                            placeholder="Threads トピックタグ（任意）"
+                            className="flex-1 bg-transparent border-none text-xs text-purple-200 placeholder:text-purple-400/40 focus:outline-none"
+                          />
+                        </div>
+                      )}
+
+                      {/* 日時編集 & クイックボタン */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between flex-wrap gap-1">
+                          <span className="text-[11px] font-semibold text-slate-300">予約日時 (JST):</span>
                           <button
                             type="button"
                             onClick={() => setEditDatetimeLocal(getJstDatetimeLocalValue(Date.now()))}
-                            className="text-[10px] text-accent-light hover:text-white flex items-center gap-1 font-bold cursor-pointer transition hover:underline"
-                            title="予約日時を現在の日本時間（JST）に変更します"
+                            className="text-accent-light hover:underline font-bold flex items-center gap-0.5 text-[10px] cursor-pointer"
+                            title="現在の日本時間（JST）を設定"
                           >
-                            <Clock className="w-3 h-3" />
-                            <span>現在日時に変更</span>
+                            <Clock className="w-2.5 h-2.5" />
+                            <span>現在の時間</span>
                           </button>
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
                           <input
                             type="datetime-local"
                             value={editDatetimeLocal}
                             onChange={(e) => setEditDatetimeLocal(e.target.value)}
                             className="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus-ring-accent font-mono"
                           />
-                          <button
-                            type="button"
-                            onClick={() => setEditDatetimeLocal(getJstDatetimeLocalValue(Date.now()))}
-                            className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
-                            title="現在日時に変更"
-                          >
-                            <Clock className="w-3.5 h-3.5 text-accent-light" />
-                            <span>現在日時</span>
-                          </button>
+                          <div className="flex items-center gap-1 flex-wrap sm:flex-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+                                setEditDatetimeLocal(getJstDatetimeLocalValue(cur + 5 * 60 * 1000));
+                              }}
+                              className="flex-1 sm:flex-initial px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[10px] font-bold transition text-center cursor-pointer"
+                              title="5分加算"
+                            >
+                              +5m
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+                                setEditDatetimeLocal(getJstDatetimeLocalValue(cur + 10 * 60 * 1000));
+                              }}
+                              className="flex-1 sm:flex-initial px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[10px] font-bold transition text-center cursor-pointer"
+                              title="10分加算"
+                            >
+                              +10m
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+                                setEditDatetimeLocal(getJstDatetimeLocalValue(cur + 15 * 60 * 1000));
+                              }}
+                              className="flex-1 sm:flex-initial px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[10px] font-bold transition text-center cursor-pointer"
+                              title="15分加算"
+                            >
+                              +15m
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+                                setEditDatetimeLocal(getJstDatetimeLocalValue(cur + 30 * 60 * 1000));
+                              }}
+                              className="flex-1 sm:flex-initial px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[10px] font-bold transition text-center cursor-pointer"
+                              title="30分加算"
+                            >
+                              +30m
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+                                setEditDatetimeLocal(getJstDatetimeLocalValue(cur + 60 * 60 * 1000));
+                              }}
+                              className="flex-1 sm:flex-initial px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[10px] font-bold transition text-center cursor-pointer"
+                              title="1時間加算"
+                            >
+                              +1h
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = parseJstDatetimeLocal(editDatetimeLocal) || Date.now();
+                                setEditDatetimeLocal(getJstDatetimeLocalValue(cur + 24 * 60 * 60 * 1000));
+                              }}
+                              className="flex-1 sm:flex-initial px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[10px] font-bold transition text-center cursor-pointer"
+                              title="1日加算"
+                            >
+                              +1日
+                            </button>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="flex justify-end gap-2 pt-1">
+                      <div className="flex justify-end gap-2 pt-1 border-t border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setEditingItemId(null)}
+                          className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+                        >
+                          キャンセル
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleSaveEdit(item.id)}
-                          className="px-3 py-1 rounded-lg btn-accent text-xs font-bold text-white cursor-pointer"
+                          className="px-3.5 py-1 rounded-lg btn-accent text-xs font-bold text-white cursor-pointer shadow-sm"
                         >
-                          内容を保存
+                          変更を保存
                         </button>
                       </div>
                     </div>
@@ -916,7 +1365,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
                           onCloseModal();
                         }}
                         className="text-slate-400 hover:text-slate-200 hover:bg-slate-800 px-2 py-1 rounded-md border border-slate-800 transition cursor-pointer flex items-center gap-1 font-medium text-[11px]"
-                        title="エディタに復元"
+                        title="エディタに復元して編集"
                       >
                         <Edit3 className="w-3 h-3" />
                         <span>エディタで開く</span>
@@ -926,10 +1375,10 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
                         <button
                           type="button"
                           onClick={() => handleStartEdit(item)}
-                          className="text-slate-400 hover:text-slate-200 hover:bg-slate-800 px-2 py-1 rounded-md border border-slate-800 transition cursor-pointer flex items-center gap-1 font-medium text-[11px]"
+                          className="text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-md border border-slate-700 transition cursor-pointer flex items-center gap-1 font-semibold text-[11px]"
                         >
-                          <CalendarIcon className="w-3 h-3" />
-                          <span>日時・区分変更</span>
+                          <CalendarIcon className="w-3 h-3 text-accent-light" />
+                          <span>予約を編集</span>
                         </button>
                       )}
                     </div>
@@ -944,7 +1393,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
                             isDemoMode || credentials.isDemoMode
                               ? 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 border border-sky-400/40 font-bold'
                               : 'btn-accent text-white font-bold'
-                          } px-2.5 py-1 rounded-md transition flex items-center gap-1 cursor-pointer disabled:opacity-50 text-[11px]`}
+                          } px-2.5 py-1 rounded-md transition flex items-center gap-1 cursor-pointer disabled:opacity-50 text-[11px]` }
                         >
                           {isExecuting ? (
                             <RefreshCw className="w-3 h-3 animate-spin" />

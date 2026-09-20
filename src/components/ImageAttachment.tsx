@@ -12,8 +12,6 @@ import {
   Trash2,
   FileText,
   Check,
-  ChevronDown,
-  ChevronUp,
   Info,
   CheckCircle2,
   AlertOctagon,
@@ -24,21 +22,11 @@ import {
   ChevronLeft,
   ChevronRight,
   GripVertical,
-  Cloud,
-  CloudCheck,
-  CloudOff,
-  RefreshCw,
-  AlertTriangle,
-  UploadCloud,
 } from 'lucide-react';
 import { compressImageFileWithThumbnail, processVideoFile } from '../utils/draftStorage';
 import { saveMediaBlob, getMediaBlob } from '../utils/indexedMediaStorage';
-import {
-  validateVideoMetadata,
-  checkVideoAttachmentEligibility,
-} from '../utils/mediaValidation';
 import { VideoSpecsModal } from './VideoSpecsModal';
-import { uploadMediaItem, dataUrlToBlob } from '../utils/postApi';
+import { dataUrlToBlob } from '../utils/postApi';
 
 interface ImageAttachmentProps {
   images: AttachedImage[];
