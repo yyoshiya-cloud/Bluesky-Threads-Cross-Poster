@@ -288,12 +288,13 @@ export function isTrulyPublicCdnUrl(url?: string | null): boolean {
   if (lower.includes('localhost') || lower.includes('127.0.0.1')) return false;
   if (lower.includes('.run.app') || lower.includes('.internal') || lower.includes('/api/media/')) return false;
   if (lower.includes('web.app') || lower.includes('firebaseapp.com')) return false;
+  if (lower.includes('tmpfiles.org')) return false; // tmpfiles.org returns HTML/redirects, not direct image files
   return true;
 }
 
 /**
  * Meta Threads APIが直接ダウンロード可能な公開静的メディアホストへ高速アップロード
- * （Catbox Litterbox / Uguu 高速ホスト / tmpfiles.org: いずれもダイレクトURL・Metaクローラーアクセス確認済）
+ * （Uguu 高速ホスト: ダイレクトURL・Metaクローラーアクセス確認済）
  */
 async function uploadMediaToPublicHost(
   buffer: Buffer,
@@ -306,44 +307,14 @@ async function uploadMediaToPublicHost(
   const isVideo = detected.isVideo;
   const sizeMb = (buffer.length / 1024 / 1024).toFixed(2);
 
-  // 1. Catbox Litterbox (最優先: 最速レスポンス・最大1GB対応、動画・画像対応、24h保持、ダイレクトURL、Metaクローラー200確認済)
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const formData = new FormData();
-      formData.append('reqtype', 'fileupload');
-      formData.append('time', '24h');
-      formData.append('fileToUpload', new Blob([buffer], { type: effectiveMime }), uploadName);
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), isVideo ? 60000 : 20000);
-      const res = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      const text = (await res.text()).trim();
-      if (res.ok && text.startsWith('http') && isTrulyPublicCdnUrl(text)) {
-        console.log(`[PublicMedia] Uploaded to Litterbox success: ${text} (${effectiveMime}, size: ${sizeMb}MB)`);
-        return text;
-      }
-    } catch (err: any) {
-      console.warn(`[PublicMedia] Litterbox attempt #${attempt + 1} note: ${err.message}`);
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 600));
-      }
-    }
-  }
-
-  // 2. Uguu (超高速一時ファイルホスティング: 無料・認証不要・100MBまで対応・Metaクローラー直接アクセス確認済)
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // 1. Uguu (超高速一時ファイルホスティング: 無料・認証不要・100MBまで対応・ダイレクト画像配信・Metaクローラー200直接アクセス確認済)
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const formData = new FormData();
       formData.append('files[]', new Blob([buffer], { type: effectiveMime }), uploadName);
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), isVideo ? 60000 : 20000);
+      const timeout = setTimeout(() => controller.abort(), isVideo ? 60000 : 25000);
       const res = await fetch('https://uguu.se/upload', {
         method: 'POST',
         body: formData,
@@ -364,37 +335,10 @@ async function uploadMediaToPublicHost(
       }
     } catch (err: any) {
       console.warn(`[PublicMedia] Uguu upload attempt #${attempt + 1} note: ${err.message}`);
-      if (attempt === 0) {
+      if (attempt < 2) {
         await new Promise((r) => setTimeout(r, 600));
       }
     }
-  }
-
-  // 3. tmpfiles.org (安定した一時ファイルCDN: ダイレクトURL /dl/ 対応・field名 'file')
-  try {
-    const formData = new FormData();
-    formData.append('file', new Blob([buffer], { type: effectiveMime }), uploadName);
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), isVideo ? 45000 : 15000);
-    const res = await fetch('https://tmpfiles.org/api/v1/upload', {
-      method: 'POST',
-      body: formData,
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      const rawUrl = data?.data?.url;
-      if (rawUrl && typeof rawUrl === 'string' && rawUrl.includes('tmpfiles.org/')) {
-        const directUrl = rawUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-        console.log(`[PublicMedia] Uploaded to tmpfiles.org success: ${directUrl} (${effectiveMime}, size: ${sizeMb}MB)`);
-        return directUrl;
-      }
-    }
-  } catch (err: any) {
-    console.warn(`[PublicMedia] tmpfiles.org attempt note: ${err.message}`);
   }
 
   return null;

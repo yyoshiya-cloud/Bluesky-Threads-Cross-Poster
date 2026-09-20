@@ -1060,11 +1060,12 @@ export function isTrulyPublicCdnUrl(url?: string | null): boolean {
   if (lower.includes('localhost') || lower.includes('127.0.0.1')) return false;
   if (lower.includes('.run.app') || lower.includes('.internal') || lower.includes('/api/media/')) return false;
   if (lower.includes('web.app') || lower.includes('firebaseapp.com')) return false;
+  if (lower.includes('tmpfiles.org')) return false; // tmpfiles.org returns HTML/redirects, not direct images
   return true;
 }
 
 /**
- * クライアント直接アップロード（ブラウザから直接 tmpfiles.org 一時CDNへ送信）
+ * クライアント直接アップロード（ブラウザから直接 Uguu 一時CDNへ送信）
  */
 async function uploadToDirectPublicHost(blob: Blob, name: string, signal?: AbortSignal): Promise<string | null> {
   try {
@@ -1074,24 +1075,23 @@ async function uploadToDirectPublicHost(blob: Blob, name: string, signal?: Abort
       safeName = `${safeName.replace(/\.[^/.]+$/, '').trim() || 'image'}.jpg`;
     }
     const formData = new FormData();
-    formData.append('file', blob, safeName);
-    const res = await fetch('https://tmpfiles.org/api/v1/upload', {
+    formData.append('files[]', blob, safeName);
+    const res = await fetch('https://uguu.se/upload', {
       method: 'POST',
       body: formData,
       signal,
     });
     if (res.ok) {
       const json = await res.json().catch(() => ({}));
-      const rawUrl = json?.data?.url;
-      if (rawUrl && typeof rawUrl === 'string' && rawUrl.includes('tmpfiles.org/')) {
-        const directUrl = rawUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-        console.log(`[DirectPublicUpload] Uploaded directly to tmpfiles.org: ${directUrl}`);
-        return directUrl;
+      const url = json?.files?.[0]?.url;
+      if (url && typeof url === 'string' && url.startsWith('http') && isTrulyPublicCdnUrl(url)) {
+        console.log(`[DirectPublicUpload] Uploaded directly to Uguu: ${url}`);
+        return url;
       }
     }
   } catch (err) {
     if (signal?.aborted) throw err;
-    console.warn('[DirectPublicUpload] tmpfiles.org note:', err);
+    console.warn('[DirectPublicUpload] Uguu note:', err);
   }
   return null;
 }
