@@ -34,8 +34,9 @@ export async function hashPassword(password: string): Promise<string> {
   return `fb_${hash}_${clean.length}`;
 }
 
-// デフォルト初期パスワード（yo0117）の既知ハッシュキャッシュ（同期チェック用）
-let defaultHashCache: string = '';
+// デフォルト初期パスワード（yo0117）の既知ハッシュ（crosspost_salt_yo0117 の SHA-256）
+const PRECOMPUTED_DEFAULT_HASH = '840af7393643654f0e55b14149061fa6a23e5f7a6bc2e762bc68b11bd6ecb080';
+let defaultHashCache: string = PRECOMPUTED_DEFAULT_HASH;
 hashPassword(DEFAULT_PASSWORD).then((h) => {
   defaultHashCache = h;
 });
@@ -44,7 +45,7 @@ export function getModeSecurityConfig(): ModeSecurityConfig {
   if (typeof window === 'undefined') {
     return {
       requirePassword: true,
-      passwordHash: '',
+      passwordHash: PRECOMPUTED_DEFAULT_HASH,
       updatedAt: Date.now(),
     };
   }
@@ -53,22 +54,20 @@ export function getModeSecurityConfig(): ModeSecurityConfig {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (typeof parsed.requirePassword === 'boolean') {
-        return {
-          requirePassword: parsed.requirePassword,
-          passwordHash: parsed.passwordHash || defaultHashCache,
-          updatedAt: parsed.updatedAt || Date.now(),
-        };
-      }
+      return {
+        requirePassword: typeof parsed.requirePassword === 'boolean' ? parsed.requirePassword : true,
+        passwordHash: parsed.passwordHash || defaultHashCache || PRECOMPUTED_DEFAULT_HASH,
+        updatedAt: parsed.updatedAt || Date.now(),
+      };
     }
   } catch (e) {
     console.warn('Failed to parse mode security config:', e);
   }
 
-  // デフォルト設定: パスワード要求オン、初期パスワード yo0117
+  // デフォルト設定: パスワード要求ON（有効）、初期パスワード yo0117
   return {
     requirePassword: true,
-    passwordHash: defaultHashCache,
+    passwordHash: defaultHashCache || PRECOMPUTED_DEFAULT_HASH,
     updatedAt: Date.now(),
   };
 }
