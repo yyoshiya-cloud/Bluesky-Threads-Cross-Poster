@@ -1138,6 +1138,7 @@ async function uploadToDirectPublicHost(blob: Blob, name: string, signal?: Abort
 
 /**
  * Threads コンテナのエンコード・処理状態（FINISHED / IN_PROGRESS / ERROR）を照会
+ * 注意: ブラウザ直接通信時はMeta APIのCORS制約によりGETリクエストが制限される場合があります
  */
 async function checkDirectContainerStatus(
   containerId: string,
@@ -1151,9 +1152,10 @@ async function checkDirectContainerStatus(
     );
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
+      const errMsg = errData?.error?.message || `HTTP ${res.status}`;
       return {
         status: 'ERROR',
-        error: errData?.error?.message || `HTTP ${res.status}`,
+        error: errMsg,
       };
     }
     const data = await res.json().catch(() => ({}));
@@ -1163,7 +1165,12 @@ async function checkDirectContainerStatus(
     return { status, error: errMsg };
   } catch (err: any) {
     if (signal?.aborted) throw err;
-    return { status: 'ERROR', error: err.message };
+    // ブラウザのCORS制限による "Failed to fetch" の場合はエラーにせず CORS_RESTRICTED として安全にフォールバック
+    const msg = String(err?.message || err);
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
+      return { status: 'CORS_RESTRICTED' };
+    }
+    return { status: 'ERROR', error: msg };
   }
 }
 
@@ -1173,17 +1180,30 @@ async function checkDirectContainerStatus(
 async function waitForDirectContainerFinished(
   containerId: string,
   accessToken: string,
+  hasVideo = false,
   maxWaitMs = 120000,
   signal?: AbortSignal
 ): Promise<void> {
   const start = Date.now();
   let checkCount = 0;
+  let isCorsRestricted = false;
+
   while (Date.now() - start < maxWaitMs) {
     if (signal?.aborted) {
       throw new DOMException('ユーザー操作により投稿処理が中止されました', 'AbortError');
     }
     checkCount++;
     const result = await checkDirectContainerStatus(containerId, accessToken, signal);
+
+    if (result.status === 'CORS_RESTRICTED') {
+      isCorsRestricted = true;
+      // ブラウザ直接アクセスでGETがCORSブロックされる場合は、動画有無に応じた固定ウェイトで待機
+      const waitTime = hasVideo ? 12000 : 3000;
+      console.log(`[Threads Direct Container ${containerId}] CORS restricted for GET status check. Applying safe sleep: ${waitTime}ms`);
+      await abortableWait(waitTime, signal);
+      return;
+    }
+
     const elapsedSec = ((Date.now() - start) / 1000).toFixed(1);
 
     if (checkCount === 1 || checkCount % 4 === 0 || result.status === 'FINISHED') {
@@ -1194,8 +1214,8 @@ async function waitForDirectContainerFinished(
       return;
     }
 
-    if (result.status === 'ERROR' || result.error) {
-      const rawErrMsg = result.error || 'Meta側での画像/動画エンコード処理に失敗しました';
+    if (result.status === 'ERROR' && result.error) {
+      const rawErrMsg = result.error;
       let ratioHint = '';
       const lower = rawErrMsg.toLowerCase();
       if (lower.includes('aspect ratio') || lower.includes('ratio') || lower.includes('dimension')) {
@@ -1379,7 +1399,10 @@ async function directPostToThreads(
       const hasVideo = postMedias.some((m) => m.isVideo);
       console.log(`[directPostToThreads] Waiting for ${childContainerIds.length} child containers to finish encoding (hasVideo: ${hasVideo})...`);
       await Promise.all(
-        childContainerIds.map((cid) => waitForDirectContainerFinished(cid, token, hasVideo ? 120000 : 45000, signal))
+        childContainerIds.map((cid, idx) => {
+          const item = postMedias[idx];
+          return waitForDirectContainerFinished(cid, token, item?.isVideo ?? false, hasVideo ? 120000 : 45000, signal);
+        })
       );
 
       // 親カルーセルコンテナ作成
@@ -1413,7 +1436,7 @@ async function directPostToThreads(
       creationId = parentData.id;
 
       // 親カルーセルコンテナのFINISHED待機
-      await waitForDirectContainerFinished(creationId, token, hasVideo ? 120000 : 45000, signal);
+      await waitForDirectContainerFinished(creationId, token, hasVideo, hasVideo ? 120000 : 45000, signal);
 
     } else if (postMedias.length === 1) {
       // ----------------------------------------------------
@@ -1453,7 +1476,7 @@ async function directPostToThreads(
       creationId = singleData.id;
 
       // メディアコンテナのFINISHED待機 (動画は最大120秒、画像は最大45秒)
-      await waitForDirectContainerFinished(creationId, token, single.isVideo ? 120000 : 45000, signal);
+      await waitForDirectContainerFinished(creationId, token, single.isVideo, single.isVideo ? 120000 : 45000, signal);
 
     } else {
       // ----------------------------------------------------
@@ -1492,25 +1515,58 @@ async function directPostToThreads(
     // 2. コンテナ作成後の公開待機 (Threads API推奨)
     await abortableWait(1500, signal);
 
-    // 3. コンテナ公開 (threads_publish)
+    // 3. コンテナ公開 (threads_publish) with 自動リトライ（トランスコード完了待ち）
     const publishParams = new URLSearchParams();
     publishParams.append('creation_id', creationId);
     publishParams.append('access_token', token);
 
-    const publishRes = await fetch('https://graph.threads.net/v1.0/me/threads_publish', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: publishParams.toString(),
-      signal,
-    });
+    let publishedId = '';
+    const maxPublishRetries = postMedias.some((m) => m.isVideo) ? 8 : 4;
+    let lastPublishErr = '';
 
-    const publishData = await publishRes.json().catch(() => ({}));
-    if (!publishRes.ok || !publishData.id) {
-      const errMsg = publishData?.error?.message || `Threads投稿公開に失敗しました (${publishRes.status})`;
-      throw new Error(errMsg);
+    for (let pAttempt = 1; pAttempt <= maxPublishRetries; pAttempt++) {
+      if (signal?.aborted) {
+        throw new DOMException('ユーザー操作により投稿処理が中止されました', 'AbortError');
+      }
+
+      const publishRes = await fetch('https://graph.threads.net/v1.0/me/threads_publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: publishParams.toString(),
+        signal,
+      });
+
+      const publishData = await publishRes.json().catch(() => ({}));
+      if (publishRes.ok && publishData.id) {
+        publishedId = publishData.id;
+        break;
+      }
+
+      const rawErrMsg = publishData?.error?.message || `HTTP ${publishRes.status}`;
+      lastPublishErr = rawErrMsg;
+
+      // Meta側で「まだコンテナの準備ができていない」系エラーの場合は待機して再試行
+      const isPending =
+        rawErrMsg.includes('does not exist') ||
+        rawErrMsg.includes('not ready') ||
+        rawErrMsg.includes('processing') ||
+        rawErrMsg.includes('2207027') ||
+        publishRes.status === 404 ||
+        publishRes.status === 400;
+
+      if (isPending && pAttempt < maxPublishRetries) {
+        const sleepMs = pAttempt * 3000;
+        console.log(`[threads_publish attempt #${pAttempt}/${maxPublishRetries}] Container still processing by Meta (${rawErrMsg}). Retrying in ${sleepMs}ms...`);
+        await abortableWait(sleepMs, signal);
+        continue;
+      }
+
+      throw new Error(`Threads投稿公開に失敗しました: ${rawErrMsg}`);
     }
 
-    const publishedId = publishData.id;
+    if (!publishedId) {
+      throw new Error(`Threads投稿公開に失敗しました: ${lastPublishErr}`);
+    }
     previousPostId = publishedId;
     postIds.push(publishedId);
     urls.push(`https://www.threads.net/post/${publishedId}`);
