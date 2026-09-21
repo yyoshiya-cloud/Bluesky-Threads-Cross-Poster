@@ -795,7 +795,7 @@ export async function uploadMediaItem(
         }
       }
 
-      // フォールバック: 通常の /api/media/upload
+      // フォールバック1: 通常の /api/media/upload
       const fallbackRes = await fetch('/api/media/upload', {
         method: 'POST',
         body: formData,
@@ -820,7 +820,19 @@ export async function uploadMediaItem(
           };
         }
       }
+
+      // フォールバック2: Vercel等のサーバーレス/静的ホスティング環境向けクライアント直接CDNアップロード
+      const directPublicUrl = await uploadToDirectPublicHost(fileToUpload, safeUploadName, signal);
+      if (directPublicUrl && isTrulyPublicCdnUrl(directPublicUrl)) {
+        img.publicUrl = directPublicUrl;
+        return {
+          mediaId: img.mediaId,
+          dataUrl: img.dataUrl,
+          publicUrl: directPublicUrl,
+        };
+      }
     } catch (uploadErr) {
+      if (signal?.aborted) throw uploadErr;
       console.warn('Failed to upload media item via FormData:', uploadErr);
     }
   }
@@ -1613,11 +1625,11 @@ export async function sendThreadsPost(
         }
         const isVideo = img.mediaType === 'video' || (img.dataUrl?.startsWith('data:video'));
         const uploadResult = await uploadMediaItem(img, signal);
-        if (isVideo && !uploadResult.mediaId) {
-          throw new Error(`動画「${img.name || '添付動画'}」のサーバー転送に失敗しました。メディアファイルへの参照が切れている可能性があるため、動画を一度削除して再添付の上でお試しください。`);
-        }
         const hasMediaId = Boolean(uploadResult.mediaId);
         const hasPublicUrl = Boolean(uploadResult.publicUrl && isTrulyPublicCdnUrl(uploadResult.publicUrl));
+        if (isVideo && !hasMediaId && !hasPublicUrl && !img.file) {
+          throw new Error(`動画「${img.name || '添付動画'}」の本体ファイルが見つかりません。ページの再読み込み等で動画ファイルへの参照が切れている可能性があるため、動画を一度削除して再添付の上でお試しください。`);
+        }
         return {
           name: img.name,
           mediaId: uploadResult.mediaId,
