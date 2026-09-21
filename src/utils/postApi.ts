@@ -1137,6 +1137,86 @@ async function uploadToDirectPublicHost(blob: Blob, name: string, signal?: Abort
 }
 
 /**
+ * Threads コンテナのエンコード・処理状態（FINISHED / IN_PROGRESS / ERROR）を照会
+ */
+async function checkDirectContainerStatus(
+  containerId: string,
+  accessToken: string,
+  signal?: AbortSignal
+): Promise<{ status?: string; error?: string }> {
+  try {
+    const res = await fetch(
+      `https://graph.threads.net/v1.0/${containerId}?fields=status,id,error_message&access_token=${encodeURIComponent(accessToken)}`,
+      { signal }
+    );
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return {
+        status: 'ERROR',
+        error: errData?.error?.message || `HTTP ${res.status}`,
+      };
+    }
+    const data = await res.json().catch(() => ({}));
+    const rawStatus = data.status || '';
+    const status = typeof rawStatus === 'string' ? rawStatus.toUpperCase() : (data.error_message ? 'ERROR' : undefined);
+    const errMsg = data.error_message || data.error?.message;
+    return { status, error: errMsg };
+  } catch (err: any) {
+    if (signal?.aborted) throw err;
+    return { status: 'ERROR', error: err.message };
+  }
+}
+
+/**
+ * Threads コンテナが Meta 側で準備完了（FINISHED）するまで待機
+ */
+async function waitForDirectContainerFinished(
+  containerId: string,
+  accessToken: string,
+  maxWaitMs = 120000,
+  signal?: AbortSignal
+): Promise<void> {
+  const start = Date.now();
+  let checkCount = 0;
+  while (Date.now() - start < maxWaitMs) {
+    if (signal?.aborted) {
+      throw new DOMException('ユーザー操作により投稿処理が中止されました', 'AbortError');
+    }
+    checkCount++;
+    const result = await checkDirectContainerStatus(containerId, accessToken, signal);
+    const elapsedSec = ((Date.now() - start) / 1000).toFixed(1);
+
+    if (checkCount === 1 || checkCount % 4 === 0 || result.status === 'FINISHED') {
+      console.log(`[Threads Direct Container ${containerId}] Status: ${result.status || 'UNKNOWN'} (elapsed: ${elapsedSec}s)`);
+    }
+
+    if (result.status === 'FINISHED' || result.status === 'PUBLISHED') {
+      return;
+    }
+
+    if (result.status === 'ERROR' || result.error) {
+      const rawErrMsg = result.error || 'Meta側での画像/動画エンコード処理に失敗しました';
+      let ratioHint = '';
+      const lower = rawErrMsg.toLowerCase();
+      if (lower.includes('aspect ratio') || lower.includes('ratio') || lower.includes('dimension')) {
+        ratioHint = '（Threads対応のアスペクト比は 1.91:1 から 4:5 または 9:16 です）';
+      } else if (lower.includes('duration') || lower.includes('length')) {
+        ratioHint = '（動画の再生時間は 1秒以上 5分以内である必要があります）';
+      } else if (lower.includes('format') || lower.includes('codec')) {
+        ratioHint = '（Threadsは MP4 または MOV 形式 (H.264 / AAC) のみ対応しています）';
+      }
+      throw new Error(`Meta側でのメディア処理エラー: ${rawErrMsg}${ratioHint ? ` ${ratioHint}` : ''}`);
+    }
+
+    if (result.status === 'EXPIRED') {
+      throw new Error('メディアコンテナの有効期限が切れました。再度お試しください。');
+    }
+
+    await abortableWait(2000, signal);
+  }
+}
+
+/**
  * Threads への直接 Meta Graph API 投稿フォールバック（画像・カルーセル・動画完全対応）
  */
 async function directPostToThreads(
@@ -1283,6 +1363,7 @@ async function directPostToThreads(
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: childParams.toString(),
+          signal,
         });
 
         const childData = await childRes.json().catch(() => ({}));
@@ -1291,11 +1372,18 @@ async function directPostToThreads(
           throw new Error(errMsg);
         }
         childContainerIds.push(childData.id);
-        await new Promise((r) => setTimeout(r, 400));
+        await abortableWait(300, signal);
       }
 
+      // 各子コンテナ（画像・動画）のMeta側エンコード完了 (FINISHED) を待機
+      const hasVideo = postMedias.some((m) => m.isVideo);
+      console.log(`[directPostToThreads] Waiting for ${childContainerIds.length} child containers to finish encoding (hasVideo: ${hasVideo})...`);
+      await Promise.all(
+        childContainerIds.map((cid) => waitForDirectContainerFinished(cid, token, hasVideo ? 120000 : 45000, signal))
+      );
+
       // 親カルーセルコンテナ作成
-      await new Promise((r) => setTimeout(r, 1200));
+      await abortableWait(800, signal);
       const parentParams = new URLSearchParams();
       parentParams.append('access_token', token);
       parentParams.append('media_type', 'CAROUSEL');
@@ -1314,6 +1402,7 @@ async function directPostToThreads(
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: parentParams.toString(),
+        signal,
       });
 
       const parentData = await parentRes.json().catch(() => ({}));
@@ -1322,6 +1411,9 @@ async function directPostToThreads(
         throw new Error(errMsg);
       }
       creationId = parentData.id;
+
+      // 親カルーセルコンテナのFINISHED待機
+      await waitForDirectContainerFinished(creationId, token, hasVideo ? 120000 : 45000, signal);
 
     } else if (postMedias.length === 1) {
       // ----------------------------------------------------
@@ -1350,6 +1442,7 @@ async function directPostToThreads(
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: singleParams.toString(),
+        signal,
       });
 
       const singleData = await singleRes.json().catch(() => ({}));
@@ -1358,6 +1451,9 @@ async function directPostToThreads(
         throw new Error(errMsg);
       }
       creationId = singleData.id;
+
+      // メディアコンテナのFINISHED待機 (動画は最大120秒、画像は最大45秒)
+      await waitForDirectContainerFinished(creationId, token, single.isVideo ? 120000 : 45000, signal);
 
     } else {
       // ----------------------------------------------------
@@ -1379,6 +1475,7 @@ async function directPostToThreads(
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: containerParams.toString(),
+        signal,
       });
 
       const containerData = await containerRes.json().catch(() => ({}));
@@ -1387,6 +1484,9 @@ async function directPostToThreads(
         throw new Error(errMsg);
       }
       creationId = containerData.id;
+
+      // テキストコンテナの準備待機
+      await abortableWait(800, signal);
     }
 
     // 2. コンテナ作成後の公開待機 (Threads API推奨)
@@ -1678,9 +1778,9 @@ export async function sendThreadsPost(
         const errMsg = directErr.message || `Threads投稿に失敗しました (${res.status})`;
         recordCommError({
           platform: 'Threads',
-          action: 'Threadsスレッド投稿',
-          endpoint: '/api/threads/post',
-          httpStatus: res.status,
+          action: 'Threads直接投稿',
+          endpoint: 'https://graph.threads.net/v1.0/me/threads',
+          httpStatus: 400,
           errorMessage: errMsg,
           requestSummary: `スレッド数: ${posts.length}件, ${formatMediaSummary(images)}, トピック: ${topic ? `#${topic}` : 'なし'}`,
         });
@@ -1702,9 +1802,9 @@ export async function sendThreadsPost(
           const errMsg = directErr.message || data.error || `Threads投稿に失敗しました (404)`;
           recordCommError({
             platform: 'Threads',
-            action: 'Threadsスレッド投稿',
-            endpoint: '/api/threads/post',
-            httpStatus: 404,
+            action: 'Threads直接投稿',
+            endpoint: 'https://graph.threads.net/v1.0/me/threads',
+            httpStatus: 400,
             errorMessage: errMsg,
             requestSummary: `スレッド数: ${posts.length}件, ${formatMediaSummary(images)}, トピック: ${topic ? `#${topic}` : 'なし'}`,
           });
