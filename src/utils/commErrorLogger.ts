@@ -15,6 +15,7 @@ export interface CommErrorLogEntry {
   level?: CommLogLevel; // 'error' | 'success' | 'info' | 'warning' (省略時は'error')
   platform: 'Bluesky' | 'Threads' | 'All' | 'Network' | 'System';
   action: string; // 操作内容 (例: "Bluesky接続試行", "Threads接続成功", "Threadsアクセストークン検証")
+  appUrl?: string; // 実行アプリURL (例: "https://ais-dev-...run.app" または "https://your-app.vercel.app")
   browser?: string; // 実行ブラウザ名称 & バージョン & OS (例: "Google Chrome 128.0.6613.120 (Windows 10/11 64-bit)")
   userAgent?: string; // ブラウザUser-Agent
   endpoint?: string;
@@ -183,6 +184,7 @@ export function recordCommLog(
     timestamp: ts,
     timestampJst: formatToJstShortString(ts),
     level,
+    appUrl: entry.appUrl || (typeof window !== 'undefined' ? window.location.origin : undefined),
     browser: entry.browser || (isClient ? browserDetails.summary : undefined),
     userAgent: entry.userAgent || (isClient ? browserDetails.userAgent : undefined),
     ...entry,
@@ -297,16 +299,16 @@ export function generateCommErrorLogText(
   const infoCount = logs.filter((l) => l.level === 'info' || l.level === 'warning').length;
 
   const browserDetails = getBrowserDetails();
+  const currentAppUrl = typeof window !== 'undefined' ? window.location.origin : 'https://localhost:3000';
 
   const lines: string[] = [
     separator,
     `  ${title}`,
     separator,
     `出力日時 (JST)    : ${generatedAtJst}`,
+    `実行アプリURL      : ${currentAppUrl}`,
     `対象環境          : Web Studio (Client & API Gateway)`,
     `利用ブラウザ      : ${browserDetails.summary}`,
-    `ブラウザ名称      : ${browserDetails.name}`,
-    `ブラウザバージョン: ${browserDetails.version}`,
     `実行環境OS        : ${browserDetails.os} (${browserDetails.osArch})`,
     `ユーザーエージェント: ${browserDetails.userAgent}`,
     `記録総件数        : ${logs.length} 件 (エラー: ${errorCount}件, 成功: ${successCount}件, 接続経緯: ${infoCount}件)`,
@@ -335,8 +337,7 @@ export function generateCommErrorLogText(
     lines.push(`  発生日時 (JST)  : ${log.timestampJst}`);
     const bSummary = log.browser || browserDetails.summary;
     lines.push(`  実行ブラウザ    : ${bSummary}`);
-    lines.push(`  ブラウザ名称    : ${browserDetails.name}`);
-    lines.push(`  ブラウザバージョン: ${browserDetails.version}`);
+    lines.push(`  アプリURL       : ${log.appUrl || currentAppUrl}`);
     lines.push(`  プラットフォーム: ${log.platform}`);
     lines.push(`  操作内容        : ${log.action}`);
     if (log.endpoint) {
@@ -393,6 +394,7 @@ export function generateHistoryItemErrorLogText(item: {
 }): string {
   const generatedAtJst = formatToJstDetailedString(Date.now());
   const separator = '='.repeat(84);
+  const currentAppUrl = typeof window !== 'undefined' ? window.location.origin : 'https://localhost:3000';
 
   // 日時をJSTに変換 (末尾のJST表記は除外)
   let occurrenceTimeJst = String(item.timestamp).replace(/\s*JST\b/g, '').trim();
@@ -412,9 +414,8 @@ export function generateHistoryItemErrorLogText(item: {
     `  CrossPost Studio - 投稿通信エラー個別診断ログ`,
     separator,
     `ログ出力日時 (JST): ${generatedAtJst}`,
+    `実行アプリURL      : ${currentAppUrl}`,
     `利用ブラウザ      : ${getBrowserSummaryString()}`,
-    `ブラウザ名称      : ${bDetails.name}`,
-    `ブラウザバージョン: ${bDetails.version}`,
     `投稿試行日時 (JST): ${occurrenceTimeJst}`,
     `対象プラットフォーム: ${(item.platforms || []).join(', ') || '不明'}`,
     separator,

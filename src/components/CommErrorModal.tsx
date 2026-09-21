@@ -156,13 +156,13 @@ export const CommErrorModal: React.FC<CommErrorModalProps> = ({
 
   // 単一ログのコピー
   const handleCopySingle = (log: CommErrorLogEntry) => {
+    const appUrl = log.appUrl || (typeof window !== 'undefined' ? window.location.origin : '');
     const text = [
       `【CrossPost 通信ログ】`,
       `レベル: ${(log.level || 'error').toUpperCase()}`,
       `発生日時 (JST): ${log.timestampJst}`,
+      `実行アプリURL: ${appUrl}`,
       `実行ブラウザ: ${log.browser || currentBrowserDetails.summary}`,
-      `ブラウザ名称: ${currentBrowserDetails.name}`,
-      `ブラウザバージョン: ${currentBrowserDetails.version}`,
       `プラットフォーム: ${log.platform}`,
       `操作: ${log.action}`,
       log.errorCode ? `エラーコード: ${log.errorCode}` : '',
