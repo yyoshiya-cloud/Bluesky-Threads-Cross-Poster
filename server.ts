@@ -1818,18 +1818,22 @@ ${cleanText}
       let isOwnPost = false;
       let warning: string | undefined = undefined;
 
-      const threadsUserMatch = input.match(/threads\.net\/@?([^/?#]+)\/post\/([^/?#]+)/i);
-      const threadsShortMatch = input.match(/threads\.net\/t\/([^/?#]+)/i);
+      const threadsUserMatch = input.match(/threads\.(?:net|com)\/@[^/?#]+\/post\/([^/?#]+)/i);
+      const threadsShortMatch = input.match(/threads\.(?:net|com)\/t\/([^/?#]+)/i);
+      const threadsShareMatch = input.match(/threads\.(?:net|com)\/share\/(?:post\/)?([^/?#]+)/i);
+      const authorMatch = input.match(/threads\.(?:net|com)\/@([^/?#]+)/i);
 
       if (threadsUserMatch) {
-        threadsAuthor = threadsUserMatch[1].startsWith('@') ? threadsUserMatch[1] : `@${threadsUserMatch[1]}`;
-        threadsShortcode = threadsUserMatch[2].replace(/\/+$/, '');
+        threadsShortcode = threadsUserMatch[1].replace(/\/+$/, '').split('?')[0];
+        if (authorMatch) threadsAuthor = `@${authorMatch[1]}`;
       } else if (threadsShortMatch) {
-        threadsShortcode = threadsShortMatch[1].replace(/\/+$/, '');
+        threadsShortcode = threadsShortMatch[1].replace(/\/+$/, '').split('?')[0];
+      } else if (threadsShareMatch) {
+        threadsShortcode = threadsShareMatch[1].replace(/\/+$/, '').split('?')[0];
       } else if (/^\d{15,25}$/.test(input)) {
         threadsPostId = input;
       } else {
-        threadsShortcode = input.replace(/\/+$/, '');
+        threadsShortcode = input.replace(/\/+$/, '').split('?')[0];
       }
 
       // ユーザーのアクセストークンがある場合、自アカウントの最近の投稿一覧から shortcode / ID を照合して正規の threads_media ID を特定
@@ -1852,11 +1856,18 @@ ${cleanText}
             const listData = await listRes.json().catch(() => ({}));
             const userPosts = Array.isArray(listData?.data) ? listData.data : [];
 
-            const matchedPost = userPosts.find((p: any) => {
+            // 1. 完全一致（id, shortcode, permalink に含まれるか）
+            let matchedPost = userPosts.find((p: any) => {
               if (threadsPostId && p.id === threadsPostId) return true;
               if (threadsShortcode && (p.shortcode === threadsShortcode || p.permalink?.includes(threadsShortcode))) return true;
               return false;
             });
+
+            // 2. もしシェアリンクなどで shortcode が直接一致せず、かつ自アカウントの投稿が1件以上ある場合
+            //    URLがシェアリンク形式（share/）であれば、直前の最新投稿との紐付けを試行
+            if (!matchedPost && threadsShareMatch && userPosts.length > 0) {
+              matchedPost = userPosts[0]; // 最新の自投稿を優先
+            }
 
             if (matchedPost) {
               threadsPostId = matchedPost.id;
@@ -2557,12 +2568,18 @@ ${cleanText}
         } else {
           // URL または shortcode から shortcode を抽出
           let targetShortcode = rawTargetReplyTo;
-          const userMatch = rawTargetReplyTo.match(/threads\.net\/@?[^/?#]+\/post\/([^/?#]+)/i);
-          const shortMatch = rawTargetReplyTo.match(/threads\.net\/t\/([^/?#]+)/i);
+          const userMatch = rawTargetReplyTo.match(/threads\.(?:net|com)\/@[^/?#]+\/post\/([^/?#]+)/i);
+          const shortMatch = rawTargetReplyTo.match(/threads\.(?:net|com)\/t\/([^/?#]+)/i);
+          const shareMatch = rawTargetReplyTo.match(/threads\.(?:net|com)\/share\/(?:post\/)?([^/?#]+)/i);
+
           if (userMatch) {
-            targetShortcode = userMatch[1].replace(/\/+$/, '');
+            targetShortcode = userMatch[1].replace(/\/+$/, '').split('?')[0];
           } else if (shortMatch) {
-            targetShortcode = shortMatch[1].replace(/\/+$/, '');
+            targetShortcode = shortMatch[1].replace(/\/+$/, '').split('?')[0];
+          } else if (shareMatch) {
+            targetShortcode = shareMatch[1].replace(/\/+$/, '').split('?')[0];
+          } else {
+            targetShortcode = rawTargetReplyTo.replace(/\/+$/, '').split('?')[0];
           }
 
           try {
@@ -2572,12 +2589,18 @@ ${cleanText}
             if (listRes.ok) {
               const listData = await listRes.json().catch(() => ({}));
               const userPosts = Array.isArray(listData?.data) ? listData.data : [];
-              const matched = userPosts.find(
+              let matched = userPosts.find(
                 (p: any) =>
                   p.id === targetShortcode ||
                   p.shortcode === targetShortcode ||
                   p.permalink?.includes(targetShortcode)
               );
+
+              // シェアリンク形式で完全一致しない場合、直前の自投稿（最新1件目）を自動照合
+              if (!matched && shareMatch && userPosts.length > 0) {
+                matched = userPosts[0];
+              }
+
               if (matched?.id) {
                 prevPublishedId = matched.id;
                 console.log(`[threads:post] Resolved Threads reply target "${targetShortcode}" to media_id: ${matched.id}`);

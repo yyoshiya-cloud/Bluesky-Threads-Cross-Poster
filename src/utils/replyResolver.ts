@@ -69,19 +69,21 @@ export function parseReplyUrl(input: string): ParsedReplyUrl {
     };
   }
 
-  // 3. Threads Web URL (例: https://www.threads.net/@user/post/C-abc123XYZ or https://www.threads.net/t/C-abc123XYZ)
-  const threadsUserMatch = trimmed.match(/threads\.net\/@?([^/?#]+)\/post\/([^/?#]+)/i);
+  // 3. Threads Web URL (例: https://www.threads.net/@user/post/C-abc or https://www.threads.com/@user/post/C-abc)
+  const threadsUserMatch = trimmed.match(/threads\.(?:net|com)\/@[^/?#]+\/post\/([^/?#]+)/i);
   if (threadsUserMatch) {
-    const rawShortcode = threadsUserMatch[2].replace(/\/+$/, '');
+    const rawShortcode = threadsUserMatch[1].replace(/\/+$/, '');
+    const authorMatch = trimmed.match(/threads\.(?:net|com)\/@([^/?#]+)/i);
     return {
       platform: 'Threads',
       rawInput: trimmed,
-      authorHandle: threadsUserMatch[1].startsWith('@') ? threadsUserMatch[1] : `@${threadsUserMatch[1]}`,
+      authorHandle: authorMatch ? `@${authorMatch[1]}` : undefined,
       shortcode: rawShortcode,
     };
   }
 
-  const threadsShortMatch = trimmed.match(/threads\.net\/t\/([^/?#]+)/i);
+  // 4. Threads 短縮 URL (例: https://www.threads.net/t/C-abc or https://www.threads.com/t/C-abc)
+  const threadsShortMatch = trimmed.match(/threads\.(?:net|com)\/t\/([^/?#]+)/i);
   if (threadsShortMatch) {
     const rawShortcode = threadsShortMatch[1].replace(/\/+$/, '');
     return {
@@ -91,8 +93,19 @@ export function parseReplyUrl(input: string): ParsedReplyUrl {
     };
   }
 
-  // 4. Threads 数字Post ID (例: 17985834872123456)
-  if (/^\d{15,22}$/.test(trimmed)) {
+  // 5. Threads シェア URL (例: https://www.threads.com/share/F0Dp4eXK0 or https://www.threads.net/share/post/F0Dp4eXK0)
+  const threadsShareMatch = trimmed.match(/threads\.(?:net|com)\/share\/(?:post\/)?([^/?#]+)/i);
+  if (threadsShareMatch) {
+    const rawShareCode = threadsShareMatch[1].replace(/\/+$/, '');
+    return {
+      platform: 'Threads',
+      rawInput: trimmed,
+      shortcode: rawShareCode,
+    };
+  }
+
+  // 6. Threads 数字Post ID (例: 17985834872123456)
+  if (/^\d{15,25}$/.test(trimmed)) {
     return {
       platform: 'Threads',
       rawInput: trimmed,
@@ -100,7 +113,7 @@ export function parseReplyUrl(input: string): ParsedReplyUrl {
     };
   }
 
-  // 5. 一般的なドメインパターンでのフォールバック判定
+  // 7. 一般的なドメインパターンでのフォールバック判定
   if (/bsky\.app|bsky\.social|^at:\/\//i.test(trimmed)) {
     return {
       platform: 'Bluesky',
@@ -115,7 +128,7 @@ export function parseReplyUrl(input: string): ParsedReplyUrl {
     };
   }
 
-  // 6. Bluesky rkey (例: 3lxxxxxxxxx)
+  // 8. Bluesky rkey (例: 3lxxxxxxxxx)
   if (/^[a-z0-9]{13}$/.test(trimmed)) {
     return {
       platform: 'Bluesky',

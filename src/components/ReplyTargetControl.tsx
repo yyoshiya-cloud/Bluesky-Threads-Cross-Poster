@@ -351,7 +351,7 @@ export const ReplyTargetControl: React.FC<ReplyTargetControlProps> = ({
                   placeholder={
                     selectedPlatform === 'Bluesky'
                       ? 'https://bsky.app/profile/.../post/... または at://...'
-                      : 'https://www.threads.net/@user/post/... または 投稿ID'
+                      : 'https://www.threads.net/@user/post/... または threads.com/share/... または 投稿ID'
                   }
                   className="w-full pl-9 pr-8 py-2 text-xs bg-slate-900 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 transition"
                 />

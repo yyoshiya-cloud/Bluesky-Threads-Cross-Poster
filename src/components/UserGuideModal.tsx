@@ -100,7 +100,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
       icon: MessageSquare,
       summary: '既存のBlueskyまたはThreadsの投稿URL・IDを指定して、直接リプライ（返信）を投稿できます。',
       details: [
-        '【URLからSNSを自動判断】「💬 特定の投稿にリプライする」を開き、投稿URL（bsky.app または threads.net）を貼り付けると、対象プラットフォーム（Bluesky / Threads）が自動判別されます。',
+        '【URLからSNSを自動判断】「💬 特定の投稿にリプライする」を開き、投稿URL（bsky.app または threads.net / threads.com / shareリンク等）を貼り付けると、対象プラットフォーム（Bluesky / Threads）が自動判別されます。',
         '【ワンクリック入力クリア】URL入力欄右端の「✕（クリア）」ボタンを押すことで、貼り付けたURL・エラー・自動判定を一括で素早く消去して再入力できます。',
         '【キャンセル・解除で両方表示に復帰】フォーム右上のキャンセルボタン（✕マーク）または設定カードの「解除」ボタンを押すと、リプライ設定が安全に解除され、プレビュー画面も即座に通常の「BlueskyとThreadsの両方表示」に戻ります。',
         '【返信先プレビュー & 誤投稿ガード】リプライ対象の投稿者アイコン・表示名・本文抜粋がエディタおよびプレビュー画面にリアルタイム表示されます。また、Blueskyへのリプライ時はBlueskyのみ、Threadsへのリプライ時はThreadsのみに自動制限され、異なるSNSへ返信文面が同時投稿される事故を確実に防止します。',
@@ -418,7 +418,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
     {
       id: 'faq-reply',
       question: '既存の投稿にリプライ（返信）投稿するにはどうすればよいですか？',
-      answer: 'エディタ上部の「💬 特定の投稿にリプライする」をクリックし、BlueskyまたはThreadsの投稿URLを入力してください。URLからBlueskyかThreadsかを自動判別し、対象投稿のアイコンや本文抜粋を取得して表示します。入力欄の右端にある「✕」ボタンで入力を素早くクリアでき、右上キャンセル（✕）またはカードの「解除」を押すことで、いつでもプレビュー画面を通常の「Bluesky・Threads両方表示」に戻せます。返信時は対象SNSのみに自動制限されるため、他SNSへ誤って返信文面が同時投稿される心配もありません。',
+      answer: 'エディタ上部の「💬 特定の投稿にリプライする」をクリックし、BlueskyまたはThreadsの投稿URLを入力してください。WebブラウザのURL（threads.net / threads.com / bsky.app）や、Threads公式アプリの共有ボタンでコピーしたシェアリンク（threads.com/share/...）にも完全対応しており、対象SNSを自動判別して投稿情報を取得・設定します。入力欄右端の「✕」ボタンで入力を素早くクリアでき、右上キャンセル（✕）または設定カードの「解除」を押すことで、いつでもプレビュー画面を通常の「Bluesky・Threads両方表示」に戻せます。',
     },
     {
       id: 'faq-ai',
