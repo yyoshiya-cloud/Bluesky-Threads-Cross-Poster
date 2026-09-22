@@ -31,7 +31,8 @@ export function shortcodeToThreadsId(shortcode: string): string {
 export interface ParsedReplyUrl {
   platform: 'Bluesky' | 'Threads' | null;
   rawInput: string;
-  postId?: string; // 抽出されたID / rkey / 短縮コード
+  postId?: string; // 抽出されたID / rkey
+  shortcode?: string; // Threads 短縮コード
   authorHandle?: string;
   isAtUri?: boolean;
 }
@@ -71,24 +72,22 @@ export function parseReplyUrl(input: string): ParsedReplyUrl {
   // 3. Threads Web URL (例: https://www.threads.net/@user/post/C-abc123XYZ or https://www.threads.net/t/C-abc123XYZ)
   const threadsUserMatch = trimmed.match(/threads\.net\/@?([^/?#]+)\/post\/([^/?#]+)/i);
   if (threadsUserMatch) {
-    const rawShortcode = threadsUserMatch[2];
-    const numericId = shortcodeToThreadsId(rawShortcode);
+    const rawShortcode = threadsUserMatch[2].replace(/\/+$/, '');
     return {
       platform: 'Threads',
       rawInput: trimmed,
       authorHandle: threadsUserMatch[1].startsWith('@') ? threadsUserMatch[1] : `@${threadsUserMatch[1]}`,
-      postId: numericId,
+      shortcode: rawShortcode,
     };
   }
 
   const threadsShortMatch = trimmed.match(/threads\.net\/t\/([^/?#]+)/i);
   if (threadsShortMatch) {
-    const rawShortcode = threadsShortMatch[1];
-    const numericId = shortcodeToThreadsId(rawShortcode);
+    const rawShortcode = threadsShortMatch[1].replace(/\/+$/, '');
     return {
       platform: 'Threads',
       rawInput: trimmed,
-      postId: numericId,
+      shortcode: rawShortcode,
     };
   }
 
@@ -136,6 +135,7 @@ export interface ReplyPreviewResult {
   platform: 'Bluesky' | 'Threads';
   url: string;
   postId?: string;
+  shortcode?: string;
   authorHandle?: string;
   authorDisplayName?: string;
   authorAvatar?: string;
@@ -144,6 +144,8 @@ export interface ReplyPreviewResult {
   cid?: string;
   rootUri?: string;
   rootCid?: string;
+  warning?: string;
+  isOwnPost?: boolean;
   error?: string;
 }
 
@@ -159,7 +161,7 @@ export async function fetchReplyTargetPreview(
   const parsed = parseReplyUrl(input);
   const platform = parsed.platform || platformHint || 'Bluesky';
 
-  // 1. まずバックエンドAPI（/api/reply-preview）を試行
+  // 1. まずバックエンドAPI（/api/reply-preview）を試行 (Threadsの場合はMeta APIから正規のthreads_media IDを照合)
   try {
     const res = await fetch('/api/reply-preview', {
       method: 'POST',
@@ -180,6 +182,15 @@ export async function fetchReplyTargetPreview(
           platform,
         };
       }
+      if (data && data.error) {
+        return {
+          success: false,
+          platform,
+          url: input,
+          error: data.error,
+          warning: data.warning,
+        };
+      }
     }
   } catch (err: any) {
     if (signal?.aborted) throw err;
@@ -191,14 +202,22 @@ export async function fetchReplyTargetPreview(
     return await resolveBlueskyClientFallback(parsed, input, credentials, signal);
   } else {
     // Threads クライアント側フォールバック
-    const resolvedId = parsed.postId || shortcodeToThreadsId(input);
+    const resolvedId = parsed.postId;
     return {
-      success: Boolean(resolvedId),
+      success: Boolean(resolvedId || parsed.shortcode),
       platform: 'Threads',
       url: input,
       postId: resolvedId,
+      shortcode: parsed.shortcode,
       authorHandle: parsed.authorHandle,
-      postSnippet: resolvedId ? `Threads 投稿 (ID: ${resolvedId})` : undefined,
+      postSnippet: resolvedId
+        ? `Threads 投稿 (ID: ${resolvedId})`
+        : parsed.shortcode
+        ? `Threads 投稿 (短縮コード: ${parsed.shortcode})`
+        : undefined,
+      warning: !resolvedId && parsed.shortcode
+        ? '⚠️ Threads APIの仕様上、返信先にはご自身のアカウントで投稿したスレッドのURLのみ指定可能です（他者の投稿への返信はMeta社の追加権限が必要なためエラーとなります）。'
+        : undefined,
     };
   }
 }

@@ -96,6 +96,7 @@ export interface ReplyTarget {
   platform: 'Bluesky' | 'Threads';
   url: string; // 貼り付けられたURL または ID
   postId?: string; // 抽出・変換された投稿ID (Bluesky: rkeyまたはAT-URI, Threads: 数字IDまたはShortcode)
+  shortcode?: string; // Threads 短縮コード (URLの末尾識別子)
   authorHandle?: string; // 投稿者のハンドル (例: user.bsky.social, @username)
   authorDisplayName?: string; // 投稿者の表示名
   authorAvatar?: string; // 投稿者のアイコン画像URL
@@ -104,6 +105,8 @@ export interface ReplyTarget {
   cid?: string; // Bluesky用 CID
   rootUri?: string; // Bluesky用 スレッドRootのURI
   rootCid?: string; // Bluesky用 スレッドRootのCID
+  warning?: string; // API制約や注意点に関する警告メッセージ
+  isOwnPost?: boolean; // 自身のアカウントの投稿であるか
 }
 
 export interface PostHistoryItem {

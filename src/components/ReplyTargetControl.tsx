@@ -230,6 +230,17 @@ export const ReplyTargetControl: React.FC<ReplyTargetControlProps> = ({
           </div>
         </div>
 
+        {/* API制約等の警告表示 */}
+        {replyTarget.warning && (
+          <div className="mt-2 flex items-start gap-2 text-[11px] text-amber-200 bg-amber-950/30 p-2.5 rounded-lg border border-amber-500/30 leading-relaxed">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+            <div className="flex-1">
+              <span className="font-semibold text-amber-300">Threads APIの制限事項:</span>
+              <p className="mt-0.5 text-amber-200/90">{replyTarget.warning}</p>
+            </div>
+          </div>
+        )}
+
         {/* 単一プラットフォーム制約の明確な案内 */}
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-300/90 bg-amber-950/20 px-2.5 py-1.5 rounded-lg border border-amber-500/20">
           <ShieldAlert className="w-3.5 h-3.5 shrink-0 text-amber-400" />

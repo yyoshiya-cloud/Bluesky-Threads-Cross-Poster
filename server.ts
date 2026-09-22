@@ -1814,58 +1814,102 @@ ${cleanText}
       // 2. Threads URL 判定・解決
       let threadsPostId = '';
       let threadsAuthor = '';
+      let threadsShortcode = '';
+      let isOwnPost = false;
+      let warning: string | undefined = undefined;
 
       const threadsUserMatch = input.match(/threads\.net\/@?([^/?#]+)\/post\/([^/?#]+)/i);
       const threadsShortMatch = input.match(/threads\.net\/t\/([^/?#]+)/i);
 
       if (threadsUserMatch) {
         threadsAuthor = threadsUserMatch[1].startsWith('@') ? threadsUserMatch[1] : `@${threadsUserMatch[1]}`;
-        threadsPostId = decodeThreadsShortcode(threadsUserMatch[2]);
+        threadsShortcode = threadsUserMatch[2].replace(/\/+$/, '');
       } else if (threadsShortMatch) {
-        threadsPostId = decodeThreadsShortcode(threadsShortMatch[1]);
+        threadsShortcode = threadsShortMatch[1].replace(/\/+$/, '');
       } else if (/^\d{15,25}$/.test(input)) {
         threadsPostId = input;
       } else {
-        threadsPostId = decodeThreadsShortcode(input);
+        threadsShortcode = input.replace(/\/+$/, '');
       }
 
-      if (!threadsPostId) {
-        res.status(400).json({
-          success: false,
-          platform: 'Threads',
-          error: 'Threadsの投稿IDまたはURLを認識できませんでした。',
-        });
-        return;
-      }
+      // ユーザーのアクセストークンがある場合、自アカウントの最近の投稿一覧から shortcode / ID を照合して正規の threads_media ID を特定
+      let postSnippet = threadsPostId
+        ? `Threads 投稿 (ID: ${threadsPostId})`
+        : threadsShortcode
+        ? `Threads 投稿 (${threadsShortcode})`
+        : 'Threads 投稿';
 
-      // Threads Graph API による詳細情報取得 (トークンがある場合)
-      let postSnippet = `Threads 投稿 (ID: ${threadsPostId})`;
-      if (credentials?.threadsAccessToken && !credentials.isDemoMode && !credentials.threadsAccessToken.includes('demo')) {
+      const token = (credentials?.threadsAccessToken || '').trim();
+      if (token && !credentials?.isDemoMode && !token.includes('demo')) {
         try {
-          const graphRes = await fetch(
-            `https://graph.threads.net/v1.0/${threadsPostId}?fields=id,text,username,timestamp&access_token=${credentials.threadsAccessToken}`
+          const targetUser = credentials?.threadsUserId || 'me';
+          // 自身のアカウントの投稿一覧を取得して照合
+          const listRes = await fetch(
+            `https://graph.threads.net/v1.0/${targetUser}/threads?fields=id,shortcode,permalink,text,username,timestamp&limit=100&access_token=${token}`
           );
-          if (graphRes.ok) {
-            const graphData = await graphRes.json().catch(() => ({}));
-            if (graphData?.text) {
-              postSnippet = graphData.text.slice(0, 140);
+
+          if (listRes.ok) {
+            const listData = await listRes.json().catch(() => ({}));
+            const userPosts = Array.isArray(listData?.data) ? listData.data : [];
+
+            const matchedPost = userPosts.find((p: any) => {
+              if (threadsPostId && p.id === threadsPostId) return true;
+              if (threadsShortcode && (p.shortcode === threadsShortcode || p.permalink?.includes(threadsShortcode))) return true;
+              return false;
+            });
+
+            if (matchedPost) {
+              threadsPostId = matchedPost.id;
+              isOwnPost = true;
+              if (matchedPost.shortcode) threadsShortcode = matchedPost.shortcode;
+              if (matchedPost.text) postSnippet = matchedPost.text.slice(0, 140);
+              if (matchedPost.username) threadsAuthor = `@${matchedPost.username}`;
             }
-            if (graphData?.username) {
-              threadsAuthor = `@${graphData.username}`;
+          }
+
+          // もし投稿一覧に見つからず、かつ純粋な数値IDが指定されている場合は個別ID取得を試行
+          if (!threadsPostId && /^\d{15,25}$/.test(input)) {
+            const singleRes = await fetch(
+              `https://graph.threads.net/v1.0/${input}?fields=id,text,username,timestamp&access_token=${token}`
+            );
+            if (singleRes.ok) {
+              const singleData = await singleRes.json().catch(() => ({}));
+              if (singleData?.id) {
+                threadsPostId = singleData.id;
+                if (singleData.text) postSnippet = singleData.text.slice(0, 140);
+                if (singleData.username) threadsAuthor = `@${singleData.username}`;
+              }
             }
           }
         } catch (gErr) {
-          console.warn('[reply-preview] Threads Graph API fetch skipped:', gErr);
+          console.warn('[reply-preview] Threads Graph API fetch failed:', gErr);
         }
+      }
+
+      // 自アカウントの投稿として正規IDが特定できなかった場合（外部ユーザーの投稿URLなど）
+      if (!threadsPostId && threadsShortcode) {
+        warning = '⚠️ Threads APIの仕様上、リプライ先にはご自身のアカウントで投稿されたスレッドのURLのみ指定可能です（他者の投稿への返信はMeta社の追加権限が必要なためエラーとなります）。';
+      }
+
+      if (!threadsPostId && !threadsShortcode) {
+        res.status(400).json({
+          success: false,
+          platform: 'Threads',
+          error: 'Threadsの投稿URLまたは投稿IDを認識できませんでした。',
+        });
+        return;
       }
 
       res.json({
         success: true,
         platform: 'Threads',
         url: input,
-        postId: threadsPostId,
+        postId: threadsPostId || undefined,
+        shortcode: threadsShortcode || undefined,
         authorHandle: threadsAuthor || undefined,
         postSnippet,
+        isOwnPost,
+        warning,
       });
     } catch (err: any) {
       console.error('reply-preview error:', err);
@@ -2503,8 +2547,55 @@ ${cleanText}
       const targetUser = (threadsUserId || '').trim() || 'me';
       const createdPostIds: string[] = [];
       const createdUrls: string[] = [];
-      const targetReplyTo = (replyToId || replyTarget?.postId || '').trim();
-      let prevPublishedId: string | null = targetReplyTo || null;
+      const rawTargetReplyTo = (replyToId || replyTarget?.postId || replyTarget?.shortcode || replyTarget?.url || '').trim();
+      let prevPublishedId: string | null = null;
+
+      // Threads リプライ先 ID の事前検証・正規 threads_media ID 解決
+      if (rawTargetReplyTo) {
+        if (/^\d{15,25}$/.test(rawTargetReplyTo)) {
+          prevPublishedId = rawTargetReplyTo;
+        } else {
+          // URL または shortcode から shortcode を抽出
+          let targetShortcode = rawTargetReplyTo;
+          const userMatch = rawTargetReplyTo.match(/threads\.net\/@?[^/?#]+\/post\/([^/?#]+)/i);
+          const shortMatch = rawTargetReplyTo.match(/threads\.net\/t\/([^/?#]+)/i);
+          if (userMatch) {
+            targetShortcode = userMatch[1].replace(/\/+$/, '');
+          } else if (shortMatch) {
+            targetShortcode = shortMatch[1].replace(/\/+$/, '');
+          }
+
+          try {
+            const listRes = await fetch(
+              `https://graph.threads.net/v1.0/${targetUser}/threads?fields=id,shortcode,permalink&limit=100&access_token=${cleanToken}`
+            );
+            if (listRes.ok) {
+              const listData = await listRes.json().catch(() => ({}));
+              const userPosts = Array.isArray(listData?.data) ? listData.data : [];
+              const matched = userPosts.find(
+                (p: any) =>
+                  p.id === targetShortcode ||
+                  p.shortcode === targetShortcode ||
+                  p.permalink?.includes(targetShortcode)
+              );
+              if (matched?.id) {
+                prevPublishedId = matched.id;
+                console.log(`[threads:post] Resolved Threads reply target "${targetShortcode}" to media_id: ${matched.id}`);
+              }
+            }
+          } catch (resErr) {
+            console.warn('[threads:post] Failed to auto-resolve reply target shortcode:', resErr);
+          }
+
+          if (!prevPublishedId) {
+            res.status(400).json({
+              success: false,
+              error: `Threadsのリプライ先投稿（${targetShortcode}）の正規IDを特定できませんでした。Threads APIの公式仕様により、返信先にはご自身のアカウントで投稿したスレッドのURLまたは正規の投稿IDを指定してください（他者の投稿への返信はMeta社の追加権限 threads_manage_replies が必要です）。`,
+            });
+            return;
+          }
+        }
+      }
 
       // 外部からMetaサーバーがアクセス可能な基準URLを決定
       let baseUrl = '';
@@ -2574,9 +2665,11 @@ ${cleanText}
         const codeDetails = [code, subcode, type].filter(Boolean).join(', ');
         const userMsg = err.error_user_msg ? ` [詳細: ${err.error_user_msg}]` : '';
 
-        // 画像・動画比率・サイズ・権限・期限切れのヒント
+        // 画像・動画比率・サイズ・権限・期限切れ・リプライ先IDのヒント
         let hint = '';
-        if (err.code === 36003 || err.code === 1363030 || rawMsg.toLowerCase().includes('aspect ratio') || rawMsg.toLowerCase().includes('dimension')) {
+        if (rawMsg.includes('reply_to_id') || rawMsg.includes('threads_media ID')) {
+          hint = '（リプライ先の投稿IDが無効です。Threads APIの公式仕様上、返信先にはご自身のアカウントで投稿したスレッドのURLまたはIDを指定してください。他者の投稿への返信にはMeta社の追加権限 threads_manage_replies が必要となります）';
+        } else if (err.code === 36003 || err.code === 1363030 || rawMsg.toLowerCase().includes('aspect ratio') || rawMsg.toLowerCase().includes('dimension')) {
           hint = '（Threads対応のアスペクト比は 1.91:1 から 4:5 です。動画・画像のアスペクト比をご確認ください）';
         } else if (err.code === 36001 || rawMsg.toLowerCase().includes('format is not supported') || rawMsg.toLowerCase().includes('image format')) {
           hint = '（Meta Threads非対応の画像形式です。Threads APIはJPEGおよびPNG形式のみをサポートしています）';
