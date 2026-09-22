@@ -23,6 +23,7 @@ import {
   Layers,
   MousePointerClick,
   BarChart3,
+  MessageSquare,
 } from 'lucide-react';
 
 interface UserGuideModalProps {
@@ -73,7 +74,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   onOpenSettings,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'features' | 'workflow' | 'faq'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'features' | 'workflow' | 'faq' | 'tips'>('overview');
   const [expandedFeatureId, setExpandedFeatureId] = useState<string | null>('feature-crosspost');
 
   if (!isOpen) return null;
@@ -91,6 +92,20 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
         '投稿完了時には各SNSの実際の投稿URLを直接開けるリンクを表示。',
       ],
       tips: 'アカウント設定前の場合は「DEMOモード」で投稿フローとプレビューを安全にお試しいただけます。',
+    },
+    {
+      id: 'feature-reply',
+      title: '💬 特定の投稿へのリプライ（返信）投稿機能',
+      category: 'core',
+      icon: MessageSquare,
+      summary: '既存のBlueskyまたはThreadsの投稿URL・IDを指定して、直接リプライ（返信）を投稿できます。',
+      details: [
+        '【URLからSNSを自動判断】「💬 特定の投稿にリプライする」を開き、投稿URL（bsky.app または threads.net）を貼り付けると、対象プラットフォーム（Bluesky / Threads）が自動判別されます。',
+        '【ワンクリック入力クリア】URL入力欄右端の「✕（クリア）」ボタンを押すことで、貼り付けたURL・エラー・自動判定を一括で素早く消去して再入力できます。',
+        '【キャンセル・解除で両方表示に復帰】フォーム右上のキャンセルボタン（✕マーク）または設定カードの「解除」ボタンを押すと、リプライ設定が安全に解除され、プレビュー画面も即座に通常の「BlueskyとThreadsの両方表示」に戻ります。',
+        '【返信先プレビュー & 誤投稿ガード】リプライ対象の投稿者アイコン・表示名・本文抜粋がエディタおよびプレビュー画面にリアルタイム表示されます。また、Blueskyへのリプライ時はBlueskyのみ、Threadsへのリプライ時はThreadsのみに自動制限され、異なるSNSへ返信文面が同時投稿される事故を確実に防止します。',
+      ],
+      tips: 'リプライ時も長文の自動スレッド分割や画像・動画（最大20件）の添付がそのまま利用可能です。',
     },
     {
       id: 'feature-preview',
@@ -363,6 +378,12 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
       description: 'Threadsの全分割投稿に公式トピックタグを一括適用。AI・キーワード解析によるタグ提案やオリジナルタグの保存も可能。',
     },
     {
+      id: 'ov-reply',
+      icon: MessageSquare,
+      title: '💬 特定投稿へのリプライ（返信）',
+      description: 'URLを入力するだけでBlueskyまたはThreadsを自動判定。誤投稿ガード機能や、キャンセル（✕）でプレビューを両方表示に戻す安心設計を備えています。',
+    },
+    {
       id: 'ov-preview',
       icon: Eye,
       title: '📱 公式UIスキン＆リアルタイム比較',
@@ -378,8 +399,8 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
     },
     {
       step: 2,
-      title: '本文を入力 & 個別書き分け・メディア添付',
-      description: 'エディタに投稿文を入力します。「共通テキスト」のほか、「Bluesky専用」「Threads専用」タブで文面を個別に書き分けることも可能です。「ハッシュタグ候補」や「定型文（スニペット）」から素早く挿入したり、Threads専用トピックタグを設定。画像や動画（最大20件）はドラッグ＆ドロップで添付でき、直感的なドラッグ操作で順序を並び替えられます。',
+      title: '本文を入力 & リプライ指定・個別書き分け・メディア添付',
+      description: 'エディタに投稿文を入力します。特定の投稿に返信したい場合は「💬 特定の投稿にリプライする」からURLを入力（自動判別対応、✕でクリアや両方表示に戻すことも可能）。「共通テキスト」のほか、「Bluesky専用」「Threads専用」タブで文面を個別に書き分けることも可能です。「ハッシュタグ候補」や「定型文（スニペット）」から素早く挿入したり、Threads専用トピックタグを設定。画像や動画（最大20件）はドラッグ＆ドロップで添付でき、直感的なドラッグ操作で順序を並び替えられます。',
     },
     {
       step: 3,
@@ -394,6 +415,11 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   ];
 
   const faqItems: FaqItem[] = [
+    {
+      id: 'faq-reply',
+      question: '既存の投稿にリプライ（返信）投稿するにはどうすればよいですか？',
+      answer: 'エディタ上部の「💬 特定の投稿にリプライする」をクリックし、BlueskyまたはThreadsの投稿URLを入力してください。URLからBlueskyかThreadsかを自動判別し、対象投稿のアイコンや本文抜粋を取得して表示します。入力欄の右端にある「✕」ボタンで入力を素早くクリアでき、右上キャンセル（✕）またはカードの「解除」を押すことで、いつでもプレビュー画面を通常の「Bluesky・Threads両方表示」に戻せます。返信時は対象SNSのみに自動制限されるため、他SNSへ誤って返信文面が同時投稿される心配もありません。',
+    },
     {
       id: 'faq-ai',
       question: 'AIアシスト機能でエラーが出たり動作が遅いときはどうすればよいですか？',
@@ -462,6 +488,12 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   ];
 
   const tipsItems: TipItem[] = [
+    {
+      id: 'tip-reply',
+      icon: '💬',
+      title: 'リプライURLの自動判別とプレビュー両方表示復帰',
+      description: '返信先URLを貼り付けるだけでBlueskyかThreadsかを自動判別。入力欄の「✕」でクリアでき、設定をキャンセルまたは解除すればプレビュー画面も即座に通常の「両方表示」に戻せます。',
+    },
     {
       id: 'tip-context-menu',
       icon: '🖱️',
@@ -679,16 +711,39 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
-              <span>💡 FAQ & TIPS</span>
+              <span>❓ FAQ</span>
               {isSearching && (
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
-                    faqAndTipsHits > 0
+                    filteredFaq.length > 0
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                       : 'bg-slate-800 text-slate-500'
                   }`}
                 >
-                  {faqAndTipsHits}
+                  {filteredFaq.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('tips')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'tips'
+                  ? 'btn-accent text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <span>💡 TIPS</span>
+              {isSearching && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                    filteredTips.length > 0
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                      : 'bg-slate-800 text-slate-500'
+                  }`}
+                >
+                  {filteredTips.length}
                 </span>
               )}
             </button>
@@ -804,13 +859,22 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                             ✨ 実装機能一覧を見る ({filteredFeatures.length}件)
                           </button>
                         )}
-                        {faqAndTipsHits > 0 && (
+                        {filteredFaq.length > 0 && (
                           <button
                             type="button"
                             onClick={() => setActiveTab('faq')}
                             className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-accent-light text-xs font-bold transition cursor-pointer"
                           >
-                            💡 FAQ & TIPSを見る ({faqAndTipsHits}件)
+                            ❓ FAQを見る ({filteredFaq.length}件)
+                          </button>
+                        )}
+                        {filteredTips.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('tips')}
+                            className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-accent-light text-xs font-bold transition cursor-pointer"
+                          >
+                            💡 TIPSを見る ({filteredTips.length}件)
                           </button>
                         )}
                         {filteredWorkflow.length > 0 && (
@@ -870,13 +934,22 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                             ✨ 実装機能一覧を見る ({filteredFeatures.length}件)
                           </button>
                         )}
-                        {faqAndTipsHits > 0 && (
+                        {filteredFaq.length > 0 && (
                           <button
                             type="button"
                             onClick={() => setActiveTab('faq')}
                             className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-accent-light text-xs font-bold transition cursor-pointer"
                           >
-                            💡 FAQ & TIPSを見る ({faqAndTipsHits}件)
+                            ❓ FAQを見る ({filteredFaq.length}件)
+                          </button>
+                        )}
+                        {filteredTips.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('tips')}
+                            className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-accent-light text-xs font-bold transition cursor-pointer"
+                          >
+                            💡 TIPSを見る ({filteredTips.length}件)
                           </button>
                         )}
                       </div>
@@ -914,13 +987,22 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                         機能一覧内に「{searchQuery}」に一致する機能はありません。
                       </p>
                       <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
-                        {faqAndTipsHits > 0 && (
+                        {filteredFaq.length > 0 && (
                           <button
                             type="button"
                             onClick={() => setActiveTab('faq')}
                             className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-accent-light text-xs font-bold transition cursor-pointer"
                           >
-                            💡 FAQ & TIPSを見る ({faqAndTipsHits}件)
+                            ❓ FAQを見る ({filteredFaq.length}件)
+                          </button>
+                        )}
+                        {filteredTips.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('tips')}
+                            className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-accent-light text-xs font-bold transition cursor-pointer"
+                          >
+                            💡 TIPSを見る ({filteredTips.length}件)
                           </button>
                         )}
                         {filteredWorkflow.length > 0 && (
@@ -997,16 +1079,25 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                 </div>
               )}
 
-              {/* TAB 4: FAQ & TIPS */}
+              {/* TAB 4: よくある質問（FAQ） */}
               {activeTab === 'faq' && (
                 <div className="space-y-4 animate-in fade-in duration-150">
                   {/* 現在タブで0件だが他タブにヒットがある場合 */}
-                  {isSearching && faqAndTipsHits === 0 && (
+                  {isSearching && filteredFaq.length === 0 && (
                     <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2">
                       <p className="text-xs text-slate-400">
-                        FAQ & TIPS内に「{searchQuery}」に一致する項目はありません。
+                        FAQ内に「{searchQuery}」に一致する質問はありません。
                       </p>
                       <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
+                        {filteredTips.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('tips')}
+                            className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-accent-light text-xs font-bold transition cursor-pointer"
+                          >
+                            💡 TIPSを見る ({filteredTips.length}件)
+                          </button>
+                        )}
                         {filteredFeatures.length > 0 && (
                           <button
                             type="button"
@@ -1053,10 +1144,53 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* TAB 5: お役立ちTIPS */}
+              {activeTab === 'tips' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  {/* 現在タブで0件だが他タブにヒットがある場合 */}
+                  {isSearching && filteredTips.length === 0 && (
+                    <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2">
+                      <p className="text-xs text-slate-400">
+                        TIPS内に「{searchQuery}」に一致する項目はありません。
+                      </p>
+                      <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
+                        {filteredFaq.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('faq')}
+                            className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-accent-light text-xs font-bold transition cursor-pointer"
+                          >
+                            ❓ FAQを見る ({filteredFaq.length}件)
+                          </button>
+                        )}
+                        {filteredFeatures.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('features')}
+                            className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-accent-light text-xs font-bold transition cursor-pointer"
+                          >
+                            ✨ 実装機能一覧を見る ({filteredFeatures.length}件)
+                          </button>
+                        )}
+                        {filteredWorkflow.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('workflow')}
+                            className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-accent-light text-xs font-bold transition cursor-pointer"
+                          >
+                            📋 投稿の流れを見る ({filteredWorkflow.length}件)
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* 実用 TIPS・裏ワザ セクション */}
                   {filteredTips.length > 0 && (
-                    <div className="pt-2 space-y-3">
+                    <div className="space-y-3">
                       <h3 className="text-xs font-bold text-accent-light uppercase tracking-wider px-1 flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5" />
                         実用 TIPS & 業務効率化テクニック{isSearching && ` (${filteredTips.length}件)`}
@@ -1066,12 +1200,13 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                         {filteredTips.map((tip) => (
                           <div
                             key={tip.id}
-                            className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1"
+                            className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5"
                           >
                             <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                              <span>{tip.icon}</span> {tip.title}
+                              <span className="text-base">{tip.icon}</span>
+                              <span>{tip.title}</span>
                             </div>
-                            <p className="text-[11px] text-slate-400 leading-relaxed">
+                            <p className="text-xs text-slate-400 leading-relaxed">
                               {tip.description}
                             </p>
                           </div>

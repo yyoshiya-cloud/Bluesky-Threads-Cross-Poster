@@ -7,6 +7,7 @@ import {
   ScheduledPostItem,
   SplitThreadItem,
   SnippetItem,
+  ReplyTarget,
 } from '../types';
 
 /**
@@ -51,6 +52,9 @@ export type AppEvent =
   // プラットフォーム選択
   | { type: 'TOGGLE_POST_TO_BLUESKY'; payload: boolean }
   | { type: 'TOGGLE_POST_TO_THREADS'; payload: boolean }
+
+  // リプライ先設定
+  | { type: 'SET_REPLY_TARGET'; payload: ReplyTarget | undefined }
 
   // メディア（画像・動画）操作
   | { type: 'ADD_IMAGES'; payload: AttachedImage[] }
@@ -178,6 +182,7 @@ export interface RootViewModel {
   images: AttachedImage[];
   postToBluesky: boolean;
   postToThreads: boolean;
+  replyTarget?: ReplyTarget;
   threadsTopic: string;
   autoSplit: boolean;
   includeNumbering: boolean;

@@ -114,6 +114,8 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
           onTogglePostToBluesky={(val) => dispatch({ type: 'TOGGLE_POST_TO_BLUESKY', payload: val })}
           postToThreads={viewModel.postToThreads}
           onTogglePostToThreads={(val) => dispatch({ type: 'TOGGLE_POST_TO_THREADS', payload: val })}
+          replyTarget={viewModel.replyTarget}
+          onSetReplyTarget={(target) => dispatch({ type: 'SET_REPLY_TARGET', payload: target })}
           threadsTopic={viewModel.threadsTopic}
           onChangeThreadsTopic={(val) => dispatch({ type: 'UPDATE_THREADS_TOPIC', payload: val })}
           autoSplit={viewModel.autoSplit}
@@ -226,6 +228,7 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         credentials={viewModel.credentials}
         postToBluesky={viewModel.postToBluesky}
         postToThreads={viewModel.postToThreads}
+        replyTarget={viewModel.replyTarget}
         blueskyPosts={viewModel.blueskySplits.map((s) => s.text)}
         threadsPosts={viewModel.threadsSplits.map((s) => s.text)}
         threadsTopic={viewModel.threadsTopic}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SplitThreadItem, AttachedImage, ApiCredentials } from '../types';
+import { SplitThreadItem, AttachedImage, ApiCredentials, ReplyTarget } from '../types';
 import {
   MessageSquare,
   Repeat2,
@@ -28,6 +28,7 @@ interface ThreadPreviewProps {
   postToBluesky: boolean;
   postToThreads: boolean;
   credentials?: ApiCredentials;
+  replyTarget?: ReplyTarget;
 }
 
 type PreviewFontSize = 'sm' | 'md' | 'lg';
@@ -61,6 +62,7 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
   postToBluesky,
   postToThreads,
   credentials,
+  replyTarget,
 }) => {
   const [showDiffGuide, setShowDiffGuide] = useState<boolean>(false);
 
@@ -463,6 +465,45 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
 
             {/* スレッド本体エリア */}
             <div className="p-3 sm:p-4 divide-y divide-[#1e2a38]/60 min-w-0">
+              {/* Bluesky リプライ親投稿プレビュー */}
+              {replyTarget?.platform?.toLowerCase() === 'bluesky' && (
+                <div className="relative pb-3 mb-2 border-b border-sky-900/40">
+                  <div className="absolute left-[19px] top-10 bottom-0 w-[2px] bg-[#0085ff]/30 z-0" />
+                  <div className="relative z-10 flex items-start gap-2.5 sm:gap-3">
+                    {replyTarget.authorAvatar ? (
+                      <img
+                        src={replyTarget.authorAvatar}
+                        alt=""
+                        className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover shrink-0 ring-2 ring-sky-500/30"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-sky-950 border border-sky-800 flex items-center justify-center font-bold text-xs text-sky-400 shrink-0">
+                        {replyTarget.authorDisplayName?.slice(0, 1) || 'B'}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-xs text-slate-300 truncate">
+                          {replyTarget.authorDisplayName || replyTarget.authorHandle || 'リプライ対象'}
+                        </span>
+                        {replyTarget.authorHandle && (
+                          <span className="text-[11px] text-slate-500 truncate">
+                            {replyTarget.authorHandle}
+                          </span>
+                        )}
+                        <span className="ml-auto text-[10px] text-sky-400 bg-sky-950/60 px-1.5 py-0.5 rounded border border-sky-800/60 font-medium">
+                          💬 返信先
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-400 line-clamp-3 leading-relaxed">
+                        {replyTarget.postSnippet || replyTarget.url}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {blueskySplits.length === 0 ? (
                 <div className="py-12 text-center text-slate-500 text-xs">
                   <BlueskyButterflyLogo className="w-8 h-8 mx-auto mb-2 text-slate-700" />
@@ -726,6 +767,45 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
 
             {/* スレッド本体エリア */}
             <div className="p-3 sm:p-4 divide-y divide-neutral-800/60 min-w-0">
+              {/* Threads リプライ親投稿プレビュー */}
+              {replyTarget?.platform?.toLowerCase() === 'threads' && (
+                <div className="relative pb-3 mb-2 border-b border-neutral-800">
+                  <div className="absolute left-[19px] top-10 bottom-0 w-[1.5px] bg-neutral-700 z-0" />
+                  <div className="relative z-10 flex items-start gap-2.5 sm:gap-3">
+                    {replyTarget.authorAvatar ? (
+                      <img
+                        src={replyTarget.authorAvatar}
+                        alt=""
+                        className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover shrink-0 ring-2 ring-purple-500/30"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center font-bold text-xs text-purple-400 shrink-0">
+                        {replyTarget.authorDisplayName?.slice(0, 1) || 'T'}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-xs text-neutral-300 truncate">
+                          {replyTarget.authorDisplayName || replyTarget.authorHandle || 'リプライ対象'}
+                        </span>
+                        {replyTarget.authorHandle && (
+                          <span className="text-[11px] text-neutral-500 truncate">
+                            {replyTarget.authorHandle}
+                          </span>
+                        )}
+                        <span className="ml-auto text-[10px] text-purple-400 bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/60 font-medium">
+                          💬 返信先
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-neutral-400 line-clamp-3 leading-relaxed">
+                        {replyTarget.postSnippet || replyTarget.url}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {threadsSplits.length === 0 ? (
                 <div className="py-12 text-center text-neutral-500 text-xs">
                   <ThreadsSpiralLogo className="w-8 h-8 mx-auto mb-2 text-neutral-700" />

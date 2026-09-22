@@ -1689,10 +1689,197 @@ ${cleanText}
     }
   });
 
+  // リプライ先投稿の情報取得・プレビュー解決 API
+  app.post('/api/reply-preview', async (req, res) => {
+    try {
+      const { url, platform, credentials } = req.body || {};
+      if (!url || typeof url !== 'string') {
+        res.status(400).json({ success: false, error: 'URLが指定されていません。' });
+        return;
+      }
+
+      const input = url.trim();
+
+      // Threads / Instagram Base64 短縮コード変換
+      const decodeThreadsShortcode = (shortcode: string): string => {
+        const clean = shortcode.trim().replace(/^\/+|\/+$/g, '');
+        if (/^\d{10,25}$/.test(clean)) return clean;
+        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+        try {
+          let id = BigInt(0);
+          for (let i = 0; i < clean.length; i++) {
+            const char = clean[i];
+            const val = alphabet.indexOf(char);
+            if (val === -1) return clean;
+            id = id * BigInt(64) + BigInt(val);
+          }
+          return id.toString();
+        } catch {
+          return clean;
+        }
+      };
+
+      // 1. Bluesky URL 判定・解決
+      const isBluesky =
+        platform === 'Bluesky' ||
+        input.includes('bsky.app') ||
+        input.startsWith('at://');
+
+      if (isBluesky) {
+        let handleOrDid = '';
+        let rkey = '';
+
+        const atMatch = input.match(/^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/?#]+)/i);
+        const webMatch = input.match(/bsky\.app\/profile\/([^/?#]+)\/post\/([^/?#]+)/i);
+
+        if (atMatch) {
+          handleOrDid = atMatch[1];
+          rkey = atMatch[2];
+        } else if (webMatch) {
+          handleOrDid = decodeURIComponent(webMatch[1]);
+          rkey = webMatch[2];
+        } else if (/^[a-z0-9]{13}$/.test(input)) {
+          rkey = input;
+          handleOrDid = credentials?.blueskyHandle || 'me';
+        }
+
+        if (!rkey) {
+          res.status(400).json({
+            success: false,
+            platform: 'Bluesky',
+            error: 'Blueskyの投稿ID（rkey）を特定できませんでした。URLをご確認ください。',
+          });
+          return;
+        }
+
+        let did = handleOrDid.startsWith('did:') ? handleOrDid : '';
+        if (!did && handleOrDid) {
+          const cleanHandle = handleOrDid.replace(/^@/, '');
+          const resolveRes = await fetch(
+            `https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(cleanHandle)}`
+          );
+          if (resolveRes.ok) {
+            const resolveData = await resolveRes.json().catch(() => ({}));
+            if (resolveData?.did) did = resolveData.did;
+          }
+        }
+
+        if (!did && credentials?.blueskyDid) {
+          did = credentials.blueskyDid;
+        }
+
+        const targetUri = did ? `at://${did}/app.bsky.feed.post/${rkey}` : '';
+        if (targetUri) {
+          const threadRes = await fetch(
+            `https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=${encodeURIComponent(targetUri)}&depth=0&parentHeight=1`
+          );
+          if (threadRes.ok) {
+            const threadData = await threadRes.json().catch(() => ({}));
+            const post = threadData?.thread?.post;
+            if (post) {
+              const author = post.author || {};
+              const record = post.record || {};
+              const replyMeta = record.reply;
+
+              res.json({
+                success: true,
+                platform: 'Bluesky',
+                url: input,
+                postId: rkey,
+                uri: post.uri,
+                cid: post.cid,
+                rootUri: replyMeta?.root?.uri || post.uri,
+                rootCid: replyMeta?.root?.cid || post.cid,
+                authorHandle: author.handle ? `@${author.handle}` : handleOrDid,
+                authorDisplayName: author.displayName,
+                authorAvatar: author.avatar,
+                postSnippet: typeof record.text === 'string' ? record.text.slice(0, 140) : undefined,
+              });
+              return;
+            }
+          }
+        }
+
+        res.json({
+          success: Boolean(rkey),
+          platform: 'Bluesky',
+          url: input,
+          postId: rkey,
+          authorHandle: handleOrDid,
+          uri: targetUri || undefined,
+        });
+        return;
+      }
+
+      // 2. Threads URL 判定・解決
+      let threadsPostId = '';
+      let threadsAuthor = '';
+
+      const threadsUserMatch = input.match(/threads\.net\/@?([^/?#]+)\/post\/([^/?#]+)/i);
+      const threadsShortMatch = input.match(/threads\.net\/t\/([^/?#]+)/i);
+
+      if (threadsUserMatch) {
+        threadsAuthor = threadsUserMatch[1].startsWith('@') ? threadsUserMatch[1] : `@${threadsUserMatch[1]}`;
+        threadsPostId = decodeThreadsShortcode(threadsUserMatch[2]);
+      } else if (threadsShortMatch) {
+        threadsPostId = decodeThreadsShortcode(threadsShortMatch[1]);
+      } else if (/^\d{15,25}$/.test(input)) {
+        threadsPostId = input;
+      } else {
+        threadsPostId = decodeThreadsShortcode(input);
+      }
+
+      if (!threadsPostId) {
+        res.status(400).json({
+          success: false,
+          platform: 'Threads',
+          error: 'Threadsの投稿IDまたはURLを認識できませんでした。',
+        });
+        return;
+      }
+
+      // Threads Graph API による詳細情報取得 (トークンがある場合)
+      let postSnippet = `Threads 投稿 (ID: ${threadsPostId})`;
+      if (credentials?.threadsAccessToken && !credentials.isDemoMode && !credentials.threadsAccessToken.includes('demo')) {
+        try {
+          const graphRes = await fetch(
+            `https://graph.threads.net/v1.0/${threadsPostId}?fields=id,text,username,timestamp&access_token=${credentials.threadsAccessToken}`
+          );
+          if (graphRes.ok) {
+            const graphData = await graphRes.json().catch(() => ({}));
+            if (graphData?.text) {
+              postSnippet = graphData.text.slice(0, 140);
+            }
+            if (graphData?.username) {
+              threadsAuthor = `@${graphData.username}`;
+            }
+          }
+        } catch (gErr) {
+          console.warn('[reply-preview] Threads Graph API fetch skipped:', gErr);
+        }
+      }
+
+      res.json({
+        success: true,
+        platform: 'Threads',
+        url: input,
+        postId: threadsPostId,
+        authorHandle: threadsAuthor || undefined,
+        postSnippet,
+      });
+    } catch (err: any) {
+      console.error('reply-preview error:', err);
+      res.status(500).json({
+        success: false,
+        error: `リプライ先の解析に失敗しました: ${err.message || '内部エラー'}`,
+      });
+    }
+  });
+
   // Bluesky 投稿実行 (uploadBlob + createRecord)
   app.post('/api/bluesky/post', async (req, res) => {
     try {
-      const { credentials, posts, images = [], isDemo = false } = req.body;
+      const { credentials, posts, images = [], isDemo = false, replyTarget } = req.body;
       const { blueskyIdentifier, blueskyAppPassword, blueskyServiceUrl = 'https://bsky.social', isDemoMode } = credentials || {};
 
       let cleanIdentifier = sanitizeInput(blueskyIdentifier).replace(/^@/, '');
@@ -1747,7 +1934,9 @@ ${cleanText}
         );
 
         let demoMsg = '【デモモード】シミュレーション投稿が完了しました。';
-        if (hasVideo && hasImage) {
+        if (replyTarget?.url || replyTarget?.postId) {
+          demoMsg = `【デモモード】Blueskyのリプライ先（${replyTarget.authorHandle || replyTarget.postId || '指定投稿'}）への返信シミュレーション投稿が完了しました。`;
+        } else if (hasVideo && hasImage) {
           demoMsg = `【デモモード】動画と画像が混在しているため、2つ目以降のコンテンツをスレッド（返信ツリー計${totalCount}件）へ自動分割してシミュレーション投稿が完了しました。`;
         } else if (hasVideo) {
           demoMsg = '【デモモード】動画付きスレッド投稿シミュレーションが完了しました（動画プレイヤー・Embed対応）。';
@@ -1916,6 +2105,18 @@ ${cleanText}
       let rootRef: { uri: string; cid: string } | null = null;
       let parentRef: { uri: string; cid: string } | null = null;
 
+      // リプライ先投稿が指定されている場合は、第1投稿目をそのリプライとして設定
+      if (replyTarget && replyTarget.uri && replyTarget.cid) {
+        rootRef = {
+          uri: replyTarget.rootUri || replyTarget.uri,
+          cid: replyTarget.rootCid || replyTarget.cid,
+        };
+        parentRef = {
+          uri: replyTarget.uri,
+          cid: replyTarget.cid,
+        };
+      }
+
       const safePosts = Array.isArray(posts) ? posts : [];
       const totalPostCount = Math.max(
         safePosts.length,
@@ -1958,7 +2159,7 @@ ${cleanText}
           }
         }
 
-        // 2投稿目以降はツリー（リプライ）として連結
+        // リプライ先、または2投稿目以降のスレッド（返信ツリー）として連結
         if (rootRef && parentRef) {
           record.reply = {
             root: rootRef,
@@ -2000,9 +2201,11 @@ ${cleanText}
         createdPostKeys.push(rkey);
         createdUrls.push(`https://bsky.app/profile/${handle}/post/${rkey}`);
 
-        if (i === 0) {
+        // リプライ先がない新規スレッドの場合のみ、1投稿目を rootRef に設定
+        if (i === 0 && !rootRef) {
           rootRef = { uri, cid };
         }
+        // 後続投稿用の親参照を更新
         parentRef = { uri, cid };
 
         // 連続投稿時のレートリミット対策ウェイト
@@ -2221,7 +2424,7 @@ ${cleanText}
   // Threads 投稿実行 (コンテナ作成 + 公開)
   app.post('/api/threads/post', async (req, res) => {
     try {
-      const { credentials, posts, images = [], topic, clientOrigin, isDemo = false } = req.body;
+      const { credentials, posts, images = [], topic, clientOrigin, isDemo = false, replyToId, replyTarget } = req.body;
       const { threadsUserId = 'me', threadsAccessToken, threadsUsername, isDemoMode } = credentials || {};
       const cleanToken = sanitizeInput(threadsAccessToken);
 
@@ -2255,6 +2458,17 @@ ${cleanText}
         );
         const imageCount = Array.isArray(images) ? images.length : 0;
         const topicNote = cleanTopic ? `（トピック「#${cleanTopic}」設定済）` : '';
+        let demoMsg = '';
+        if (replyTarget?.url || replyTarget?.postId || replyToId) {
+          demoMsg = `【デモモード】Threadsリプライ先（${replyTarget?.authorHandle || replyTarget?.postId || replyToId || '指定投稿'}）への返信シミュレーション投稿が完了しました${topicNote}。`;
+        } else if (imageCount > 1) {
+          demoMsg = `【デモモード】画像${imageCount}枚のカルーセル投稿シミュレーションが完了しました${topicNote}。`;
+        } else if (imageCount === 1) {
+          demoMsg = `【デモモード】画像1枚付きの投稿シミュレーションが完了しました${topicNote}。`;
+        } else {
+          demoMsg = `【デモモード】テキスト投稿シミュレーションが完了しました${topicNote}。`;
+        }
+
         res.json({
           success: true,
           isDemo: true,
@@ -2263,12 +2477,7 @@ ${cleanText}
           topic: cleanTopic || undefined,
           postIds: demoUrls.map((u) => u.split('/').pop()),
           urls: demoUrls,
-          message:
-            imageCount > 1
-              ? `【デモモード】画像${imageCount}枚のカルーセル投稿シミュレーションが完了しました${topicNote}。`
-              : imageCount === 1
-              ? `【デモモード】画像1枚付きの投稿シミュレーションが完了しました${topicNote}。`
-              : `【デモモード】テキスト投稿シミュレーションが完了しました${topicNote}。`,
+          message: demoMsg,
         });
         return;
       }
@@ -2294,7 +2503,8 @@ ${cleanText}
       const targetUser = (threadsUserId || '').trim() || 'me';
       const createdPostIds: string[] = [];
       const createdUrls: string[] = [];
-      let prevPublishedId: string | null = null;
+      const targetReplyTo = (replyToId || replyTarget?.postId || '').trim();
+      let prevPublishedId: string | null = targetReplyTo || null;
 
       // 外部からMetaサーバーがアクセス可能な基準URLを決定
       let baseUrl = '';

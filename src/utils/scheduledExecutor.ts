@@ -44,7 +44,8 @@ export async function executeScheduledPostItem(
   try {
     // 1. Bluesky 投稿
     if (item.postToBluesky) {
-      const bskyRes = await sendBlueskyPost(credentials, bskyPosts, item.images);
+      const bskyReply = item.replyTarget?.platform?.toLowerCase() === 'bluesky' ? item.replyTarget : undefined;
+      const bskyRes = await sendBlueskyPost(credentials, bskyPosts, item.images, undefined, bskyReply);
       if (bskyRes.success) {
         blueskySuccess = true;
         bskyUrls = bskyRes.urls || [];
@@ -55,7 +56,16 @@ export async function executeScheduledPostItem(
 
     // 2. Threads 投稿
     if (item.postToThreads) {
-      const thrRes = await sendThreadsPost(credentials, thrPosts, item.images, item.threadsTopic);
+      const thrReply = item.replyTarget?.platform?.toLowerCase() === 'threads' ? item.replyTarget : undefined;
+      const thrRes = await sendThreadsPost(
+        credentials,
+        thrPosts,
+        item.images,
+        item.threadsTopic,
+        undefined,
+        thrReply,
+        thrReply?.postId
+      );
       if (thrRes.success) {
         threadsSuccess = true;
         thrUrls = thrRes.urls || [];

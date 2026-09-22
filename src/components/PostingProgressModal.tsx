@@ -25,7 +25,7 @@ import {
   Download,
   Ban,
 } from 'lucide-react';
-import { ApiCredentials, AttachedImage } from '../types';
+import { ApiCredentials, AttachedImage, ReplyTarget } from '../types';
 import { sendBlueskyPost, sendThreadsPost, checkIsDemoCredentials, uploadMediaItem, abortableWait } from '../utils/postApi';
 import { validateMediaForPosting } from '../utils/mediaValidation';
 import { VideoSpecsModal } from './VideoSpecsModal';
@@ -53,6 +53,7 @@ interface PostingProgressModalProps {
   credentials: ApiCredentials;
   postToBluesky: boolean;
   postToThreads: boolean;
+  replyTarget?: ReplyTarget;
   blueskyPosts: string[];
   threadsPosts: string[];
   threadsTopic?: string;
@@ -296,6 +297,7 @@ export const PostingProgressModal: React.FC<PostingProgressModalProps> = ({
   credentials,
   postToBluesky,
   postToThreads,
+  replyTarget,
   blueskyPosts,
   threadsPosts,
   threadsTopic,
@@ -611,7 +613,8 @@ export const PostingProgressModal: React.FC<PostingProgressModalProps> = ({
       });
 
       try {
-        const result = await sendBlueskyPost(effectiveCredentials, blueskyPosts, images, signal);
+        const bskyReply = replyTarget?.platform?.toLowerCase() === 'bluesky' ? replyTarget : undefined;
+        const result = await sendBlueskyPost(effectiveCredentials, blueskyPosts, images, signal, bskyReply);
         if (signal.aborted) return;
         if (result.success) {
           bSuccess = true;
@@ -675,7 +678,16 @@ export const PostingProgressModal: React.FC<PostingProgressModalProps> = ({
       });
 
       try {
-        const result = await sendThreadsPost(effectiveCredentials, threadsPosts, images, threadsTopic, signal);
+        const thrReply = replyTarget?.platform?.toLowerCase() === 'threads' ? replyTarget : undefined;
+        const result = await sendThreadsPost(
+          effectiveCredentials,
+          threadsPosts,
+          images,
+          threadsTopic,
+          signal,
+          thrReply,
+          thrReply?.postId
+        );
         if (signal.aborted) return;
         if (result.success) {
           tSuccess = true;

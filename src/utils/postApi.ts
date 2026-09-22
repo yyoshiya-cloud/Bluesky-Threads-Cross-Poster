@@ -1,4 +1,4 @@
-import { ApiCredentials, AttachedImage } from '../types';
+import { ApiCredentials, AttachedImage, ReplyTarget } from '../types';
 import { recordCommError, recordCommSuccess, recordCommInfo } from './commErrorLogger';
 
 export interface PostResult {
@@ -847,7 +847,8 @@ async function directPostToBluesky(
   credentials: ApiCredentials,
   posts: string[],
   images: AttachedImage[] = [],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  replyTarget?: ReplyTarget
 ): Promise<PostResult> {
   if (signal?.aborted) {
     throw new DOMException('ユーザー操作により投稿処理が中止されました', 'AbortError');
@@ -970,6 +971,17 @@ async function directPostToBluesky(
   let rootRef: { uri: string; cid: string } | null = null;
   let parentRef: { uri: string; cid: string } | null = null;
 
+  if (replyTarget && replyTarget.uri && replyTarget.cid) {
+    rootRef = {
+      uri: replyTarget.rootUri || replyTarget.uri,
+      cid: replyTarget.rootCid || replyTarget.cid,
+    };
+    parentRef = {
+      uri: replyTarget.uri,
+      cid: replyTarget.cid,
+    };
+  }
+
   const totalPostCount = Math.max(posts.length, mediaChunks.length) || 1;
 
   for (let i = 0; i < totalPostCount; i++) {
@@ -985,7 +997,7 @@ async function directPostToBluesky(
       createdAt: new Date().toISOString(),
     };
 
-    if (!isFirst && rootRef && parentRef) {
+    if (rootRef && parentRef) {
       recordPayload.reply = {
         root: rootRef,
         parent: parentRef,
@@ -1039,7 +1051,7 @@ async function directPostToBluesky(
     postIds.push(rkey);
     urls.push(postUrl);
 
-    if (isFirst) {
+    if (isFirst && !rootRef) {
       rootRef = { uri, cid };
     }
     parentRef = { uri, cid };
@@ -1244,7 +1256,9 @@ async function directPostToThreads(
   posts: string[],
   images: AttachedImage[] = [],
   topic?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  replyTarget?: ReplyTarget,
+  replyToId?: string
 ): Promise<PostResult> {
   if (signal?.aborted) {
     throw new DOMException('ユーザー操作により投稿処理が中止されました', 'AbortError');
@@ -1348,7 +1362,8 @@ async function directPostToThreads(
 
   const postIds: string[] = [];
   const urls: string[] = [];
-  let previousPostId: string | null = null;
+  const targetReplyTo = (replyToId || replyTarget?.postId || '').trim();
+  let previousPostId: string | null = targetReplyTo || null;
 
   // スレッド投稿数
   const totalPosts = Math.max(posts.length, 1);
@@ -1417,7 +1432,7 @@ async function directPostToThreads(
       if (isFirst && topic && topic.trim()) {
         parentParams.append('topic_tag', topic.trim().replace(/^#/, ''));
       }
-      if (!isFirst && previousPostId) {
+      if (previousPostId) {
         parentParams.append('reply_to_id', previousPostId);
       }
 
@@ -1457,7 +1472,7 @@ async function directPostToThreads(
       if (isFirst && topic && topic.trim()) {
         singleParams.append('topic_tag', topic.trim().replace(/^#/, ''));
       }
-      if (!isFirst && previousPostId) {
+      if (previousPostId) {
         singleParams.append('reply_to_id', previousPostId);
       }
 
@@ -1490,7 +1505,7 @@ async function directPostToThreads(
       if (isFirst && topic && topic.trim()) {
         containerParams.append('topic_tag', topic.trim().replace(/^#/, ''));
       }
-      if (!isFirst && previousPostId) {
+      if (previousPostId) {
         containerParams.append('reply_to_id', previousPostId);
       }
 
@@ -1603,7 +1618,8 @@ export async function sendBlueskyPost(
   credentials: ApiCredentials,
   posts: string[],
   images: AttachedImage[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  replyTarget?: ReplyTarget
 ): Promise<PostResult> {
   if (signal?.aborted) {
     throw new DOMException('ユーザー操作により投稿処理が中止されました', 'AbortError');
@@ -1618,12 +1634,15 @@ export async function sendBlueskyPost(
     const urls = Array.from({ length: count }).map(
       (_, idx) => `https://bsky.app/profile/demo-creator.bsky.social/post/demo-${Date.now()}-${idx + 1}`
     );
+    const demoMsg = (replyTarget?.url || replyTarget?.postId)
+      ? `【DEMOモード】リプライ先（${replyTarget.authorHandle || replyTarget.postId || '指定投稿'}）への返信シミュレーション投稿が完了しました。`
+      : '【DEMOモード】シミュレーション投稿が完了しました。';
     return {
       success: true,
       isDemo: true,
       postIds: urls.map((u) => u.split('/').pop()),
       urls,
-      message: '【DEMOモード】シミュレーション投稿が完了しました。',
+      message: demoMsg,
     };
   }
 
@@ -1666,6 +1685,7 @@ export async function sendBlueskyPost(
         posts,
         isDemo: false,
         images: preparedImages,
+        replyTarget,
       }),
       signal,
     });
@@ -1676,13 +1696,13 @@ export async function sendBlueskyPost(
       data = await res.json().catch(() => ({}));
     } else {
       console.warn('Non-JSON response from /api/bluesky/post:', res.status, 'Falling back to direct XRPC...');
-      return await directPostToBluesky(credentials, posts, images, signal);
+      return await directPostToBluesky(credentials, posts, images, signal, replyTarget);
     }
 
     if (!res.ok || !data.success) {
       if (res.status === 404 || res.status >= 500) {
         console.warn(`[Bluesky Post] Backend error ${res.status}. Falling back to direct XRPC call...`);
-        return await directPostToBluesky(credentials, posts, images, signal);
+        return await directPostToBluesky(credentials, posts, images, signal, replyTarget);
       }
       const errMsg = data.error || `Bluesky投稿に失敗しました (${res.status})`;
       recordCommError({
@@ -1721,7 +1741,7 @@ export async function sendBlueskyPost(
     }
     console.warn('[Bluesky Post] Backend fetch exception. Falling back to direct XRPC call:', err);
     try {
-      return await directPostToBluesky(credentials, posts, images, signal);
+      return await directPostToBluesky(credentials, posts, images, signal, replyTarget);
     } catch (directErr: any) {
       if (signal?.aborted) throw directErr;
       const errMsg = `Bluesky通信エラー: ${directErr.message || err.message || '送信できませんでした'}`;
@@ -1748,7 +1768,9 @@ export async function sendThreadsPost(
   posts: string[],
   images: AttachedImage[],
   topic?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  replyTarget?: ReplyTarget,
+  replyToId?: string
 ): Promise<PostResult> {
   if (signal?.aborted) {
     throw new DOMException('ユーザー操作により投稿処理が中止されました', 'AbortError');
@@ -1763,12 +1785,16 @@ export async function sendThreadsPost(
     const urls = Array.from({ length: count }).map(
       (_, idx) => `https://www.threads.net/@Demo_Threads_Official/post/demo-${Date.now()}-${idx + 1}`
     );
+    const targetDesc = replyTarget?.authorHandle || replyTarget?.postId || replyToId;
+    const demoMsg = targetDesc
+      ? `【DEMOモード】Threadsリプライ先（${targetDesc}）への返信シミュレーション投稿が完了しました。`
+      : '【DEMOモード】シミュレーション投稿が完了しました。';
     return {
       success: true,
       isDemo: true,
       postIds: urls.map((u) => u.split('/').pop()),
       urls,
-      message: '【DEMOモード】シミュレーション投稿が完了しました。',
+      message: demoMsg,
     };
   }
 
@@ -1816,6 +1842,8 @@ export async function sendThreadsPost(
         clientOrigin,
         isDemo: false,
         images: preparedImages,
+        replyTarget,
+        replyToId,
       }),
       signal,
     });
@@ -1828,7 +1856,7 @@ export async function sendThreadsPost(
       // Vercel等の静的ホスティングでバックエンドが存在しない場合（404/HTML返却）は直接ブラウザ投稿へ自動フォールバック
       console.warn(`[Threads Post] Backend returned non-JSON (${res.status}). Falling back to browser-direct Meta Graph API...`);
       try {
-        return await directPostToThreads(credentials, posts, images, topic, signal);
+        return await directPostToThreads(credentials, posts, images, topic, signal, replyTarget, replyToId);
       } catch (directErr: any) {
         if (signal?.aborted) throw directErr;
         const errMsg = directErr.message || `Threads投稿に失敗しました (${res.status})`;
@@ -1852,7 +1880,7 @@ export async function sendThreadsPost(
       if (res.status === 404) {
         console.warn(`[Threads Post] Backend 404. Falling back to browser-direct Meta Graph API...`);
         try {
-          return await directPostToThreads(credentials, posts, images, topic, signal);
+          return await directPostToThreads(credentials, posts, images, topic, signal, replyTarget, replyToId);
         } catch (directErr: any) {
           if (signal?.aborted) throw directErr;
           const errMsg = directErr.message || data.error || `Threads投稿に失敗しました (404)`;

@@ -91,6 +91,21 @@ export interface PostEngagementStats {
   updatedAt?: number;
 }
 
+export interface ReplyTarget {
+  enabled: boolean;
+  platform: 'Bluesky' | 'Threads';
+  url: string; // 貼り付けられたURL または ID
+  postId?: string; // 抽出・変換された投稿ID (Bluesky: rkeyまたはAT-URI, Threads: 数字IDまたはShortcode)
+  authorHandle?: string; // 投稿者のハンドル (例: user.bsky.social, @username)
+  authorDisplayName?: string; // 投稿者の表示名
+  authorAvatar?: string; // 投稿者のアイコン画像URL
+  postSnippet?: string; // リプライ先投稿の本文抜粋
+  uri?: string; // Bluesky用 AT-URI (at://did:plc:.../app.bsky.feed.post/...)
+  cid?: string; // Bluesky用 CID
+  rootUri?: string; // Bluesky用 スレッドRootのURI
+  rootCid?: string; // Bluesky用 スレッドRootのCID
+}
+
 export interface PostHistoryItem {
   id: string;
   timestamp: string;
@@ -115,6 +130,7 @@ export interface PostHistoryItem {
   engagementUpdatedAt?: number;
   isDemo?: boolean;
   errorMessage?: string;
+  replyTarget?: ReplyTarget; // リプライ先情報（リプライ投稿の場合）
 }
 
 export interface DraftData {
@@ -128,6 +144,7 @@ export interface DraftData {
   threadsTopic?: string; // Threads専用トピックタグ
   autoSplit: boolean;
   includeNumbering: boolean;
+  replyTarget?: ReplyTarget; // リプライ先情報
   lastSavedAt: number;
 }
 
@@ -183,6 +200,7 @@ export interface ScheduledPostItem {
     bluesky?: string[];
     threads?: string[];
   };
+  replyTarget?: ReplyTarget;
 }
 
 // 投稿区分: 'all' (同時投稿) | 'bluesky' (Blueskyのみ) | 'threads' (Threadsのみ)

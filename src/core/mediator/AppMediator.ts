@@ -14,6 +14,7 @@ import {
   ThemeAccentId,
   ScheduledPostItem,
   SnippetItem,
+  ReplyTarget,
 } from '../../types';
 import { splitForBluesky, splitForThreads } from '../../utils/textSplitter';
 import {
@@ -81,6 +82,7 @@ export class AppMediator implements IMediatorArbitrator {
   private threadsTopic: string = '';
   private autoSplit: boolean = true;
   private includeNumbering: boolean = true;
+  private replyTarget: ReplyTarget | undefined = undefined;
 
   // 下書き状態
   private lastSavedAt: number | null = null;
@@ -210,6 +212,7 @@ export class AppMediator implements IMediatorArbitrator {
       images: [...this.images],
       postToBluesky: this.postToBluesky,
       postToThreads: this.postToThreads,
+      replyTarget: this.replyTarget,
       threadsTopic: this.threadsTopic,
       autoSplit: this.autoSplit,
       includeNumbering: this.includeNumbering,
@@ -300,17 +303,88 @@ export class AppMediator implements IMediatorArbitrator {
         this.notifyListeners();
         break;
 
-      case 'TOGGLE_POST_TO_BLUESKY':
+      case 'TOGGLE_POST_TO_BLUESKY': {
+        if (this.replyTarget?.platform?.toLowerCase() === 'threads' && event.payload) {
+          this.addToast({
+            type: 'warning',
+            title: 'リプライ設定中は同時選択できません',
+            message: 'Threadsへのリプライ設定中のため、Blueskyを同時に選択することはできません。同時投稿するにはリプライ先を解除してください。',
+          });
+          return;
+        }
+        if (this.replyTarget?.platform?.toLowerCase() === 'bluesky' && !event.payload) {
+          this.replyTarget = undefined;
+          this.addToast({
+            type: 'info',
+            title: 'リプライ先を解除しました',
+            message: 'Blueskyの選択を解除したため、リプライ設定も解除されました。',
+          });
+        }
         this.postToBluesky = event.payload;
         this.scheduleDraftSave();
         this.notifyListeners();
         break;
+      }
 
-      case 'TOGGLE_POST_TO_THREADS':
+      case 'TOGGLE_POST_TO_THREADS': {
+        if (this.replyTarget?.platform?.toLowerCase() === 'bluesky' && event.payload) {
+          this.addToast({
+            type: 'warning',
+            title: 'リプライ設定中は同時選択できません',
+            message: 'Blueskyへのリプライ設定中のため、Threadsを同時に選択することはできません。同時投稿するにはリプライ先を解除してください。',
+          });
+          return;
+        }
+        if (this.replyTarget?.platform?.toLowerCase() === 'threads' && !event.payload) {
+          this.replyTarget = undefined;
+          this.addToast({
+            type: 'info',
+            title: 'リプライ先を解除しました',
+            message: 'Threadsの選択を解除したため、リプライ設定も解除されました。',
+          });
+        }
         this.postToThreads = event.payload;
         this.scheduleDraftSave();
         this.notifyListeners();
         break;
+      }
+
+      case 'SET_REPLY_TARGET': {
+        const target = event.payload;
+        if (target) {
+          this.replyTarget = target;
+          const isBluesky = target.platform?.toLowerCase() === 'bluesky';
+          if (isBluesky) {
+            this.postToBluesky = true;
+            this.postToThreads = false;
+            this.addToast({
+              type: 'info',
+              title: '💬 Blueskyリプライモード',
+              message: `Blueskyの投稿（${target.authorHandle || target.postId}）へのリプライを設定しました。Threadsへの投稿はオフになりました。`,
+            });
+          } else {
+            this.postToBluesky = false;
+            this.postToThreads = true;
+            this.addToast({
+              type: 'info',
+              title: '💬 Threadsリプライモード',
+              message: `Threadsの投稿（${target.authorHandle || target.postId}）へのリプライを設定しました。Blueskyへの投稿はオフになりました。`,
+            });
+          }
+        } else {
+          this.replyTarget = undefined;
+          this.postToBluesky = true;
+          this.postToThreads = true;
+          this.addToast({
+            type: 'info',
+            title: 'リプライ設定を解除しました',
+            message: '通常の同時投稿モードに戻りました（Bluesky・Threads両方を表示）。',
+          });
+        }
+        this.scheduleDraftSave();
+        this.notifyListeners();
+        break;
+      }
 
       case 'ADD_IMAGES': {
         const unique = event.payload.filter(
@@ -494,6 +568,7 @@ export class AppMediator implements IMediatorArbitrator {
           threadsTopic: this.threadsTopic || undefined,
           autoSplit: this.autoSplit,
           includeNumbering: this.includeNumbering,
+          replyTarget: this.replyTarget,
         });
 
         this.scheduledPosts = loadScheduledPostsFromStorage();
@@ -538,6 +613,7 @@ export class AppMediator implements IMediatorArbitrator {
           threadsTopic: this.threadsTopic ? this.threadsTopic : undefined,
           images: this.images.map((i) => i.dataUrl),
           attachedImages: this.images,
+          replyTarget: this.replyTarget,
           status,
           blueskySuccess: res.blueskySuccess,
           threadsSuccess: res.threadsSuccess,
@@ -552,6 +628,9 @@ export class AppMediator implements IMediatorArbitrator {
 
         if (this.threadsTopic && this.threadsTopic.trim()) {
           addSavedThreadsTopic(this.threadsTopic.trim());
+        }
+        if (isFullSuccess) {
+          this.replyTarget = undefined;
         }
         this.machineState = 'READY';
         this.modals.posting = false;
@@ -623,6 +702,14 @@ export class AppMediator implements IMediatorArbitrator {
         this.postToThreads = p.postToThreads;
         this.autoSplit = p.autoSplit;
         this.includeNumbering = p.includeNumbering;
+        this.replyTarget = p.replyTarget;
+        if (p.replyTarget?.platform?.toLowerCase() === 'bluesky') {
+          this.postToBluesky = true;
+          this.postToThreads = false;
+        } else if (p.replyTarget?.platform?.toLowerCase() === 'threads') {
+          this.postToBluesky = false;
+          this.postToThreads = true;
+        }
 
         this.modals.scheduled = false;
         this.addToast({
@@ -642,6 +729,7 @@ export class AppMediator implements IMediatorArbitrator {
         this.customPlatformText = false;
         this.images = [];
         this.threadsTopic = '';
+        this.replyTarget = undefined;
         this.lastSavedAt = null;
         this.draftStatus = 'saved';
         this.addToast({
@@ -948,6 +1036,7 @@ export class AppMediator implements IMediatorArbitrator {
       threadsTopic: this.threadsTopic,
       autoSplit: this.autoSplit,
       includeNumbering: this.includeNumbering,
+      replyTarget: this.replyTarget,
       lastSavedAt: now,
     };
     const result = saveDraftToStorage(draft);

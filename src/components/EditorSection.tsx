@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AttachedImage, SplitThreadItem, ApiCredentials, ThemeAccentId } from '../types';
+import { AttachedImage, SplitThreadItem, ApiCredentials, ThemeAccentId, ReplyTarget } from '../types';
 import { compressImageFileWithThumbnail, processVideoFile } from '../utils/draftStorage';
 import { saveMediaBlob } from '../utils/indexedMediaStorage';
 import { uploadMediaItem } from '../utils/postApi';
@@ -12,6 +12,7 @@ import { QuickPresetSettingsModal } from './QuickPresetSettingsModal';
 import { SnippetModal } from './SnippetModal';
 import { OgpPreviewSection } from './OgpPreviewSection';
 import { AiAssistModal, AiAssistTab } from './AiAssistModal';
+import { ReplyTargetControl } from './ReplyTargetControl';
 import {
   Send,
   Sparkles,
@@ -79,6 +80,8 @@ interface EditorSectionProps {
   onTogglePostToBluesky: (val: boolean) => void;
   postToThreads: boolean;
   onTogglePostToThreads: (val: boolean) => void;
+  replyTarget?: ReplyTarget;
+  onSetReplyTarget?: (target: ReplyTarget | undefined) => void;
   threadsTopic?: string;
   onChangeThreadsTopic?: (topic: string) => void;
   autoSplit: boolean;
@@ -169,6 +172,8 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   onTogglePostToBluesky,
   postToThreads,
   onTogglePostToThreads,
+  replyTarget,
+  onSetReplyTarget,
   threadsTopic = '',
   onChangeThreadsTopic,
   autoSplit,
@@ -214,6 +219,8 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   // 個別分岐が実際に有効（非空で共通とは別内容）かどうかの判定
   const isBlueskyCustomized = Boolean(customPlatformText && blueskyText && blueskyText.trim().length > 0);
   const isThreadsCustomized = Boolean(customPlatformText && threadsText && threadsText.trim().length > 0);
+  const isBlueskyReply = replyTarget?.platform?.toLowerCase() === 'bluesky';
+  const isThreadsReply = replyTarget?.platform?.toLowerCase() === 'threads';
 
   // 現在アクティブなタブのテキストを取得
   const currentActiveText =
@@ -514,8 +521,11 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               <span className="text-xs font-bold text-slate-300">投稿先:</span>
               <label
                 id="toggle-post-bluesky-label"
+                title={isThreadsReply ? 'Threadsへのリプライ設定中のため、Blueskyは選択できません' : undefined}
                 className={`flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded-lg border text-xs font-bold cursor-pointer transition select-none ${
-                  postToBluesky
+                  isThreadsReply
+                    ? 'bg-slate-950 text-slate-600 border-slate-900 opacity-40 cursor-not-allowed'
+                    : postToBluesky
                     ? 'bg-[#0085ff]/15 text-[#0085ff] border-[#0085ff]/50 ring-1 ring-[#0085ff]/30'
                     : 'bg-slate-950 text-slate-500 border-slate-800 opacity-60'
                 }`}
@@ -528,12 +538,16 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 />
                 <span>🦋 Bluesky</span>
                 {postToBluesky && <span className="w-1.5 h-1.5 rounded-full bg-[#0085ff]" />}
+                {isThreadsReply && <span className="text-[10px] text-slate-500 font-normal">🔒</span>}
               </label>
 
               <label
                 id="toggle-post-threads-label"
+                title={isBlueskyReply ? 'Blueskyへのリプライ設定中のため、Threadsは選択できません' : undefined}
                 className={`flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded-lg border text-xs font-bold cursor-pointer transition select-none ${
-                  postToThreads
+                  isBlueskyReply
+                    ? 'bg-slate-950 text-slate-600 border-slate-900 opacity-40 cursor-not-allowed'
+                    : postToThreads
                     ? 'bg-slate-950 text-purple-300 border-purple-500/60 ring-1 ring-purple-500/30'
                     : 'bg-slate-950 text-slate-500 border-slate-800 opacity-60'
                 }`}
@@ -546,6 +560,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 />
                 <span>🌀 Threads</span>
                 {postToThreads && <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />}
+                {isBlueskyReply && <span className="text-[10px] text-slate-500 font-normal">🔒</span>}
               </label>
             </div>
 
@@ -645,6 +660,20 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               </div>
             </div>
           </div>
+
+          {/* リプライ先投稿設定 / プレビュー表示 */}
+          <ReplyTargetControl
+            replyTarget={replyTarget}
+            onSetReplyTarget={onSetReplyTarget || (() => {})}
+            onRestoreBothPlatforms={() => {
+              onTogglePostToBluesky(true);
+              onTogglePostToThreads(true);
+            }}
+            credentials={credentials}
+            postToBluesky={postToBluesky}
+            postToThreads={postToThreads}
+            onNotify={onNotify}
+          />
 
           {/* 個別編集タブ時の分岐ガイド & 操作バナー */}
           {activeEditorTab === 'bluesky' && (
@@ -1747,6 +1776,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               postToBluesky={postToBluesky}
               postToThreads={postToThreads}
               credentials={credentials}
+              replyTarget={replyTarget}
             />
           </div>
 
