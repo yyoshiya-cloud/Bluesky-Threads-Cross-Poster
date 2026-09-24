@@ -117,14 +117,14 @@ export const Header: React.FC<HeaderProps> = ({
   const isThreadsLoggedIn = Boolean(credentials.threadsConnected || credentials.threadsAccessToken);
 
   return (
-    <header className="bg-[#0F0F11]/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 px-3 sm:px-5 lg:px-6 h-13 flex items-center justify-between gap-3 shrink-0">
+    <header className="bg-[#0E1320]/95 backdrop-blur-md border-b border-slate-700/80 sticky top-0 z-30 px-3 sm:px-5 lg:px-6 h-13 flex items-center justify-between gap-3 shrink-0 shadow-sm">
       {/* ロゴ & タイトル（左クリック3回でモード切替） */}
       <div
         id="app-logo-button"
         onClick={handleTitleClick}
-        className="flex items-center gap-2.5 select-none cursor-pointer group py-1 px-1.5 -ml-1.5 rounded-xl hover:bg-slate-800/50 transition relative"
+        className="flex items-center gap-2.5 select-none cursor-pointer group py-1 px-1.5 -ml-1.5 rounded-xl hover:bg-slate-800/60 transition relative"
       >
-        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden shadow-md shadow-blue-950/40 border border-slate-700/60 flex items-center justify-center bg-slate-900 shrink-0 group-hover:scale-105 group-hover:border-accent transition duration-200">
+        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden shadow-md shadow-blue-950/40 border border-slate-600/70 flex items-center justify-center bg-slate-900 shrink-0 group-hover:scale-105 group-hover:border-accent transition duration-200">
           <img
             src="/favicon.svg"
             alt="CrossPost Icon"
@@ -149,10 +149,10 @@ export const Header: React.FC<HeaderProps> = ({
                   triggerModeSwitch();
                 }}
                 title="クリックしてLIVE（本番）モードに切り替え"
-                className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-sky-500/20 text-sky-300/80 border border-sky-400/30 flex items-center gap-1 shadow-sm hover:bg-sky-500/30 hover:text-sky-200 transition cursor-pointer"
+                className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/40 flex items-center gap-1 shadow-sm hover:bg-sky-500/30 hover:text-white transition cursor-pointer"
               >
-                <Sparkles className="w-2.5 h-2.5 text-sky-300/80" />
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-300/80 animate-pulse" />
+                <Sparkles className="w-2.5 h-2.5 text-sky-300" />
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
                 DEMO MODE
               </button>
             ) : (
@@ -163,14 +163,14 @@ export const Header: React.FC<HeaderProps> = ({
                   triggerModeSwitch();
                 }}
                 title="クリックして安全なDEMOモードに切り替え"
-                className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shadow-sm hover:bg-emerald-500/30 hover:text-emerald-300 transition cursor-pointer"
+                className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-sm hover:bg-emerald-500/30 hover:text-white transition cursor-pointer"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 LIVE MODE
               </button>
             )}
           </div>
-          <p className="text-[10px] text-slate-500 hidden md:block group-hover:text-slate-400 transition">
+          <p className="text-[10px] text-slate-400 hidden md:block group-hover:text-slate-300 transition">
             Bluesky & Threads 同時投稿・長文自動分割・画像添付マネージャー
           </p>
         </div>
@@ -183,7 +183,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div
             id="header-account-status-pill"
             onClick={() => setShowQuickLogout(!showQuickLogout)}
-            className="cursor-pointer bg-[#0A0A0B] hover:bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800 flex items-center gap-2.5 transition text-xs select-none"
+            className="cursor-pointer bg-[#0A0F1D] hover:bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/80 flex items-center gap-2.5 transition text-xs select-none shadow-xs"
             title="クリックしてアカウント接続状態を表示"
           >
             <div className="flex items-center gap-1.5">
@@ -191,21 +191,21 @@ export const Header: React.FC<HeaderProps> = ({
               {isBlueskyLoggedIn ? (
                 <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
               ) : (
-                <span className="w-2 h-2 rounded-full bg-slate-600" />
+                <span className="w-2 h-2 rounded-full bg-slate-500" />
               )}
-              <span className="text-[10px] text-slate-400 hidden md:inline truncate max-w-[120px]">
+              <span className="text-[10px] text-slate-300 font-medium hidden md:inline truncate max-w-[120px]">
                 {isBlueskyLoggedIn ? (credentials.blueskyHandle || 'Bluesky連携中') : '未連携'}
               </span>
             </div>
-            <div className="h-3 w-[1px] bg-slate-800" />
+            <div className="h-3 w-[1px] bg-slate-700" />
             <div className="flex items-center gap-1.5">
               <span className="text-[11px]">🌀</span>
               {isThreadsLoggedIn ? (
                 <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
               ) : (
-                <span className="w-2 h-2 rounded-full bg-slate-600" />
+                <span className="w-2 h-2 rounded-full bg-slate-500" />
               )}
-              <span className="text-[10px] text-slate-400 hidden md:inline truncate max-w-[120px]">
+              <span className="text-[10px] text-slate-300 font-medium hidden md:inline truncate max-w-[120px]">
                 {isThreadsLoggedIn ? (credentials.threadsUsername || 'Threads連携中') : '未連携'}
               </span>
             </div>

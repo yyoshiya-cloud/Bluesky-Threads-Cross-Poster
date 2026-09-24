@@ -17,6 +17,7 @@ import {
   ArrowDown,
   Film,
   Image as ImageIcon,
+  MessageSquare,
 } from 'lucide-react';
 import { ScheduledPostItem, ApiCredentials, TargetPlatformCategory } from '../types';
 import {
@@ -583,6 +584,24 @@ export const ScheduledPostsModal: React.FC<ScheduledPostsModalProps> = ({
                       })()}
                     </div>
                   </div>
+
+                  {/* リプライ先情報 */}
+                  {item.replySettings?.enabled && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-indigo-300 bg-indigo-950/40 border border-indigo-800/40 px-2.5 py-1 rounded-lg">
+                      <MessageSquare className="w-3 h-3 text-indigo-400 shrink-0" />
+                      <span className="font-medium">返信先設定あり</span>
+                      {item.replySettings.blueskyResolved && (
+                        <span className="text-[10px] text-sky-300">
+                          (Bluesky: @{item.replySettings.blueskyResolved.authorHandle || item.replySettings.blueskyResolved.authorName})
+                        </span>
+                      )}
+                      {item.replySettings.threadsResolved && (
+                        <span className="text-[10px] text-purple-300">
+                          (Threads: 本人投稿)
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {/* 本文プレビュー */}
                   <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-800/80 text-xs text-slate-200 whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto">

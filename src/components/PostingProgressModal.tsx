@@ -25,7 +25,7 @@ import {
   Download,
   Ban,
 } from 'lucide-react';
-import { ApiCredentials, AttachedImage, ReplyTarget } from '../types';
+import { ApiCredentials, AttachedImage, ReplySettings } from '../types';
 import { sendBlueskyPost, sendThreadsPost, checkIsDemoCredentials, uploadMediaItem, abortableWait } from '../utils/postApi';
 import { validateMediaForPosting } from '../utils/mediaValidation';
 import { VideoSpecsModal } from './VideoSpecsModal';
@@ -53,11 +53,11 @@ interface PostingProgressModalProps {
   credentials: ApiCredentials;
   postToBluesky: boolean;
   postToThreads: boolean;
-  replyTarget?: ReplyTarget;
   blueskyPosts: string[];
   threadsPosts: string[];
   threadsTopic?: string;
   images: AttachedImage[];
+  replySettings?: ReplySettings;
   onComplete: (result: {
     blueskySuccess: boolean;
     threadsSuccess: boolean;
@@ -297,11 +297,11 @@ export const PostingProgressModal: React.FC<PostingProgressModalProps> = ({
   credentials,
   postToBluesky,
   postToThreads,
-  replyTarget,
   blueskyPosts,
   threadsPosts,
   threadsTopic,
   images,
+  replySettings,
   onComplete,
   onOpenSettings,
   onUseDemoCredentials,
@@ -613,7 +613,7 @@ export const PostingProgressModal: React.FC<PostingProgressModalProps> = ({
       });
 
       try {
-        const bskyReply = replyTarget?.platform?.toLowerCase() === 'bluesky' ? replyTarget : undefined;
+        const bskyReply = replySettings?.enabled ? replySettings.blueskyResolved : undefined;
         const result = await sendBlueskyPost(effectiveCredentials, blueskyPosts, images, signal, bskyReply);
         if (signal.aborted) return;
         if (result.success) {
@@ -678,15 +678,14 @@ export const PostingProgressModal: React.FC<PostingProgressModalProps> = ({
       });
 
       try {
-        const thrReply = replyTarget?.platform?.toLowerCase() === 'threads' ? replyTarget : undefined;
+        const thReplyId = replySettings?.enabled ? (replySettings.threadsResolved?.resolvedId || undefined) : undefined;
         const result = await sendThreadsPost(
           effectiveCredentials,
           threadsPosts,
           images,
           threadsTopic,
           signal,
-          thrReply,
-          thrReply?.postId
+          thReplyId
         );
         if (signal.aborted) return;
         if (result.success) {

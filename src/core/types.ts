@@ -7,7 +7,8 @@ import {
   ScheduledPostItem,
   SplitThreadItem,
   SnippetItem,
-  ReplyTarget,
+  ReplySettings,
+  ReplyTargetInfo,
 } from '../types';
 
 /**
@@ -52,9 +53,6 @@ export type AppEvent =
   // プラットフォーム選択
   | { type: 'TOGGLE_POST_TO_BLUESKY'; payload: boolean }
   | { type: 'TOGGLE_POST_TO_THREADS'; payload: boolean }
-
-  // リプライ先設定
-  | { type: 'SET_REPLY_TARGET'; payload: ReplyTarget | undefined }
 
   // メディア（画像・動画）操作
   | { type: 'ADD_IMAGES'; payload: AttachedImage[] }
@@ -149,6 +147,11 @@ export type AppEvent =
       };
     }
 
+  // リプライ（返信先）設定
+  | { type: 'UPDATE_REPLY_SETTINGS'; payload: Partial<ReplySettings> }
+  | { type: 'SET_RESOLVED_REPLY_TARGET'; payload: { platform: 'Bluesky' | 'Threads'; target: ReplyTargetInfo | null } }
+  | { type: 'CLEAR_REPLY_TARGET'; payload: 'Bluesky' | 'Threads' | 'all' }
+
   // モーダル操作
   | { type: 'OPEN_MODAL'; payload: ModalType }
   | { type: 'CLOSE_MODAL'; payload: ModalType }
@@ -182,10 +185,10 @@ export interface RootViewModel {
   images: AttachedImage[];
   postToBluesky: boolean;
   postToThreads: boolean;
-  replyTarget?: ReplyTarget;
   threadsTopic: string;
   autoSplit: boolean;
   includeNumbering: boolean;
+  replySettings: ReplySettings;
 
   // スレッド分割結果（算出パラメータ）
   blueskySplits: SplitThreadItem[];

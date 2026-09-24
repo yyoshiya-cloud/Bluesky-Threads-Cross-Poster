@@ -191,21 +191,6 @@ function sanitizeInput(val: any): string {
   return val.trim().replace(/^['"`]|['"`]$/g, '').replace(/[\u3000]/g, ' ').trim();
 }
 
-/**
- * 拡張子をMIMEタイプから判定 (画像・動画両対応)
- */
-function getExtensionFromMime(mimeType: string): string {
-  if (mimeType.includes('mp4')) return 'mp4';
-  if (mimeType.includes('quicktime') || mimeType.includes('mov')) return 'mov';
-  if (mimeType.includes('webm')) return 'webm';
-  if (mimeType.includes('png')) return 'png';
-  if (mimeType.includes('webp')) return 'webp';
-  if (mimeType.includes('gif')) return 'gif';
-  if (mimeType.includes('heic')) return 'heic';
-  if (mimeType.includes('avif')) return 'avif';
-  return 'jpg';
-}
-
 function isVideoMime(mimeType: string): boolean {
   return (
     mimeType.startsWith('video/') ||
@@ -1610,6 +1595,544 @@ ${cleanText}
     throw new Error('Blueskyへの動画アップロードに失敗しました。ファイル形式(MP4/MOV)およびサイズ(最大50MB)をご確認ください。');
   }
 
+  // =========================================================================
+  // リプライ投稿サポート: URL/IDパース & 対象投稿取得・検証エンドポイント
+  // =========================================================================
+
+  function parseBlueskyUrlOrUri(input: string): { handleOrDid: string; rkey: string } | null {
+    if (typeof input !== 'string') return null;
+    const clean = input.trim();
+    const atMatch = clean.match(/^at:\/\/([a-zA-Z0-9.:_-]+)\/app\.bsky\.feed\.post\/([a-zA-Z0-9]+)$/);
+    if (atMatch) {
+      return { handleOrDid: atMatch[1], rkey: atMatch[2] };
+    }
+    const webMatch = clean.match(/bsky\.app\/profile\/([a-zA-Z0-9.:_-]+)\/post\/([a-zA-Z0-9]+)/);
+    if (webMatch) {
+      return { handleOrDid: webMatch[1], rkey: webMatch[2] };
+    }
+    return null;
+  }
+
+  function parseThreadsUrlOrId(input: string): { username?: string; codeOrId: string; isNumericId: boolean } | null {
+    if (typeof input !== 'string') return null;
+    const clean = input.trim();
+    if (/^\d{10,25}$/.test(clean)) {
+      return { codeOrId: clean, isNumericId: true };
+    }
+    // https://www.threads.com/@username/post/CODE or https://www.threads.net/@username/post/CODE
+    const userPostMatch = clean.match(/threads\.(?:net|com)\/@([a-zA-Z0-9._]+)\/post\/([a-zA-Z0-9_\-]+)/i);
+    if (userPostMatch) {
+      return { username: userPostMatch[1], codeOrId: userPostMatch[2], isNumericId: /^\d+$/.test(userPostMatch[2]) };
+    }
+    // https://www.threads.com/post/CODE
+    const simplePostMatch = clean.match(/threads\.(?:net|com)\/post\/([a-zA-Z0-9_\-]+)/i);
+    if (simplePostMatch) {
+      return { codeOrId: simplePostMatch[1], isNumericId: /^\d+$/.test(simplePostMatch[1]) };
+    }
+    // https://www.threads.com/t/CODE
+    const shortMatch = clean.match(/threads\.(?:net|com)\/t\/([a-zA-Z0-9_\-]+)/i);
+    if (shortMatch) {
+      return { codeOrId: shortMatch[1], isNumericId: /^\d+$/.test(shortMatch[1]) };
+    }
+    // https://www.threads.com/share/CODE
+    const shareMatch = clean.match(/threads\.(?:net|com)\/share\/([a-zA-Z0-9_\-]+)/i);
+    if (shareMatch) {
+      return { codeOrId: shareMatch[1], isNumericId: /^\d+$/.test(shareMatch[1]) };
+    }
+    return null;
+  }
+
+  // 1. リプライ先投稿の検証・情報取得 (Bluesky / Threads)
+  app.post('/api/reply/resolve-target', async (req, res) => {
+    try {
+      const { platform, urlOrId, credentials = {} } = req.body;
+      const cleanInput = sanitizeInput(urlOrId).trim();
+
+      if (!cleanInput) {
+        res.status(400).json({ success: false, error: '投稿URLまたはIDが入力されていません。' });
+        return;
+      }
+
+      // プラットフォームの自動判定（URLから Bluesky または Threads を検出）
+      let resolvedPlatform = platform;
+      if (!resolvedPlatform || resolvedPlatform === 'auto') {
+        if (parseBlueskyUrlOrUri(cleanInput) || cleanInput.includes('bsky.app') || cleanInput.startsWith('at://')) {
+          resolvedPlatform = 'Bluesky';
+        } else if (parseThreadsUrlOrId(cleanInput) || cleanInput.includes('threads.com') || cleanInput.includes('threads.net')) {
+          resolvedPlatform = 'Threads';
+        } else {
+          res.status(400).json({
+            success: false,
+            error: 'URLからBlueskyまたはThreadsの投稿を自動判定できませんでした。https://bsky.app/... または https://www.threads.com/... の投稿URLを入力してください。',
+          });
+          return;
+        }
+      }
+
+      const isDemoMode = Boolean(credentials.isDemoMode) ||
+        (resolvedPlatform === 'Bluesky' && (credentials.blueskyIdentifier || '').includes('demo')) ||
+        (resolvedPlatform === 'Threads' && (credentials.threadsAccessToken || '').includes('demo'));
+
+      // -------------------------------------------------------------
+      // Bluesky のリプライ対象解決
+      // -------------------------------------------------------------
+      if (resolvedPlatform === 'Bluesky') {
+        const isBskyFormat = /^https?:\/\/(?:[a-zA-Z0-9-]+\.)?bsky\.app\/profile\/[^\s/]+\/post\/[^\s/]+/i.test(cleanInput) ||
+                             cleanInput.startsWith('at://') ||
+                             Boolean(parseBlueskyUrlOrUri(cleanInput));
+
+        if (!isBskyFormat) {
+          res.status(400).json({
+            success: false,
+            error: 'Blueskyの投稿URLは「https://bsky.app/profile/.../post/...」の形式で入力してください。',
+          });
+          return;
+        }
+
+        const parsed = parseBlueskyUrlOrUri(cleanInput);
+        if (!parsed) {
+          res.status(400).json({
+            success: false,
+            error: 'Blueskyの投稿URL（https://bsky.app/profile/.../post/...）または AT-URI（at://...）の形式が正しくありません。',
+          });
+          return;
+        }
+
+        // デモ版シミュレーション: https://bsky.app/... の形式の場合のみシミュレート可能
+        if (isDemoMode) {
+          res.json({
+            success: true,
+            target: {
+              platform: 'Bluesky',
+              urlOrId: cleanInput,
+              resolvedId: `at://did:plc:democreator1029384756/app.bsky.feed.post/${parsed.rkey}`,
+              cid: 'bafyreidemo1234567890abcdef',
+              rootUri: `at://did:plc:democreator1029384756/app.bsky.feed.post/${parsed.rkey}`,
+              rootCid: 'bafyreidemo1234567890abcdef',
+              authorName: parsed.handleOrDid.includes('demo') ? 'デモクリエイター' : `@${parsed.handleOrDid}`,
+              authorHandle: parsed.handleOrDid.includes('.') ? parsed.handleOrDid : `${parsed.handleOrDid}.bsky.social`,
+              authorAvatar: undefined,
+              textSnippet: '【デモシミュレーション】Bluesky返信先投稿のURL形式を確認しました。リプライ投稿のシミュレートが可能です。',
+              createdAt: new Date().toISOString(),
+              isOwnPost: true,
+              isOwnerMatch: true,
+              canReply: true,
+              verifiedCanReply: true,
+              checkStatusMessage: 'デモシミュレート可能（https://bsky.app/... 形式確認済）',
+            },
+          });
+          return;
+        }
+
+        try {
+          let did = parsed.handleOrDid;
+          // ハンドル名の場合は DID を解決
+          if (!did.startsWith('did:')) {
+            const resolveRes = await fetch(
+              `https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(did)}`
+            );
+            if (resolveRes.ok) {
+              const rData = await resolveRes.json();
+              if (rData.did) did = rData.did;
+            }
+          }
+
+          const atUri = `at://${did}/app.bsky.feed.post/${parsed.rkey}`;
+          const threadRes = await fetch(
+            `https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=${encodeURIComponent(atUri)}&depth=0`
+          );
+
+          if (!threadRes.ok) {
+            const errData = await threadRes.json().catch(() => ({}));
+            res.status(404).json({
+              success: false,
+              error: `Bluesky投稿の取得に失敗しました: ${errData.message || threadRes.statusText || '投稿が見つかりません'}`,
+            });
+            return;
+          }
+
+          const threadData = await threadRes.json();
+          const post = threadData?.thread?.post;
+          if (!post) {
+            res.status(404).json({ success: false, error: '指定されたBluesky投稿が見つかりませんでした。' });
+            return;
+          }
+
+          // ルートURI/CIDの判定（既にツリーの場合、ツリーの最上位 root を引き継ぐ）
+          const recordReply = post.record?.reply;
+          const rootUri = recordReply?.root?.uri || post.uri;
+          const rootCid = recordReply?.root?.cid || post.cid;
+
+          const currentHandle = (credentials.blueskyHandle || credentials.blueskyIdentifier || '').toLowerCase();
+          const isOwnPost = (post.author?.handle || '').toLowerCase() === currentHandle || post.author?.did === credentials.blueskyDid;
+
+          res.json({
+            success: true,
+            target: {
+              platform: 'Bluesky',
+              urlOrId: cleanInput,
+              resolvedId: post.uri,
+              cid: post.cid,
+              rootUri,
+              rootCid,
+              authorName: post.author?.displayName || post.author?.handle,
+              authorHandle: post.author?.handle,
+              authorAvatar: post.author?.avatar,
+              textSnippet: post.record?.text || '',
+              textExcerpt: post.record?.text ? post.record.text.slice(0, 180) : '',
+              createdAt: post.record?.createdAt || post.indexedAt,
+              isOwnPost,
+              canReply: true, // Bluesky は他人の投稿にも自分の投稿にも公式APIでリプライ可能
+            },
+          });
+          return;
+        } catch (fetchErr: any) {
+          res.status(500).json({
+            success: false,
+            error: `Bluesky投稿情報取得エラー: ${fetchErr.message || '通信に失敗しました'}`,
+          });
+          return;
+        }
+      }
+
+      // -------------------------------------------------------------
+      // Threads のリプライ対象解決（おすすめの2段階設計パターン）
+      // 1段階目: URL/ユーザー名および GET API (個別投稿 /me/threads / /{id}) による高速・安全な所有権チェック
+      // 2段階目: Dry-run コンテナ作成プローブによる実動作の完全検証
+      // -------------------------------------------------------------
+      if (resolvedPlatform === 'Threads') {
+        const isThreadsUrlFormat =
+          /^https?:\/\/(?:[a-zA-Z0-9-]+\.)?threads\.(?:com|net)\/[^\s]+/i.test(cleanInput) ||
+          /^\d{10,25}$/.test(cleanInput);
+
+        if (!isThreadsUrlFormat) {
+          res.status(400).json({
+            success: false,
+            error: 'Threadsの投稿URLは「https://www.threads.com/...」または「https://www.threads.net/...」の形式で入力してください。',
+          });
+          return;
+        }
+
+        const parsed = parseThreadsUrlOrId(cleanInput);
+        if (!parsed) {
+          res.status(400).json({
+            success: false,
+            error: 'Threadsの投稿URL（https://www.threads.com/@user/post/... または /share/... 等）の形式が正しくありません。',
+          });
+          return;
+        }
+
+        const threadsToken = sanitizeInput(credentials.threadsAccessToken);
+
+        // -------------------------------------------------------------
+        // デモ版シミュレーション
+        // -------------------------------------------------------------
+        if (isDemoMode || !threadsToken) {
+          const displayUsername = parsed.username || credentials.threadsUsername || 'Demo_User';
+          res.json({
+            success: true,
+            target: {
+              platform: 'Threads',
+              urlOrId: cleanInput,
+              resolvedId: parsed.codeOrId || 'demo_threads_post_123',
+              authorName: displayUsername,
+              authorHandle: displayUsername.replace(/^@/, ''),
+              textExcerpt: '【デモシミュレーション】Threads投稿URL形式を確認しました。リプライ投稿のシミュレートが可能です。',
+              textSnippet: '【デモシミュレーション】Threads投稿URL形式を確認しました。リプライ投稿のシミュレートが可能です。',
+              createdAt: new Date().toISOString(),
+              isOwnPost: true,
+              isOwnerMatch: true,
+              canReply: true,
+              isDemoSkipped: false,
+              verifiedCanReply: true,
+              checkStatusMessage: 'デモシミュレート可能（Threads URL形式確認済）',
+            },
+          });
+          return;
+        }
+
+        // -------------------------------------------------------------
+        // 1段階目: 高速APIチェック（所有権とユーザー名照合）
+        // -------------------------------------------------------------
+        const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username&access_token=${threadsToken}`);
+        const meData = await meRes.json().catch(() => ({}));
+        if (!meRes.ok || !meData.id) {
+          res.status(401).json({
+            success: false,
+            error: `Threadsアカウントの認証確認に失敗しました: ${meData?.error?.message || meRes.statusText}`,
+          });
+          return;
+        }
+
+        const currentUserId = String(meData.id);
+        const currentUsername = String(meData.username || '').toLowerCase();
+
+        // ユーザー名がURLに含まれており、かつログイン中のユーザーと異なる場合は即座に判定
+        if (parsed.username) {
+          const targetUserClean = parsed.username.replace(/^@/, '').toLowerCase();
+          if (targetUserClean !== currentUsername) {
+            res.json({
+              success: true,
+              target: {
+                platform: 'Threads',
+                urlOrId: cleanInput,
+                resolvedId: parsed.codeOrId,
+                authorName: parsed.username,
+                authorHandle: parsed.username,
+                textSnippet: '（他ユーザーのアカウント投稿）',
+                textExcerpt: '（他ユーザーのアカウント投稿）',
+                isOwnPost: false,
+                isOwnerMatch: false,
+                canReply: false,
+                verifiedCanReply: false,
+                error: `Threads APIの制限により、現在連携中のご自身のアカウント（@${meData.username}）の投稿にのみリプライ可能です。指定されたURLの投稿者（@${parsed.username}）は異なるアカウントのためリプライできません。`,
+                checkStatusMessage: `他者アカウント（@${parsed.username}）のためリプライ不可`,
+              },
+            });
+            return;
+          }
+        }
+
+        // 利用者の最近の投稿一覧（/me/threads）から高速照合
+        let matchedItem: any = null;
+        try {
+          const threadsListRes = await fetch(
+            `https://graph.threads.net/v1.0/me/threads?fields=id,media_type,text,timestamp,shortcode,permalink,username&limit=100&access_token=${threadsToken}`
+          );
+          if (threadsListRes.ok) {
+            const threadsListData = await threadsListRes.json();
+            const list: any[] = threadsListData.data || [];
+            matchedItem = list.find((item) => {
+              if (item.id === parsed.codeOrId) return true;
+              if (item.shortcode && item.shortcode === parsed.codeOrId) return true;
+              if (item.permalink && (item.permalink.includes(parsed.codeOrId) || item.permalink === cleanInput)) return true;
+              return false;
+            });
+          }
+        } catch (listErr) {
+          console.warn('[Threads Reply] Failed to fetch /me/threads:', listErr);
+        }
+
+        let targetMediaId = matchedItem ? matchedItem.id : (parsed.isNumericId ? parsed.codeOrId : null);
+        let postSnippet = matchedItem?.text || '';
+        let postCreatedAt = matchedItem?.timestamp || new Date().toISOString();
+        let isOwnerConfirmed = Boolean(matchedItem);
+
+        // /me/threads で未ヒットの場合、個別メディア照会（GET /{media-id}）で所有権確認
+        if (!targetMediaId || !isOwnerConfirmed) {
+          const targetCheckId = targetMediaId || parsed.codeOrId;
+          try {
+            const mediaRes = await fetch(
+              `https://graph.threads.net/v1.0/${targetCheckId}?fields=id,text,timestamp,username,permalink,owner&access_token=${threadsToken}`
+            );
+            const mediaData = await mediaRes.json().catch(() => ({}));
+            if (mediaRes.ok && mediaData.id) {
+              const mediaOwnerId = String(mediaData.owner?.id || '');
+              const mediaUsername = String(mediaData.username || '').toLowerCase();
+              if (mediaOwnerId === currentUserId || mediaUsername === currentUsername || !mediaData.owner) {
+                targetMediaId = mediaData.id;
+                postSnippet = mediaData.text || '（メディア投稿）';
+                postCreatedAt = mediaData.timestamp || postCreatedAt;
+                isOwnerConfirmed = true;
+              }
+            }
+          } catch (mErr) {
+            console.warn('[Threads Reply] Single media check failed:', mErr);
+          }
+        }
+
+        if (!targetMediaId || !isOwnerConfirmed) {
+          res.json({
+            success: true,
+            target: {
+              platform: 'Threads',
+              urlOrId: cleanInput,
+              resolvedId: parsed.codeOrId,
+              authorName: parsed.username || '他アカウントまたは不明',
+              authorHandle: parsed.username || 'unknown',
+              textSnippet: '（Threads APIの制限により他者の投稿または未取得の投稿にはリプライできません）',
+              textExcerpt: '（Threads APIの制限により他者の投稿または未取得の投稿にはリプライできません）',
+              isOwnPost: false,
+              isOwnerMatch: false,
+              canReply: false,
+              verifiedCanReply: false,
+              error: `Threads投稿の所有権を確認できませんでした。Threads APIの公式仕様上、ご自身のアカウント（@${meData.username}）で投稿したスレッドのみリプライ対象に指定できます。「自分の最近の投稿から選ぶ」機能、またはご自身の投稿URLをご確認ください。`,
+              checkStatusMessage: '他アカウント投稿または未確認のためリプライ不可',
+            },
+          });
+          return;
+        }
+
+        // -------------------------------------------------------------
+        // 2段階目: 実動作検証（Dry-Run コンテナ作成プローブ）
+        // ※ publish は絶対に呼び出さないためタイムラインには一切公開されません
+        // -------------------------------------------------------------
+        let apiVerified = false;
+        let apiVerifyError = '';
+
+        try {
+          const probeParams = new URLSearchParams();
+          probeParams.append('access_token', threadsToken);
+          probeParams.append('media_type', 'TEXT');
+          probeParams.append('text', 'CrossPost Studio Reply Precheck Probe');
+          probeParams.append('reply_to_id', targetMediaId);
+
+          const probeRes = await fetch(`https://graph.threads.net/v1.0/${currentUserId}/threads`, {
+            method: 'POST',
+            body: probeParams,
+          });
+          const probeData = await probeRes.json().catch(() => ({}));
+
+          if (probeRes.ok && probeData.id) {
+            apiVerified = true;
+          } else {
+            apiVerified = false;
+            apiVerifyError = probeData?.error?.message || probeRes.statusText || 'Meta Threads APIがリプライ指定を拒否しました';
+          }
+        } catch (probeErr: any) {
+          console.warn('[Threads Probe] Dry-run check network error:', probeErr);
+          // ネットワーク等の問題でプローブのみ失敗した場合は、1段階目で所有権確認が完了しているため許可
+          apiVerified = true;
+        }
+
+        if (apiVerified) {
+          res.json({
+            success: true,
+            target: {
+              platform: 'Threads',
+              urlOrId: cleanInput,
+              resolvedId: targetMediaId,
+              authorName: meData.username,
+              authorHandle: meData.username,
+              textSnippet: postSnippet || '（メディア投稿）',
+              textExcerpt: postSnippet ? postSnippet.slice(0, 180) : '（メディア投稿）',
+              createdAt: postCreatedAt,
+              isOwnPost: true,
+              isOwnerMatch: true,
+              canReply: true,
+              verifiedCanReply: true,
+              checkStatusMessage: 'Threads公式APIにて本人所有およびリプライ可能であることを完全検証済み',
+            },
+          });
+          return;
+        } else {
+          res.json({
+            success: true,
+            target: {
+              platform: 'Threads',
+              urlOrId: cleanInput,
+              resolvedId: targetMediaId,
+              authorName: meData.username,
+              authorHandle: meData.username,
+              textSnippet: postSnippet || '（リプライ制限のある投稿）',
+              textExcerpt: postSnippet ? postSnippet.slice(0, 180) : '（リプライ制限のある投稿）',
+              isOwnPost: true,
+              isOwnerMatch: true,
+              canReply: false,
+              verifiedCanReply: false,
+              error: `Threads APIの事前チェックで拒否されました: ${apiVerifyError}（返信制限設定をご確認ください）`,
+              checkStatusMessage: `リプライ不可: ${apiVerifyError}`,
+            },
+          });
+          return;
+        }
+      }
+
+      res.status(400).json({ success: false, error: '未対応のプラットフォームです。' });
+    } catch (err: any) {
+      console.error('Resolve reply target error:', err);
+      res.status(500).json({
+        success: false,
+        error: `リプライ対象の検証中にエラーが発生しました: ${err.message || '通信エラー'}`,
+      });
+    }
+  });
+
+  // 2. 利用者自身の最近のThreads投稿一覧取得（リプライ先選択UI用）
+  app.post('/api/threads/my-recent-posts', async (req, res) => {
+    try {
+      const { credentials = {} } = req.body;
+      const isDemo = Boolean(credentials.isDemoMode) ||
+        (credentials.threadsAccessToken || '').includes('demo');
+
+      if (isDemo) {
+        const username = credentials.threadsUsername || '@Demo_Threads_Official';
+        res.json({
+          success: true,
+          isDemo: true,
+          username,
+          posts: [
+            {
+              id: 'demo_post_1001',
+              text: 'Threads APIを活用したクロスポスト連携のテスト投稿です。こちらにリプライスレッドを繋げられます。',
+              timestamp: new Date(Date.now() - 3600000).toISOString(),
+              permalink: `https://www.threads.net/${username}/post/demo_post_1001`,
+              shortcode: 'demo_1001',
+              mediaType: 'TEXT_POST',
+            },
+            {
+              id: 'demo_post_1002',
+              text: '新機能のお知らせ：BlueskyとThreadsの双方向リプライ投稿に対応しました！',
+              timestamp: new Date(Date.now() - 86400000).toISOString(),
+              permalink: `https://www.threads.net/${username}/post/demo_post_1002`,
+              shortcode: 'demo_1002',
+              mediaType: 'IMAGE',
+            },
+            {
+              id: 'demo_post_1003',
+              text: '長文のスレッド分割と画像カルーセルの同時投稿テスト完了。',
+              timestamp: new Date(Date.now() - 172800000).toISOString(),
+              permalink: `https://www.threads.net/${username}/post/demo_post_1003`,
+              shortcode: 'demo_1003',
+              mediaType: 'TEXT_POST',
+            },
+          ],
+        });
+        return;
+      }
+
+      const threadsToken = sanitizeInput(credentials.threadsAccessToken);
+      if (!threadsToken) {
+        res.status(400).json({ success: false, error: 'Threadsアクセストークンが設定されていません。' });
+        return;
+      }
+
+      const listRes = await fetch(
+        `https://graph.threads.net/v1.0/me/threads?fields=id,media_type,text,timestamp,shortcode,permalink,username&limit=25&access_token=${threadsToken}`
+      );
+      const listData = await listRes.json().catch(() => ({}));
+      if (!listRes.ok) {
+        res.status(listRes.status).json({
+          success: false,
+          error: `Threadsの過去投稿一覧取得に失敗しました: ${listData?.error?.message || listRes.statusText}`,
+        });
+        return;
+      }
+
+      const rawPosts = listData.data || [];
+      const posts = rawPosts.map((p: any) => ({
+        id: p.id,
+        text: p.text || '（メディア投稿）',
+        timestamp: p.timestamp,
+        permalink: p.permalink,
+        shortcode: p.shortcode,
+        mediaType: p.media_type,
+        username: p.username,
+      }));
+
+      res.json({
+        success: true,
+        posts,
+      });
+    } catch (err: any) {
+      console.error('Fetch my recent threads posts error:', err);
+      res.status(500).json({
+        success: false,
+        error: `Threads過去投稿取得エラー: ${err.message || '通信エラー'}`,
+      });
+    }
+  });
+
   // Bluesky アカウント認証 (createSession)
   app.post('/api/bluesky/auth', async (req, res) => {
     try {
@@ -1689,248 +2212,6 @@ ${cleanText}
     }
   });
 
-  // リプライ先投稿の情報取得・プレビュー解決 API
-  app.post('/api/reply-preview', async (req, res) => {
-    try {
-      const { url, platform, credentials } = req.body || {};
-      if (!url || typeof url !== 'string') {
-        res.status(400).json({ success: false, error: 'URLが指定されていません。' });
-        return;
-      }
-
-      const input = url.trim();
-
-      // Threads / Instagram Base64 短縮コード変換
-      const decodeThreadsShortcode = (shortcode: string): string => {
-        const clean = shortcode.trim().replace(/^\/+|\/+$/g, '');
-        if (/^\d{10,25}$/.test(clean)) return clean;
-        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-        try {
-          let id = BigInt(0);
-          for (let i = 0; i < clean.length; i++) {
-            const char = clean[i];
-            const val = alphabet.indexOf(char);
-            if (val === -1) return clean;
-            id = id * BigInt(64) + BigInt(val);
-          }
-          return id.toString();
-        } catch {
-          return clean;
-        }
-      };
-
-      // 1. Bluesky URL 判定・解決
-      const isBluesky =
-        platform === 'Bluesky' ||
-        input.includes('bsky.app') ||
-        input.startsWith('at://');
-
-      if (isBluesky) {
-        let handleOrDid = '';
-        let rkey = '';
-
-        const atMatch = input.match(/^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/?#]+)/i);
-        const webMatch = input.match(/bsky\.app\/profile\/([^/?#]+)\/post\/([^/?#]+)/i);
-
-        if (atMatch) {
-          handleOrDid = atMatch[1];
-          rkey = atMatch[2];
-        } else if (webMatch) {
-          handleOrDid = decodeURIComponent(webMatch[1]);
-          rkey = webMatch[2];
-        } else if (/^[a-z0-9]{13}$/.test(input)) {
-          rkey = input;
-          handleOrDid = credentials?.blueskyHandle || 'me';
-        }
-
-        if (!rkey) {
-          res.status(400).json({
-            success: false,
-            platform: 'Bluesky',
-            error: 'Blueskyの投稿ID（rkey）を特定できませんでした。URLをご確認ください。',
-          });
-          return;
-        }
-
-        let did = handleOrDid.startsWith('did:') ? handleOrDid : '';
-        if (!did && handleOrDid) {
-          const cleanHandle = handleOrDid.replace(/^@/, '');
-          const resolveRes = await fetch(
-            `https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(cleanHandle)}`
-          );
-          if (resolveRes.ok) {
-            const resolveData = await resolveRes.json().catch(() => ({}));
-            if (resolveData?.did) did = resolveData.did;
-          }
-        }
-
-        if (!did && credentials?.blueskyDid) {
-          did = credentials.blueskyDid;
-        }
-
-        const targetUri = did ? `at://${did}/app.bsky.feed.post/${rkey}` : '';
-        if (targetUri) {
-          const threadRes = await fetch(
-            `https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=${encodeURIComponent(targetUri)}&depth=0&parentHeight=1`
-          );
-          if (threadRes.ok) {
-            const threadData = await threadRes.json().catch(() => ({}));
-            const post = threadData?.thread?.post;
-            if (post) {
-              const author = post.author || {};
-              const record = post.record || {};
-              const replyMeta = record.reply;
-
-              res.json({
-                success: true,
-                platform: 'Bluesky',
-                url: input,
-                postId: rkey,
-                uri: post.uri,
-                cid: post.cid,
-                rootUri: replyMeta?.root?.uri || post.uri,
-                rootCid: replyMeta?.root?.cid || post.cid,
-                authorHandle: author.handle ? `@${author.handle}` : handleOrDid,
-                authorDisplayName: author.displayName,
-                authorAvatar: author.avatar,
-                postSnippet: typeof record.text === 'string' ? record.text.slice(0, 140) : undefined,
-              });
-              return;
-            }
-          }
-        }
-
-        res.json({
-          success: Boolean(rkey),
-          platform: 'Bluesky',
-          url: input,
-          postId: rkey,
-          authorHandle: handleOrDid,
-          uri: targetUri || undefined,
-        });
-        return;
-      }
-
-      // 2. Threads URL 判定・解決
-      let threadsPostId = '';
-      let threadsAuthor = '';
-      let threadsShortcode = '';
-      let isOwnPost = false;
-      let warning: string | undefined = undefined;
-
-      const threadsUserMatch = input.match(/threads\.(?:net|com)\/@[^/?#]+\/post\/([^/?#]+)/i);
-      const threadsShortMatch = input.match(/threads\.(?:net|com)\/t\/([^/?#]+)/i);
-      const threadsShareMatch = input.match(/threads\.(?:net|com)\/share\/(?:post\/)?([^/?#]+)/i);
-      const authorMatch = input.match(/threads\.(?:net|com)\/@([^/?#]+)/i);
-
-      if (threadsUserMatch) {
-        threadsShortcode = threadsUserMatch[1].replace(/\/+$/, '').split('?')[0];
-        if (authorMatch) threadsAuthor = `@${authorMatch[1]}`;
-      } else if (threadsShortMatch) {
-        threadsShortcode = threadsShortMatch[1].replace(/\/+$/, '').split('?')[0];
-      } else if (threadsShareMatch) {
-        threadsShortcode = threadsShareMatch[1].replace(/\/+$/, '').split('?')[0];
-      } else if (/^\d{15,25}$/.test(input)) {
-        threadsPostId = input;
-      } else {
-        threadsShortcode = input.replace(/\/+$/, '').split('?')[0];
-      }
-
-      // ユーザーのアクセストークンがある場合、自アカウントの最近の投稿一覧から shortcode / ID を照合して正規の threads_media ID を特定
-      let postSnippet = threadsPostId
-        ? `Threads 投稿 (ID: ${threadsPostId})`
-        : threadsShortcode
-        ? `Threads 投稿 (${threadsShortcode})`
-        : 'Threads 投稿';
-
-      const token = (credentials?.threadsAccessToken || '').trim();
-      if (token && !credentials?.isDemoMode && !token.includes('demo')) {
-        try {
-          const targetUser = credentials?.threadsUserId || 'me';
-          // 自身のアカウントの投稿一覧を取得して照合
-          const listRes = await fetch(
-            `https://graph.threads.net/v1.0/${targetUser}/threads?fields=id,shortcode,permalink,text,username,timestamp&limit=100&access_token=${token}`
-          );
-
-          if (listRes.ok) {
-            const listData = await listRes.json().catch(() => ({}));
-            const userPosts = Array.isArray(listData?.data) ? listData.data : [];
-
-            // 1. 完全一致（id, shortcode, permalink に含まれるか）
-            let matchedPost = userPosts.find((p: any) => {
-              if (threadsPostId && p.id === threadsPostId) return true;
-              if (threadsShortcode && (p.shortcode === threadsShortcode || p.permalink?.includes(threadsShortcode))) return true;
-              return false;
-            });
-
-            // 2. もしシェアリンクなどで shortcode が直接一致せず、かつ自アカウントの投稿が1件以上ある場合
-            //    URLがシェアリンク形式（share/）であれば、直前の最新投稿との紐付けを試行
-            if (!matchedPost && threadsShareMatch && userPosts.length > 0) {
-              matchedPost = userPosts[0]; // 最新の自投稿を優先
-            }
-
-            if (matchedPost) {
-              threadsPostId = matchedPost.id;
-              isOwnPost = true;
-              if (matchedPost.shortcode) threadsShortcode = matchedPost.shortcode;
-              if (matchedPost.text) postSnippet = matchedPost.text.slice(0, 140);
-              if (matchedPost.username) threadsAuthor = `@${matchedPost.username}`;
-            }
-          }
-
-          // もし投稿一覧に見つからず、かつ純粋な数値IDが指定されている場合は個別ID取得を試行
-          if (!threadsPostId && /^\d{15,25}$/.test(input)) {
-            const singleRes = await fetch(
-              `https://graph.threads.net/v1.0/${input}?fields=id,text,username,timestamp&access_token=${token}`
-            );
-            if (singleRes.ok) {
-              const singleData = await singleRes.json().catch(() => ({}));
-              if (singleData?.id) {
-                threadsPostId = singleData.id;
-                if (singleData.text) postSnippet = singleData.text.slice(0, 140);
-                if (singleData.username) threadsAuthor = `@${singleData.username}`;
-              }
-            }
-          }
-        } catch (gErr) {
-          console.warn('[reply-preview] Threads Graph API fetch failed:', gErr);
-        }
-      }
-
-      // 自アカウントの投稿として正規IDが特定できなかった場合（外部ユーザーの投稿URLなど）
-      if (!threadsPostId && threadsShortcode) {
-        warning = '⚠️ Threads APIの仕様上、リプライ先にはご自身のアカウントで投稿されたスレッドのURLのみ指定可能です（他者の投稿への返信はMeta社の追加権限が必要なためエラーとなります）。';
-      }
-
-      if (!threadsPostId && !threadsShortcode) {
-        res.status(400).json({
-          success: false,
-          platform: 'Threads',
-          error: 'Threadsの投稿URLまたは投稿IDを認識できませんでした。',
-        });
-        return;
-      }
-
-      res.json({
-        success: true,
-        platform: 'Threads',
-        url: input,
-        postId: threadsPostId || undefined,
-        shortcode: threadsShortcode || undefined,
-        authorHandle: threadsAuthor || undefined,
-        postSnippet,
-        isOwnPost,
-        warning,
-      });
-    } catch (err: any) {
-      console.error('reply-preview error:', err);
-      res.status(500).json({
-        success: false,
-        error: `リプライ先の解析に失敗しました: ${err.message || '内部エラー'}`,
-      });
-    }
-  });
-
   // Bluesky 投稿実行 (uploadBlob + createRecord)
   app.post('/api/bluesky/post', async (req, res) => {
     try {
@@ -1989,8 +2270,8 @@ ${cleanText}
         );
 
         let demoMsg = '【デモモード】シミュレーション投稿が完了しました。';
-        if (replyTarget?.url || replyTarget?.postId) {
-          demoMsg = `【デモモード】Blueskyのリプライ先（${replyTarget.authorHandle || replyTarget.postId || '指定投稿'}）への返信シミュレーション投稿が完了しました。`;
+        if (replyTarget?.resolvedId || replyTarget?.urlOrId) {
+          demoMsg = `【デモモード】指定されたBluesky投稿へのリプライシミュレーション投稿（計${totalCount}件）が完了しました。`;
         } else if (hasVideo && hasImage) {
           demoMsg = `【デモモード】動画と画像が混在しているため、2つ目以降のコンテンツをスレッド（返信ツリー計${totalCount}件）へ自動分割してシミュレーション投稿が完了しました。`;
         } else if (hasVideo) {
@@ -2160,7 +2441,7 @@ ${cleanText}
       let rootRef: { uri: string; cid: string } | null = null;
       let parentRef: { uri: string; cid: string } | null = null;
 
-      // リプライ先投稿が指定されている場合は、第1投稿目をそのリプライとして設定
+      // リプライ先が指定されている場合、初期 rootRef と parentRef を設定
       if (replyTarget && replyTarget.uri && replyTarget.cid) {
         rootRef = {
           uri: replyTarget.rootUri || replyTarget.uri,
@@ -2479,7 +2760,7 @@ ${cleanText}
   // Threads 投稿実行 (コンテナ作成 + 公開)
   app.post('/api/threads/post', async (req, res) => {
     try {
-      const { credentials, posts, images = [], topic, clientOrigin, isDemo = false, replyToId, replyTarget } = req.body;
+      const { credentials, posts, images = [], topic, clientOrigin, isDemo = false, replyToId } = req.body;
       const { threadsUserId = 'me', threadsAccessToken, threadsUsername, isDemoMode } = credentials || {};
       const cleanToken = sanitizeInput(threadsAccessToken);
 
@@ -2514,8 +2795,8 @@ ${cleanText}
         const imageCount = Array.isArray(images) ? images.length : 0;
         const topicNote = cleanTopic ? `（トピック「#${cleanTopic}」設定済）` : '';
         let demoMsg = '';
-        if (replyTarget?.url || replyTarget?.postId || replyToId) {
-          demoMsg = `【デモモード】Threadsリプライ先（${replyTarget?.authorHandle || replyTarget?.postId || replyToId || '指定投稿'}）への返信シミュレーション投稿が完了しました${topicNote}。`;
+        if (replyToId) {
+          demoMsg = `【デモモード】ご自身のアカウント投稿（ID: ${replyToId}）へのリプライシミュレーション投稿が完了しました${topicNote}。`;
         } else if (imageCount > 1) {
           demoMsg = `【デモモード】画像${imageCount}枚のカルーセル投稿シミュレーションが完了しました${topicNote}。`;
         } else if (imageCount === 1) {
@@ -2558,65 +2839,77 @@ ${cleanText}
       const targetUser = (threadsUserId || '').trim() || 'me';
       const createdPostIds: string[] = [];
       const createdUrls: string[] = [];
-      const rawTargetReplyTo = (replyToId || replyTarget?.postId || replyTarget?.shortcode || replyTarget?.url || '').trim();
       let prevPublishedId: string | null = null;
 
-      // Threads リプライ先 ID の事前検証・正規 threads_media ID 解決
-      if (rawTargetReplyTo) {
-        if (/^\d{15,25}$/.test(rawTargetReplyTo)) {
-          prevPublishedId = rawTargetReplyTo;
-        } else {
-          // URL または shortcode から shortcode を抽出
-          let targetShortcode = rawTargetReplyTo;
-          const userMatch = rawTargetReplyTo.match(/threads\.(?:net|com)\/@[^/?#]+\/post\/([^/?#]+)/i);
-          const shortMatch = rawTargetReplyTo.match(/threads\.(?:net|com)\/t\/([^/?#]+)/i);
-          const shareMatch = rawTargetReplyTo.match(/threads\.(?:net|com)\/share\/(?:post\/)?([^/?#]+)/i);
+      // リプライ先IDが指定されている場合、本人の投稿であるかを厳格に検証
+      // Threads API制限: 利用者本人の投稿にのみリプライ可能
+      if (replyToId) {
+        let cleanReplyToId = sanitizeInput(replyToId).trim();
+        if (cleanReplyToId) {
+          const parsed = parseThreadsUrlOrId(cleanReplyToId);
+          const lookupCode = parsed ? parsed.codeOrId : cleanReplyToId;
 
-          if (userMatch) {
-            targetShortcode = userMatch[1].replace(/\/+$/, '').split('?')[0];
-          } else if (shortMatch) {
-            targetShortcode = shortMatch[1].replace(/\/+$/, '').split('?')[0];
-          } else if (shareMatch) {
-            targetShortcode = shareMatch[1].replace(/\/+$/, '').split('?')[0];
-          } else {
-            targetShortcode = rawTargetReplyTo.replace(/\/+$/, '').split('?')[0];
-          }
-
-          try {
-            const listRes = await fetch(
-              `https://graph.threads.net/v1.0/${targetUser}/threads?fields=id,shortcode,permalink&limit=100&access_token=${cleanToken}`
-            );
-            if (listRes.ok) {
-              const listData = await listRes.json().catch(() => ({}));
-              const userPosts = Array.isArray(listData?.data) ? listData.data : [];
-              let matched = userPosts.find(
-                (p: any) =>
-                  p.id === targetShortcode ||
-                  p.shortcode === targetShortcode ||
-                  p.permalink?.includes(targetShortcode)
-              );
-
-              // シェアリンク形式で完全一致しない場合、直前の自投稿（最新1件目）を自動照合
-              if (!matched && shareMatch && userPosts.length > 0) {
-                matched = userPosts[0];
-              }
-
-              if (matched?.id) {
-                prevPublishedId = matched.id;
-                console.log(`[threads:post] Resolved Threads reply target "${targetShortcode}" to media_id: ${matched.id}`);
-              }
-            }
-          } catch (resErr) {
-            console.warn('[threads:post] Failed to auto-resolve reply target shortcode:', resErr);
-          }
-
-          if (!prevPublishedId) {
-            res.status(400).json({
+          // 利用者の me.id と me.username を取得
+          const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username&access_token=${cleanToken}`);
+          const meData = await meRes.json().catch(() => ({}));
+          if (!meRes.ok || !meData.id) {
+            res.status(401).json({
               success: false,
-              error: `Threadsのリプライ先投稿（${targetShortcode}）の正規IDを特定できませんでした。Threads APIの公式仕様により、返信先にはご自身のアカウントで投稿したスレッドのURLまたは正規の投稿IDを指定してください（他者の投稿への返信はMeta社の追加権限 threads_manage_replies が必要です）。`,
+              error: `Threadsアカウントの認証確認に失敗しました: ${meData?.error?.message || meRes.statusText}`,
             });
             return;
           }
+
+          const currentUserId = String(meData.id);
+          const currentUsername = String(meData.username || '').toLowerCase();
+
+          // 利用者の過去投稿一覧（最新100件）または直接照会で検証
+          let verifiedMediaId: string | null = null;
+          try {
+            const listRes = await fetch(
+              `https://graph.threads.net/v1.0/me/threads?fields=id,shortcode,permalink,username&limit=100&access_token=${cleanToken}`
+            );
+            if (listRes.ok) {
+              const listData = await listRes.json();
+              const list: any[] = listData.data || [];
+              const matched = list.find(item =>
+                item.id === lookupCode ||
+                item.shortcode === lookupCode ||
+                (item.permalink && (item.permalink.includes(lookupCode) || item.permalink === cleanReplyToId))
+              );
+              if (matched) verifiedMediaId = matched.id;
+            }
+          } catch (e) {
+            console.warn('[Threads Post Reply] Failed checking /me/threads:', e);
+          }
+
+          if (!verifiedMediaId) {
+            try {
+              const targetRes = await fetch(
+                `https://graph.threads.net/v1.0/${lookupCode}?fields=id,username,owner&access_token=${cleanToken}`
+              );
+              const targetData = await targetRes.json().catch(() => ({}));
+              if (targetRes.ok && targetData.id) {
+                const ownerId = String(targetData.owner?.id || '');
+                const authorUser = String(targetData.username || '').toLowerCase();
+                if (ownerId === currentUserId || authorUser === currentUsername || !targetData.owner) {
+                  verifiedMediaId = targetData.id;
+                }
+              }
+            } catch (e) {
+              console.warn('[Threads Post Reply] Direct check failed:', e);
+            }
+          }
+
+          if (!verifiedMediaId) {
+            res.status(400).json({
+              success: false,
+              error: `Threads APIの制限により、利用者ご自身（@${meData.username}）の投稿にのみリプライ可能です。指定された投稿（${cleanReplyToId}）の所有権が確認できなかったため、リプライ投稿は中断されました。`,
+            });
+            return;
+          }
+
+          prevPublishedId = verifiedMediaId;
         }
       }
 

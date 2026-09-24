@@ -1,4 +1,4 @@
-import { ApiCredentials, AttachedImage, ReplyTarget } from '../types';
+import { ApiCredentials, AttachedImage, ReplyTargetInfo } from '../types';
 import { recordCommError, recordCommSuccess, recordCommInfo } from './commErrorLogger';
 
 export interface PostResult {
@@ -45,6 +45,161 @@ export interface ThreadsRefreshResult {
   errorCode?: string | number;
   message?: string;
   error?: string;
+}
+
+export interface ResolveReplyTargetResult {
+  success: boolean;
+  target?: ReplyTargetInfo;
+  error?: string;
+}
+
+export interface RecentThreadsPostItem {
+  id: string;
+  text: string;
+  timestamp: string;
+  permalink?: string;
+  shortcode?: string;
+  mediaType?: string;
+  username?: string;
+}
+
+export interface RecentThreadsPostsResult {
+  success: boolean;
+  isDemo?: boolean;
+  posts?: RecentThreadsPostItem[];
+  error?: string;
+}
+
+/**
+ * 入力されたURLやIDからBlueskyかThreadsかを自動判定
+ */
+export function detectReplyPlatform(input: string): 'Bluesky' | 'Threads' | null {
+  if (!input) return null;
+  const clean = input.trim();
+  if (
+    clean.includes('bsky.app') ||
+    clean.startsWith('at://') ||
+    /bsky\.app\/profile\/[^/]+\/post\/[^/]+/.test(clean)
+  ) {
+    return 'Bluesky';
+  }
+  if (
+    clean.includes('threads.com') ||
+    clean.includes('threads.net') ||
+    /^\d{10,25}$/.test(clean) ||
+    /threads\.(?:com|net)\/(?:@[^/]+\/post|t|share)\/[^/]+/.test(clean)
+  ) {
+    return 'Threads';
+  }
+  return null;
+}
+
+/**
+ * リプライURLとして有効な形式（https://bsky.app/... または https://www.threads.com/...）かを検証
+ */
+export function isValidReplyUrlFormat(input: string): { valid: boolean; platform: 'Bluesky' | 'Threads' | null; reason?: string } {
+  if (!input) return { valid: false, platform: null, reason: 'URLが入力されていません' };
+  const clean = input.trim();
+
+  // Bluesky形式
+  if (clean.includes('bsky.app') || clean.startsWith('at://')) {
+    const isBsky = /^https?:\/\/(?:[a-zA-Z0-9-]+\.)?bsky\.app\/profile\/[^\s/]+\/post\/[^\s/]+/i.test(clean) || clean.startsWith('at://');
+    if (isBsky) {
+      return { valid: true, platform: 'Bluesky' };
+    }
+    return { valid: false, platform: 'Bluesky', reason: 'BlueskyのURLは「https://bsky.app/profile/.../post/...」の形式で入力してください。' };
+  }
+
+  // Threads形式
+  if (clean.includes('threads.com') || clean.includes('threads.net')) {
+    const isThreads = /^https?:\/\/(?:[a-zA-Z0-9-]+\.)?threads\.(?:com|net)\/[^\s]+/i.test(clean) || /^\d{10,25}$/.test(clean);
+    if (isThreads) {
+      return { valid: true, platform: 'Threads' };
+    }
+    return { valid: false, platform: 'Threads', reason: 'ThreadsのURLは「https://www.threads.com/...」の形式で入力してください。' };
+  }
+
+  return { valid: false, platform: null, reason: 'https://bsky.app/... または https://www.threads.com/... のURLを入力してください。' };
+}
+
+/**
+ * リプライ対象の投稿URL/IDをサーバーで検証・解決し、詳細情報を取得
+ * platform は 'Bluesky' | 'Threads' | 'auto' (URLから自動検出)
+ */
+export async function resolveReplyTarget(
+  platform: 'Bluesky' | 'Threads' | 'auto',
+  urlOrId: string,
+  credentials?: ApiCredentials
+): Promise<ResolveReplyTargetResult> {
+  const clean = urlOrId?.trim();
+  if (!clean) {
+    return { success: false, error: 'URLまたはIDが入力されていません' };
+  }
+
+  // 自動判定
+  const targetPlatform = platform === 'auto' ? (detectReplyPlatform(clean) || 'auto') : platform;
+
+  try {
+    const res = await fetch('/api/reply/resolve-target', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platform: targetPlatform,
+        urlOrId: clean,
+        credentials,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success && data.target) {
+      return { success: true, target: data.target };
+    }
+
+    return {
+      success: false,
+      error: data.error || (data.target?.error) || `検証に失敗しました (${res.status})`,
+      target: data.target,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || '通信エラーが発生しました',
+    };
+  }
+}
+
+/**
+ * ログイン中ユーザー自身のThreads最近の投稿一覧を取得 (リプライ先選択UI用)
+ */
+export async function fetchMyRecentThreadsPosts(
+  credentials?: ApiCredentials
+): Promise<RecentThreadsPostsResult> {
+  try {
+    const res = await fetch('/api/threads/my-recent-posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credentials }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      return {
+        success: true,
+        isDemo: data.isDemo,
+        posts: data.posts || [],
+      };
+    }
+
+    return {
+      success: false,
+      error: data.error || `一覧取得に失敗しました (${res.status})`,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || '通信エラーが発生しました',
+    };
+  }
 }
 
 export const DEMO_CREDENTIALS: ApiCredentials = {
@@ -848,7 +1003,7 @@ async function directPostToBluesky(
   posts: string[],
   images: AttachedImage[] = [],
   signal?: AbortSignal,
-  replyTarget?: ReplyTarget
+  replyTarget?: ReplyTargetInfo | null
 ): Promise<PostResult> {
   if (signal?.aborted) {
     throw new DOMException('ユーザー操作により投稿処理が中止されました', 'AbortError');
@@ -971,13 +1126,13 @@ async function directPostToBluesky(
   let rootRef: { uri: string; cid: string } | null = null;
   let parentRef: { uri: string; cid: string } | null = null;
 
-  if (replyTarget && replyTarget.uri && replyTarget.cid) {
+  if (replyTarget && replyTarget.resolvedId && replyTarget.cid) {
     rootRef = {
-      uri: replyTarget.rootUri || replyTarget.uri,
+      uri: replyTarget.rootUri || replyTarget.resolvedId,
       cid: replyTarget.rootCid || replyTarget.cid,
     };
     parentRef = {
-      uri: replyTarget.uri,
+      uri: replyTarget.resolvedId,
       cid: replyTarget.cid,
     };
   }
@@ -1257,7 +1412,6 @@ async function directPostToThreads(
   images: AttachedImage[] = [],
   topic?: string,
   signal?: AbortSignal,
-  replyTarget?: ReplyTarget,
   replyToId?: string
 ): Promise<PostResult> {
   if (signal?.aborted) {
@@ -1362,8 +1516,14 @@ async function directPostToThreads(
 
   const postIds: string[] = [];
   const urls: string[] = [];
-  const targetReplyTo = (replyToId || replyTarget?.postId || '').trim();
-  let previousPostId: string | null = targetReplyTo || null;
+  let previousPostId: string | null = null;
+
+  if (replyToId) {
+    const cleanReplyId = replyToId.trim();
+    if (cleanReplyId) {
+      previousPostId = cleanReplyId;
+    }
+  }
 
   // スレッド投稿数
   const totalPosts = Math.max(posts.length, 1);
@@ -1619,7 +1779,7 @@ export async function sendBlueskyPost(
   posts: string[],
   images: AttachedImage[],
   signal?: AbortSignal,
-  replyTarget?: ReplyTarget
+  replyTarget?: ReplyTargetInfo | null
 ): Promise<PostResult> {
   if (signal?.aborted) {
     throw new DOMException('ユーザー操作により投稿処理が中止されました', 'AbortError');
@@ -1634,8 +1794,8 @@ export async function sendBlueskyPost(
     const urls = Array.from({ length: count }).map(
       (_, idx) => `https://bsky.app/profile/demo-creator.bsky.social/post/demo-${Date.now()}-${idx + 1}`
     );
-    const demoMsg = (replyTarget?.url || replyTarget?.postId)
-      ? `【DEMOモード】リプライ先（${replyTarget.authorHandle || replyTarget.postId || '指定投稿'}）への返信シミュレーション投稿が完了しました。`
+    const demoMsg = replyTarget?.resolvedId || replyTarget?.urlOrId
+      ? `【DEMOモード】指定されたBluesky投稿へのリプライシミュレーション投稿が完了しました。`
       : '【DEMOモード】シミュレーション投稿が完了しました。';
     return {
       success: true,
@@ -1685,7 +1845,13 @@ export async function sendBlueskyPost(
         posts,
         isDemo: false,
         images: preparedImages,
-        replyTarget,
+        replyTarget: replyTarget?.resolvedId ? {
+          uri: replyTarget.resolvedId,
+          cid: replyTarget.cid,
+          rootUri: replyTarget.rootUri,
+          rootCid: replyTarget.rootCid,
+          urlOrId: replyTarget.urlOrId,
+        } : undefined,
       }),
       signal,
     });
@@ -1769,7 +1935,6 @@ export async function sendThreadsPost(
   images: AttachedImage[],
   topic?: string,
   signal?: AbortSignal,
-  replyTarget?: ReplyTarget,
   replyToId?: string
 ): Promise<PostResult> {
   if (signal?.aborted) {
@@ -1785,9 +1950,8 @@ export async function sendThreadsPost(
     const urls = Array.from({ length: count }).map(
       (_, idx) => `https://www.threads.net/@Demo_Threads_Official/post/demo-${Date.now()}-${idx + 1}`
     );
-    const targetDesc = replyTarget?.authorHandle || replyTarget?.postId || replyToId;
-    const demoMsg = targetDesc
-      ? `【DEMOモード】Threadsリプライ先（${targetDesc}）への返信シミュレーション投稿が完了しました。`
+    const demoMsg = replyToId
+      ? `【DEMOモード】ご自身の投稿へのリプライシミュレーション投稿が完了しました。`
       : '【DEMOモード】シミュレーション投稿が完了しました。';
     return {
       success: true,
@@ -1842,8 +2006,7 @@ export async function sendThreadsPost(
         clientOrigin,
         isDemo: false,
         images: preparedImages,
-        replyTarget,
-        replyToId,
+        replyToId: replyToId ? replyToId.trim() : undefined,
       }),
       signal,
     });
@@ -1856,7 +2019,7 @@ export async function sendThreadsPost(
       // Vercel等の静的ホスティングでバックエンドが存在しない場合（404/HTML返却）は直接ブラウザ投稿へ自動フォールバック
       console.warn(`[Threads Post] Backend returned non-JSON (${res.status}). Falling back to browser-direct Meta Graph API...`);
       try {
-        return await directPostToThreads(credentials, posts, images, topic, signal, replyTarget, replyToId);
+        return await directPostToThreads(credentials, posts, images, topic, signal, replyToId);
       } catch (directErr: any) {
         if (signal?.aborted) throw directErr;
         const errMsg = directErr.message || `Threads投稿に失敗しました (${res.status})`;
@@ -1880,7 +2043,7 @@ export async function sendThreadsPost(
       if (res.status === 404) {
         console.warn(`[Threads Post] Backend 404. Falling back to browser-direct Meta Graph API...`);
         try {
-          return await directPostToThreads(credentials, posts, images, topic, signal, replyTarget, replyToId);
+          return await directPostToThreads(credentials, posts, images, topic, signal, replyToId);
         } catch (directErr: any) {
           if (signal?.aborted) throw directErr;
           const errMsg = directErr.message || data.error || `Threads投稿に失敗しました (404)`;

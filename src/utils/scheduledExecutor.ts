@@ -44,7 +44,7 @@ export async function executeScheduledPostItem(
   try {
     // 1. Bluesky 投稿
     if (item.postToBluesky) {
-      const bskyReply = item.replyTarget?.platform?.toLowerCase() === 'bluesky' ? item.replyTarget : undefined;
+      const bskyReply = item.replySettings?.enabled ? item.replySettings.blueskyResolved : undefined;
       const bskyRes = await sendBlueskyPost(credentials, bskyPosts, item.images, undefined, bskyReply);
       if (bskyRes.success) {
         blueskySuccess = true;
@@ -56,15 +56,14 @@ export async function executeScheduledPostItem(
 
     // 2. Threads 投稿
     if (item.postToThreads) {
-      const thrReply = item.replyTarget?.platform?.toLowerCase() === 'threads' ? item.replyTarget : undefined;
+      const thReplyId = item.replySettings?.enabled ? (item.replySettings.threadsResolved?.resolvedId || undefined) : undefined;
       const thrRes = await sendThreadsPost(
         credentials,
         thrPosts,
         item.images,
         item.threadsTopic,
         undefined,
-        thrReply,
-        thrReply?.postId
+        thReplyId
       );
       if (thrRes.success) {
         threadsSuccess = true;
@@ -121,6 +120,7 @@ export async function executeScheduledPostItem(
       threadsUrls: thrUrls,
       isDemo,
       errorMessage: overallSuccess ? undefined : `[予約投稿エラー] ${errorMsg}`,
+      replySettings: item.replySettings,
     };
 
     const currentHistory = loadHistoryFromStorage();

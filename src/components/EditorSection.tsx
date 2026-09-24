@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AttachedImage, SplitThreadItem, ApiCredentials, ThemeAccentId, ReplyTarget } from '../types';
+import { AttachedImage, SplitThreadItem, ApiCredentials, ThemeAccentId, ReplySettings, ReplyTargetInfo } from '../types';
 import { compressImageFileWithThumbnail, processVideoFile } from '../utils/draftStorage';
 import { saveMediaBlob } from '../utils/indexedMediaStorage';
 import { uploadMediaItem } from '../utils/postApi';
@@ -12,7 +12,7 @@ import { QuickPresetSettingsModal } from './QuickPresetSettingsModal';
 import { SnippetModal } from './SnippetModal';
 import { OgpPreviewSection } from './OgpPreviewSection';
 import { AiAssistModal, AiAssistTab } from './AiAssistModal';
-import { ReplyTargetControl } from './ReplyTargetControl';
+import { ReplySettingsSection } from './ReplySettingsSection';
 import {
   Send,
   Sparkles,
@@ -29,6 +29,7 @@ import {
   Tag,
   Plus,
   RotateCcw,
+  MessageSquare,
   X,
   Settings,
   Film,
@@ -80,8 +81,6 @@ interface EditorSectionProps {
   onTogglePostToBluesky: (val: boolean) => void;
   postToThreads: boolean;
   onTogglePostToThreads: (val: boolean) => void;
-  replyTarget?: ReplyTarget;
-  onSetReplyTarget?: (target: ReplyTarget | undefined) => void;
   threadsTopic?: string;
   onChangeThreadsTopic?: (topic: string) => void;
   autoSplit: boolean;
@@ -107,11 +106,15 @@ interface EditorSectionProps {
   onDeleteSavedAccount?: (platform: 'bluesky' | 'threads') => void;
   onOpenUserGuide?: () => void;
   onOpenCommErrors?: () => void;
-  onNotify?: (msg: { type: 'success' | 'error' | 'info'; title: string; message: string }) => void;
+  onNotify?: (msg: { type: 'success' | 'error' | 'warning' | 'info'; title: string; message: string }) => void;
   lastSavedAt: number | null;
   draftStatus: 'saved' | 'saving' | 'error' | 'idle';
   draftError?: string;
   onClearDraft: () => void;
+  replySettings?: ReplySettings;
+  onUpdateReplySettings?: (settings: Partial<ReplySettings>) => void;
+  onSetResolvedReplyTarget?: (platform: 'Bluesky' | 'Threads', target: ReplyTargetInfo) => void;
+  onClearReplyTarget?: (platform?: 'Bluesky' | 'Threads') => void;
 }
 
 const SAMPLE_TEXTS = [
@@ -172,8 +175,6 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   onTogglePostToBluesky,
   postToThreads,
   onTogglePostToThreads,
-  replyTarget,
-  onSetReplyTarget,
   threadsTopic = '',
   onChangeThreadsTopic,
   autoSplit,
@@ -204,6 +205,10 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   draftStatus,
   draftError,
   onClearDraft,
+  replySettings,
+  onUpdateReplySettings,
+  onSetResolvedReplyTarget,
+  onClearReplyTarget,
 }) => {
   const [showSamples, setShowSamples] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -219,8 +224,6 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   // 個別分岐が実際に有効（非空で共通とは別内容）かどうかの判定
   const isBlueskyCustomized = Boolean(customPlatformText && blueskyText && blueskyText.trim().length > 0);
   const isThreadsCustomized = Boolean(customPlatformText && threadsText && threadsText.trim().length > 0);
-  const isBlueskyReply = replyTarget?.platform?.toLowerCase() === 'bluesky';
-  const isThreadsReply = replyTarget?.platform?.toLowerCase() === 'threads';
 
   // 現在アクティブなタブのテキストを取得
   const currentActiveText =
@@ -386,8 +389,8 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   // 投稿モード: 'instant' (同時投稿) | 'scheduled' (予約投稿)
   const [postMode, setPostMode] = useState<'instant' | 'scheduled'>('instant');
 
-  // 下部パネルドックタブ: 'media' (画像・動画) | 'tags' (ハッシュタグ・トピック) | 'ogp' (リンクプレビュー) | 'settings' (分割設定)
-  const [bottomDockTab, setBottomDockTab] = useState<'media' | 'tags' | 'ogp' | 'settings'>(() =>
+  // 下部パネルドックタブ: 'media' (画像・動画) | 'tags' (ハッシュタグ・トピック) | 'reply' (リプライ設定) | 'ogp' (リンクプレビュー) | 'settings' (分割設定)
+  const [bottomDockTab, setBottomDockTab] = useState<'media' | 'tags' | 'reply' | 'ogp' | 'settings'>(() =>
     images.length > 0 ? 'media' : 'tags'
   );
 
@@ -417,8 +420,112 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
   };
 
+  // リプライ投稿の妥当性判定（スイッチ不要：返信先URL/ターゲットが入力されている場合にリプライモードとして動作）
+  const hasBlueskyReply = Boolean(
+    replySettings?.blueskyResolved ||
+    (replySettings?.blueskyTargetUrl && replySettings.blueskyTargetUrl.trim().length > 0)
+  );
+  const hasThreadsReply = Boolean(
+    replySettings?.threadsResolved ||
+    (replySettings?.threadsTargetUrl && replySettings.threadsTargetUrl.trim().length > 0)
+  );
+  const isReplyActive = hasBlueskyReply || hasThreadsReply;
+
+  // 投稿先の選択状態
+  const isBothSelected = Boolean(postToBluesky && postToThreads);
+  const isNeitherSelected = Boolean(!postToBluesky && !postToThreads);
+
+  // リプライ先プラットフォームに応じた投稿先および個別編集タブの自動制御
+  useEffect(() => {
+    if (hasThreadsReply) {
+      if (postToBluesky) onTogglePostToBluesky(false);
+      if (!postToThreads) onTogglePostToThreads(true);
+      if (activeEditorTab !== 'threads') setActiveEditorTab('threads');
+    } else if (hasBlueskyReply) {
+      if (postToThreads) onTogglePostToThreads(false);
+      if (!postToBluesky) onTogglePostToBluesky(true);
+      if (activeEditorTab !== 'bluesky') setActiveEditorTab('bluesky');
+    } else {
+      // 通常時：片方のみ選択されている場合、共通タブは無効化されるため対象プラットフォームのタブへ自動切替
+      if (postToBluesky && !postToThreads) {
+        if (activeEditorTab !== 'bluesky') {
+          setActiveEditorTab('bluesky');
+        }
+      } else if (!postToBluesky && postToThreads) {
+        if (activeEditorTab !== 'threads') {
+          setActiveEditorTab('threads');
+        }
+      }
+    }
+  }, [hasThreadsReply, hasBlueskyReply, postToBluesky, postToThreads, activeEditorTab, onTogglePostToBluesky, onTogglePostToThreads]);
+
+  // 各プラットフォームおよび共通タブの無効化（グレーアウト）判定
+  // 共通タブ: BlueskyとThreadsの両方が選択されている時のみ活性化
+  const isCommonDisabled = !isBothSelected;
+  // 個別タブ: 対応するプラットフォームが選択されていない、または他方リプライ設定時に無効化
+  const isBlueskyDisabled = Boolean(hasThreadsReply || !postToBluesky);
+  const isThreadsDisabled = Boolean(hasBlueskyReply || !postToThreads);
+
+  // 1. Threads返信先が指定されているが未照合またはリプライ不可
+  const isThreadsReplyInvalid = Boolean(
+    hasThreadsReply &&
+    (!replySettings?.threadsResolved || replySettings.threadsResolved.canReply === false)
+  );
+
+  // 2. Bluesky返信先が指定されているが未照合またはリプライ不可
+  const isBlueskyReplyInvalid = Boolean(
+    hasBlueskyReply &&
+    (!replySettings?.blueskyResolved || replySettings.blueskyResolved.canReply === false)
+  );
+
+  const isNoReplyTarget = false;
+  const isReplyBlocked = isThreadsReplyInvalid || isBlueskyReplyInvalid;
+
+  // 即時投稿前の妥当性チェック
+  const handleSafeSubmitPost = () => {
+    if (isReplyBlocked) {
+      if (onNotify) {
+        if (isThreadsReplyInvalid) {
+          onNotify({
+            type: 'warning',
+            title: 'Threadsのリプライ先をご確認ください',
+            message: 'Threadsのリプライ先が正しく照合されていません。「https://www.threads.com/...」の形式で有効な投稿URLを入力・照合してください。',
+          });
+        } else if (isBlueskyReplyInvalid) {
+          onNotify({
+            type: 'warning',
+            title: 'Blueskyのリプライ先をご確認ください',
+            message: 'Blueskyのリプライ先が正しく照合されていません。「https://bsky.app/...」の形式で有効な投稿URLを入力・照合してください。',
+          });
+        }
+      }
+      setBottomDockTab('reply');
+      return;
+    }
+    onSubmitPost();
+  };
+
   const handleScheduleSubmit = () => {
     if (!onSchedulePost) return;
+    if (isReplyBlocked) {
+      if (onNotify) {
+        if (isThreadsReplyInvalid) {
+          onNotify({
+            type: 'warning',
+            title: 'Threadsのリプライ先をご確認ください',
+            message: 'Threadsのリプライ先が正しく照合されていません。「https://www.threads.com/...」の形式で有効な投稿URLを入力・照合してください。',
+          });
+        } else if (isBlueskyReplyInvalid) {
+          onNotify({
+            type: 'warning',
+            title: 'Blueskyのリプライ先をご確認ください',
+            message: 'Blueskyのリプライ先が正しく照合されていません。「https://bsky.app/...」の形式で有効な投稿URLを入力・照合してください。',
+          });
+        }
+      }
+      setBottomDockTab('reply');
+      return;
+    }
     const targetTimestamp = parseJstDatetimeLocal(scheduledDatetimeLocal);
     onSchedulePost(targetTimestamp);
   };
@@ -512,168 +619,211 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
     <div id="editor-section-container" className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start lg:items-stretch">
       {/* 左側：エディタ & 設定 */}
       <div className="lg:col-span-6 xl:col-span-5 space-y-3 min-w-0 w-full flex flex-col">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-3 shadow-xl">
+        <div className="bg-[#111726] border border-slate-700/80 rounded-2xl p-3.5 sm:p-4 space-y-3 shadow-xl">
           {/* 上部バー：投稿先トグル & サンプル挿入 */}
           {/* 一体化上部バー：投稿先トグル & エディタ分岐タブ & 例文・クリア */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-700/80">
             {/* 投稿先セレクター */}
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-xs font-bold text-slate-300">投稿先:</span>
+              <span className="text-xs font-bold text-slate-200">投稿先:</span>
               <label
                 id="toggle-post-bluesky-label"
-                title={isThreadsReply ? 'Threadsへのリプライ設定中のため、Blueskyは選択できません' : undefined}
-                className={`flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded-lg border text-xs font-bold cursor-pointer transition select-none ${
-                  isThreadsReply
-                    ? 'bg-slate-950 text-slate-600 border-slate-900 opacity-40 cursor-not-allowed'
+                title={
+                  hasThreadsReply
+                    ? 'Threadsリプライ投稿中はBlueskyへの同時投稿はできません'
+                    : 'Blueskyに投稿'
+                }
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-bold transition select-none shadow-xs ${
+                  hasThreadsReply
+                    ? 'opacity-35 cursor-not-allowed bg-slate-900/50 text-slate-500 border-slate-800 grayscale pointer-events-none'
                     : postToBluesky
-                    ? 'bg-[#0085ff]/15 text-[#0085ff] border-[#0085ff]/50 ring-1 ring-[#0085ff]/30'
-                    : 'bg-slate-950 text-slate-500 border-slate-800 opacity-60'
+                    ? 'bg-[#0085ff]/20 text-[#38bdf8] border-[#0085ff]/60 ring-1 ring-[#0085ff]/30 cursor-pointer'
+                    : 'bg-[#090D18] text-slate-400 border-slate-700/80 hover:border-slate-600 hover:text-slate-300 cursor-pointer'
                 }`}
               >
                 <input
                   type="checkbox"
-                  checked={postToBluesky}
-                  onChange={(e) => onTogglePostToBluesky(e.target.checked)}
+                  checked={postToBluesky && !hasThreadsReply}
+                  disabled={hasThreadsReply}
+                  onChange={(e) => {
+                    if (!hasThreadsReply) {
+                      onTogglePostToBluesky(e.target.checked);
+                    }
+                  }}
                   className="hidden"
                 />
                 <span>🦋 Bluesky</span>
-                {postToBluesky && <span className="w-1.5 h-1.5 rounded-full bg-[#0085ff]" />}
-                {isThreadsReply && <span className="text-[10px] text-slate-500 font-normal">🔒</span>}
+                {postToBluesky && !hasThreadsReply && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#0085ff]" />
+                )}
+                {hasThreadsReply && (
+                  <span className="text-[10px] text-slate-500 font-normal">（無効）</span>
+                )}
               </label>
 
               <label
                 id="toggle-post-threads-label"
-                title={isBlueskyReply ? 'Blueskyへのリプライ設定中のため、Threadsは選択できません' : undefined}
-                className={`flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded-lg border text-xs font-bold cursor-pointer transition select-none ${
-                  isBlueskyReply
-                    ? 'bg-slate-950 text-slate-600 border-slate-900 opacity-40 cursor-not-allowed'
+                title={
+                  hasBlueskyReply
+                    ? 'Blueskyリプライ投稿中はThreadsへの同時投稿はできません'
+                    : 'Threadsに投稿'
+                }
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-bold transition select-none shadow-xs ${
+                  hasBlueskyReply
+                    ? 'opacity-35 cursor-not-allowed bg-slate-900/50 text-slate-500 border-slate-800 grayscale pointer-events-none'
                     : postToThreads
-                    ? 'bg-slate-950 text-purple-300 border-purple-500/60 ring-1 ring-purple-500/30'
-                    : 'bg-slate-950 text-slate-500 border-slate-800 opacity-60'
+                    ? 'bg-purple-950/40 text-purple-200 border-purple-500/70 ring-1 ring-purple-500/40 cursor-pointer'
+                    : 'bg-[#090D18] text-slate-400 border-slate-700/80 hover:border-slate-600 hover:text-slate-300 cursor-pointer'
                 }`}
               >
                 <input
                   type="checkbox"
-                  checked={postToThreads}
-                  onChange={(e) => onTogglePostToThreads(e.target.checked)}
+                  checked={postToThreads && !hasBlueskyReply}
+                  disabled={hasBlueskyReply}
+                  onChange={(e) => {
+                    if (!hasBlueskyReply) {
+                      onTogglePostToThreads(e.target.checked);
+                    }
+                  }}
                   className="hidden"
                 />
                 <span>🌀 Threads</span>
-                {postToThreads && <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />}
-                {isBlueskyReply && <span className="text-[10px] text-slate-500 font-normal">🔒</span>}
+                {postToThreads && !hasBlueskyReply && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                )}
+                {hasBlueskyReply && (
+                  <span className="text-[10px] text-slate-500 font-normal">（無効）</span>
+                )}
               </label>
             </div>
 
             {/* プラットフォーム別テキスト分岐タブ (インラインコンパクト) */}
-            <div className="inline-flex items-center p-0.5 bg-slate-950/90 border border-slate-800 rounded-lg text-xs">
-              <button
-                type="button"
-                onClick={() => setActiveEditorTab('common')}
-                className={`px-2 py-1 rounded-md font-bold flex items-center gap-1 transition cursor-pointer ${
-                  activeEditorTab === 'common'
-                    ? 'bg-slate-800 text-slate-100 shadow-sm border border-slate-700'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="共通ベース文章の編集"
-              >
-                <Globe className="w-3 h-3 text-sky-400" />
-                <span>共通</span>
-              </button>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="text-xs font-bold text-slate-200">文書編集:</span>
+              <div className="inline-flex items-center p-0.5 bg-[#090D18] border border-slate-700/80 rounded-lg text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isCommonDisabled) {
+                      setActiveEditorTab('common');
+                    }
+                  }}
+                  disabled={isCommonDisabled}
+                  className={`px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition select-none ${
+                    isCommonDisabled
+                      ? 'opacity-35 cursor-not-allowed bg-slate-900/50 text-slate-500 pointer-events-none grayscale'
+                      : activeEditorTab === 'common'
+                      ? 'bg-[#1C2438] text-white shadow-sm border border-slate-600 cursor-pointer'
+                      : 'text-slate-300 hover:text-white cursor-pointer'
+                  }`}
+                  title={
+                    isCommonDisabled
+                      ? '共通本文の編集はBluesky・Threadsの両方が投稿先に選択されている時のみ有効です'
+                      : '共通ベース文章の編集'
+                  }
+                >
+                  <Globe className={`w-3 h-3 ${isCommonDisabled ? 'text-slate-500' : 'text-sky-400'}`} />
+                  <span>共通</span>
+                  {isCommonDisabled && (
+                    <span className="text-[10px] text-slate-500 font-normal">（無効）</span>
+                  )}
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveEditorTab('bluesky')}
-                className={`px-2 py-1 rounded-md font-bold flex items-center gap-1 transition cursor-pointer ${
-                  activeEditorTab === 'bluesky'
-                    ? 'bg-[#0085ff]/20 text-[#38bdf8] shadow-sm border border-[#0085ff]/40'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Bluesky個別文章の編集"
-              >
-                <span>🦋 Bluesky</span>
-                {isBlueskyCustomized && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#0085ff]" />
-                )}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isBlueskyDisabled) {
+                      setActiveEditorTab('bluesky');
+                    }
+                  }}
+                  disabled={isBlueskyDisabled}
+                  title={
+                    hasThreadsReply
+                      ? 'Threadsリプライ設定中はBluesky個別編集は無効です'
+                      : !postToBluesky
+                      ? 'Blueskyが投稿先に選択されていません'
+                      : 'Bluesky個別文章の編集'
+                  }
+                  className={`px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition select-none ${
+                    isBlueskyDisabled
+                      ? 'opacity-35 cursor-not-allowed text-slate-500 pointer-events-none grayscale'
+                      : activeEditorTab === 'bluesky'
+                      ? 'bg-[#0085ff]/25 text-[#38bdf8] shadow-sm border border-[#0085ff]/50 cursor-pointer'
+                      : 'text-slate-300 hover:text-sky-300 cursor-pointer'
+                  }`}
+                >
+                  <span>🦋 Bluesky</span>
+                  {isBlueskyDisabled ? (
+                    <span className="text-[10px] text-slate-500 font-normal">（無効）</span>
+                  ) : isBlueskyCustomized ? (
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#0085ff]" />
+                  ) : null}
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveEditorTab('threads')}
-                className={`px-2 py-1 rounded-md font-bold flex items-center gap-1 transition cursor-pointer ${
-                  activeEditorTab === 'threads'
-                    ? 'bg-purple-500/20 text-purple-300 shadow-sm border border-purple-500/40'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Threads個別文章の編集"
-              >
-                <span>🌀 Threads</span>
-                {isThreadsCustomized && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-                )}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isThreadsDisabled) {
+                      setActiveEditorTab('threads');
+                    }
+                  }}
+                  disabled={isThreadsDisabled}
+                  title={
+                    hasBlueskyReply
+                      ? 'Blueskyリプライ設定中はThreads個別編集は無効です'
+                      : !postToThreads
+                      ? 'Threadsが投稿先に選択されていません'
+                      : 'Threads個別文章の編集'
+                  }
+                  className={`px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition select-none ${
+                    isThreadsDisabled
+                      ? 'opacity-35 cursor-not-allowed text-slate-500 pointer-events-none grayscale'
+                      : activeEditorTab === 'threads'
+                      ? 'bg-purple-600/25 text-purple-200 shadow-sm border border-purple-500/50 cursor-pointer'
+                      : 'text-slate-300 hover:text-purple-300 cursor-pointer'
+                  }`}
+                >
+                  <span>🌀 Threads</span>
+                  {isThreadsDisabled ? (
+                    <span className="text-[10px] text-slate-500 font-normal">（無効）</span>
+                  ) : isThreadsCustomized ? (
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                  ) : null}
+                </button>
+              </div>
             </div>
 
-            {/* 例文挿入 & 下書きクリアボタン */}
-            <div className="flex items-center gap-1.5">
-              {hasContent && (
+            {/* 下書きクリアボタン */}
+            {hasContent && (
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={onClearDraft}
-                  className="text-slate-400 hover:text-rose-400 hover:bg-slate-800 text-xs px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
+                  disabled={isNeitherSelected}
+                  className={`text-slate-300 hover:text-rose-300 hover:bg-slate-800 text-xs px-2 py-1 rounded-lg transition flex items-center gap-1 border border-transparent hover:border-slate-700 ${
+                    isNeitherSelected ? 'opacity-35 pointer-events-none cursor-not-allowed' : 'cursor-pointer'
+                  }`}
                   title="投稿内容をクリア"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">クリア</span>
                 </button>
-              )}
-
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowSamples(!showSamples)}
-                  className="text-slate-400 hover:text-slate-200 hover:bg-slate-800 text-xs px-2 py-1 rounded-lg border border-slate-800 transition cursor-pointer flex items-center gap-1"
-                >
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  <span>例文</span>
-                </button>
-
-                {showSamples && (
-                  <div className="absolute right-0 mt-1.5 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 z-20 space-y-1">
-                    <div className="text-[11px] font-bold text-slate-400 px-2 py-1 border-b border-slate-800">
-                      サンプル文章を挿入
-                    </div>
-                    {SAMPLE_TEXTS.map((s, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          handleActiveTextChange(s.text);
-                          setShowSamples(false);
-                        }}
-                        className="w-full text-left text-xs text-slate-200 hover:bg-slate-800 p-2 rounded-lg transition truncate cursor-pointer"
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
-            </div>
+            )}
           </div>
 
-          {/* リプライ先投稿設定 / プレビュー表示 */}
-          <ReplyTargetControl
-            replyTarget={replyTarget}
-            onSetReplyTarget={onSetReplyTarget || (() => {})}
-            onRestoreBothPlatforms={() => {
-              onTogglePostToBluesky(true);
-              onTogglePostToThreads(true);
-            }}
-            credentials={credentials}
-            postToBluesky={postToBluesky}
-            postToThreads={postToThreads}
-            onNotify={onNotify}
-          />
+          {/* 投稿先が両方未選択（投稿不可状態）時の案内バナー */}
+          {isNeitherSelected && (
+            <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs flex items-center gap-2 shadow-sm animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="font-bold">
+                投稿先が選択されていません。上部の「投稿先（🦋 Bluesky / 🌀 Threads）」を選択してください。
+              </span>
+            </div>
+          )}
+
+          {/* エディタ本体 & 各種設定（投稿先が両方未選択時は全体を不活性化） */}
+          <div className={`space-y-3 ${isNeitherSelected ? 'opacity-35 pointer-events-none select-none cursor-not-allowed grayscale' : ''}`}>
 
           {/* 個別編集タブ時の分岐ガイド & 操作バナー */}
           {activeEditorTab === 'bluesky' && (
@@ -737,61 +887,63 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
           )}
 
           {activeEditorTab === 'threads' && (
-            <div className={`p-2.5 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-2 ${
-              isThreadsCustomized
-                ? 'bg-purple-950/40 border-purple-800/60 text-purple-200'
-                : 'bg-slate-950/60 border-slate-800 text-slate-400'
-            }`}>
-              <div className="flex items-center gap-2">
-                <span className="text-base">{isThreadsCustomized ? '✨' : '🔗'}</span>
-                <div>
-                  <div className="font-bold text-slate-200 text-xs">
-                    {isThreadsCustomized ? '🌀 Threads専用テキストを編集中' : 'Threadsテキストは現在「共通本文」と同期中'}
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    {isThreadsCustomized
-                      ? 'Threads向け（500文字制限やリンク配置）に調整された専用の本文です。'
-                      : 'Threads専用の文章微調整やリンク変更を行うには個別編集を開始してください。'}
+            <div className="space-y-2">
+              <div className={`p-2.5 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-2 ${
+                isThreadsCustomized
+                  ? 'bg-purple-950/40 border-purple-800/60 text-purple-200'
+                  : 'bg-slate-950/60 border-slate-800 text-slate-400'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{isThreadsCustomized ? '✨' : '🔗'}</span>
+                  <div>
+                    <div className="font-bold text-slate-200 text-xs">
+                      {isThreadsCustomized ? '🌀 Threads専用テキストを編集中' : 'Threadsテキストは現在「共通本文」と同期中'}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      {isThreadsCustomized
+                        ? 'Threads向け（500文字制限やリンク配置）に調整された専用の本文です。'
+                        : 'Threads専用の文章微調整やリンク変更を行うには個別編集を開始してください。'}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-2">
-                {isThreadsCustomized ? (
-                  <>
+                <div className="flex items-center gap-2">
+                  {isThreadsCustomized ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm('共通本文の内容をThreads専用テキストへ上書きコピーしますか？')) {
+                            if (onChangeThreadsText) onChangeThreadsText(text);
+                          }
+                        }}
+                        className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium flex items-center gap-1 cursor-pointer transition"
+                        title="共通本文の内容を再取得"
+                      >
+                        <Copy className="w-3 h-3" />
+                        共通からコピー
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDisableThreadsCustom}
+                        className="px-2 py-1 rounded bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/60 text-rose-300 text-[11px] font-medium flex items-center gap-1 cursor-pointer transition"
+                        title="個別テキストを破棄して共通と再同期"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        同期に戻す
+                      </button>
+                    </>
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => {
-                        if (window.confirm('共通本文の内容をThreads専用テキストへ上書きコピーしますか？')) {
-                          if (onChangeThreadsText) onChangeThreadsText(text);
-                        }
-                      }}
-                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium flex items-center gap-1 cursor-pointer transition"
-                      title="共通本文の内容を再取得"
+                      onClick={handleEnableThreadsCustom}
+                      className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition"
                     >
-                      <Copy className="w-3 h-3" />
-                      共通からコピー
+                      <Split className="w-3.5 h-3.5" />
+                      Threads個別編集を開始
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleDisableThreadsCustom}
-                      className="px-2 py-1 rounded bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/60 text-rose-300 text-[11px] font-medium flex items-center gap-1 cursor-pointer transition"
-                      title="個別テキストを破棄して共通と再同期"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      同期に戻す
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleEnableThreadsCustom}
-                    className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition"
-                  >
-                    <Split className="w-3.5 h-3.5" />
-                    Threads個別編集を開始
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -800,7 +952,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-1.5 px-0.5 text-xs">
             <div className="flex items-center gap-1.5 flex-wrap">
               {/* ✨ AIアシストボタン群 */}
-              <div className="inline-flex items-center bg-slate-950/80 p-0.5 rounded-lg border border-slate-800">
+              <div className="inline-flex items-center bg-[#090D18] p-0.5 rounded-lg border border-slate-700/80 shadow-xs">
                 <button
                   id="open-ai-assist-modal-button"
                   type="button"
@@ -808,10 +960,10 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     setAiModalInitialTab('split');
                     setIsAiModalOpen(true);
                   }}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 hover:text-white transition text-xs font-bold cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-sky-500/25 hover:bg-sky-500/35 text-sky-200 hover:text-white transition text-xs font-bold cursor-pointer"
                   title="AIによる自然なスレッド分割・校正"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                  <Sparkles className="w-3.5 h-3.5 text-sky-300" />
                   <span>AIアシスト</span>
                 </button>
 
@@ -822,10 +974,10 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     setAiModalInitialTab('tone');
                     setIsAiModalOpen(true);
                   }}
-                  className="px-1.5 py-1 rounded-md hover:bg-purple-500/20 text-purple-300 transition text-[11px] font-medium cursor-pointer"
+                  className="px-2 py-1 rounded-md hover:bg-purple-500/25 text-purple-300 hover:text-purple-100 transition text-[11px] font-medium cursor-pointer"
                   title="Bluesky/Threads向けトーン自動調整"
                 >
-                  <Wand2 className="w-3 h-3 text-purple-400" />
+                  <Wand2 className="w-3 h-3 text-purple-300" />
                 </button>
 
                 <button
@@ -835,10 +987,10 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     setAiModalInitialTab('safety');
                     setIsAiModalOpen(true);
                   }}
-                  className="px-1.5 py-1 rounded-md hover:bg-emerald-500/20 text-emerald-300 transition text-[11px] font-medium cursor-pointer"
+                  className="px-2 py-1 rounded-md hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-100 transition text-[11px] font-medium cursor-pointer"
                   title="セーフティ点検・事前校正"
                 >
-                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  <ShieldCheck className="w-3 h-3 text-emerald-300" />
                 </button>
               </div>
 
@@ -847,37 +999,75 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 id="open-snippets-button"
                 type="button"
                 onClick={() => setIsSnippetModalOpen(true)}
-                className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition text-xs font-medium cursor-pointer shadow-xs"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/40 transition text-xs font-medium cursor-pointer shadow-xs"
                 title="定型文・スニペット挿入"
               >
-                <FileText className="w-3 h-3 text-amber-400" />
+                <FileText className="w-3 h-3 text-amber-300" />
                 <span>定型文</span>
               </button>
+
+              {/* 例文挿入 */}
+              <div className="relative">
+                <button
+                  id="open-samples-button"
+                  type="button"
+                  onClick={() => setShowSamples(!showSamples)}
+                  disabled={isNeitherSelected}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#0F1424] hover:bg-slate-800 text-slate-200 border border-slate-700/80 transition text-xs font-medium shadow-xs ${
+                    isNeitherSelected ? 'opacity-35 pointer-events-none cursor-not-allowed' : 'cursor-pointer'
+                  }`}
+                  title="サンプル文章を挿入"
+                >
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  <span>例文</span>
+                </button>
+
+                {showSamples && !isNeitherSelected && (
+                  <div className="absolute left-0 mt-1.5 w-64 bg-[#111726] border border-slate-600 rounded-xl shadow-2xl p-2 z-30 space-y-1">
+                    <div className="text-[11px] font-bold text-slate-300 px-2 py-1 border-b border-slate-700">
+                      サンプル文章を挿入
+                    </div>
+                    {SAMPLE_TEXTS.map((s, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          handleActiveTextChange(s.text);
+                          setShowSamples(false);
+                        }}
+                        className="w-full text-left text-xs text-slate-200 hover:bg-slate-800/80 p-2 rounded-lg transition truncate cursor-pointer"
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* 区切り線挿入 */}
               <button
                 id="insert-manual-separator-button"
                 type="button"
                 onClick={handleInsertSeparator}
-                className="flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800/90 hover:bg-accent-subtle text-accent-light border border-slate-700/80 transition text-xs font-medium cursor-pointer shadow-xs"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#0F1424] hover:bg-slate-800 text-slate-200 border border-slate-700/80 transition text-xs font-medium cursor-pointer shadow-xs"
                 title="カーソル位置に区切り線 (---) を挿入してスレッド分割"
               >
-                <Scissors className="w-3 h-3 text-accent-light" />
+                <Scissors className="w-3 h-3 text-sky-400" />
                 <span>区切る (---)</span>
               </button>
             </div>
 
             {/* 文字サイズ切り替え */}
-            <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold">
+            <div className="flex items-center bg-[#090D18] p-0.5 rounded-lg border border-slate-700/80 text-xs font-semibold shadow-xs">
               {(['sm', 'md', 'lg'] as EditorFontSize[]).map((size) => (
                 <button
                   key={size}
                   id={`editor-font-size-${size}-btn`}
                   type="button"
                   onClick={() => handleEditorFontSizeChange(size)}
-                  className={`px-1.5 py-0.5 rounded text-[11px] transition cursor-pointer ${
+                  className={`px-2 py-0.5 rounded text-[11px] transition cursor-pointer ${
                     editorFontSize === size
-                      ? 'bg-slate-800 text-sky-200 border border-slate-700 shadow-xs font-bold'
+                      ? 'bg-[#1C2438] text-sky-200 border border-slate-600 shadow-xs font-bold'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                   title={`文字サイズ: ${EDITOR_FONT_SIZE_CONFIG[size].label}`}
@@ -1075,17 +1265,17 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                   : 'ここに投稿内容を入力してください...（---でスレッド分割）'
               }
               rows={4}
-              className={`w-full bg-slate-950/80 border ${
+              className={`w-full bg-[#080B13] border ${
                 activeEditorTab === 'bluesky' && isBlueskyCustomized
-                  ? 'border-sky-500/50 focus:border-sky-400'
+                  ? 'border-sky-500/70 focus:border-sky-400'
                   : activeEditorTab === 'threads' && isThreadsCustomized
-                  ? 'border-purple-500/50 focus:border-purple-400'
-                  : 'border-slate-800'
-              } rounded-t-xl rounded-b-none border-b-0 p-3 text-slate-100 placeholder-slate-600 ${EDITOR_FONT_SIZE_CONFIG[editorFontSize].textClass} focus-ring-accent transition resize-y font-sans min-h-[96px]`}
+                  ? 'border-purple-500/70 focus:border-purple-400'
+                  : 'border-slate-700/80 focus:border-sky-400'
+              } rounded-t-xl rounded-b-none border-b-0 p-3 text-slate-100 placeholder-slate-400/80 ${EDITOR_FONT_SIZE_CONFIG[editorFontSize].textClass} focus-ring-accent transition resize-y font-sans min-h-[96px] shadow-inner`}
             />
 
             {/* テキストエリア直下の一体型スマートステータスバー */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-slate-950/90 border border-slate-800 rounded-b-xl -mt-[1px]">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-[#0E1322] border border-slate-700/80 rounded-b-xl -mt-[1px] shadow-xs">
               {/* 左側: コンパクトインライン文字数カウンター */}
               <CharCounter
                 text={currentActiveText}
@@ -1098,15 +1288,15 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               />
 
               {/* 右側: 保存ステータス & 個別編集バッジ */}
-              <div className="flex items-center gap-2 text-[11px] text-slate-400 ml-auto">
+              <div className="flex items-center gap-2 text-[11px] text-slate-300 ml-auto font-medium">
                 {customPlatformText && (isBlueskyCustomized || isThreadsCustomized) && (
-                  <span className="text-[10px] text-sky-400 font-mono bg-sky-950/90 border border-sky-800/60 px-1.5 py-0.2 rounded">
+                  <span className="text-[10px] text-sky-300 font-mono bg-sky-950/90 border border-sky-800/80 px-1.5 py-0.2 rounded font-bold">
                     {activeEditorTab === 'bluesky' ? '🦋 Bluesky個別' : activeEditorTab === 'threads' ? '🌀 Threads個別' : '個別設定あり'}
                   </span>
                 )}
 
                 {draftStatus === 'saving' && (
-                  <span className="flex items-center gap-1 text-sky-400 text-[10px]">
+                  <span className="flex items-center gap-1 text-sky-300 text-[10px]">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     保存中...
                   </span>
@@ -1124,7 +1314,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                   </span>
                 )}
                 {draftStatus === 'idle' && (
-                  <span className="text-[10px] text-slate-500">自動保存ON</span>
+                  <span className="text-[10px] text-slate-400">自動保存ON</span>
                 )}
               </div>
             </div>
@@ -1132,21 +1322,21 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
 
           {/* ドック型サブパネルナビゲーションタブ */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-1">
+            <div className="flex items-center justify-between border-b border-slate-700/80 pb-1.5">
               <div className="flex items-center gap-1 overflow-x-auto text-xs">
                 <button
                   type="button"
                   onClick={() => setBottomDockTab('media')}
-                  className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
+                  className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
                     bottomDockTab === 'media'
-                      ? 'bg-slate-800 text-slate-100 border border-slate-700 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      ? 'bg-[#1A2238] text-white border border-slate-600 shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                   }`}
                 >
                   <ImageIcon className="w-3.5 h-3.5 text-sky-400" />
                   <span>メディア</span>
                   {images.length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-500 text-white font-mono">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-500 text-white font-mono font-bold">
                       {images.length}
                     </span>
                   )}
@@ -1155,10 +1345,10 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 <button
                   type="button"
                   onClick={() => setBottomDockTab('tags')}
-                  className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
+                  className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
                     bottomDockTab === 'tags'
-                      ? 'bg-slate-800 text-slate-100 border border-slate-700 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      ? 'bg-[#1A2238] text-white border border-slate-600 shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                   }`}
                 >
                   <Tag className="w-3.5 h-3.5 text-purple-400" />
@@ -1170,11 +1360,27 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
 
                 <button
                   type="button"
+                  onClick={() => setBottomDockTab('reply')}
+                  className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
+                    bottomDockTab === 'reply'
+                      ? 'bg-[#1A2238] text-white border border-indigo-500/60 shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>リプライ</span>
+                  {isReplyActive && (
+                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setBottomDockTab('ogp')}
-                  className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
+                  className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
                     bottomDockTab === 'ogp'
-                      ? 'bg-slate-800 text-slate-100 border border-slate-700 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      ? 'bg-[#1A2238] text-white border border-slate-600 shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                   }`}
                 >
                   <Link2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -1184,10 +1390,10 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 <button
                   type="button"
                   onClick={() => setBottomDockTab('settings')}
-                  className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
+                  className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
                     bottomDockTab === 'settings'
-                      ? 'bg-slate-800 text-slate-100 border border-slate-700 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      ? 'bg-[#1A2238] text-white border border-slate-600 shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                   }`}
                 >
                   <Sliders className="w-3.5 h-3.5 text-amber-400" />
@@ -1195,7 +1401,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 </button>
               </div>
 
-              <span className="text-[10px] text-slate-500 hidden sm:inline">
+              <span className="text-[10px] text-slate-400 hidden sm:inline font-medium">
                 パネル切替
               </span>
             </div>
@@ -1223,26 +1429,28 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     onUpdateText={handleActiveTextChange}
                   />
 
-                  {/* Threads専用トピック入力エリア */}
-                  {postToThreads && onChangeThreadsTopic && (
-                    <div className="p-3 bg-slate-950/80 rounded-xl border border-purple-900/50 hover:border-purple-800/70 transition-colors space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-purple-300">
-                          <Tag className="w-3.5 h-3.5 text-purple-400" />
-                          <span>🌀 Threads専用トピック (Topic Tag)</span>
-                        </div>
-                        {savedTopics.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={handleResetTopics}
-                            className="text-[10px] text-slate-400 hover:text-purple-300 transition flex items-center gap-0.5 cursor-pointer"
-                            title="候補タグを初期状態にリセット"
-                          >
-                            <RotateCcw className="w-2.5 h-2.5" />
-                            <span>初期化</span>
-                          </button>
-                        )}
-                      </div>
+                  {/* Threads専用設定エリア（トピック） */}
+                  {postToThreads && (
+                    <div className="p-3 bg-slate-950/80 rounded-xl border border-purple-900/50 hover:border-purple-800/70 transition-colors space-y-2.5">
+                      {onChangeThreadsTopic && (
+                        <>
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-purple-300">
+                              <Tag className="w-3.5 h-3.5 text-purple-400" />
+                              <span>🌀 Threads専用トピック (Topic Tag)</span>
+                            </div>
+                            {savedTopics.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={handleResetTopics}
+                                className="text-[10px] text-slate-400 hover:text-purple-300 transition flex items-center gap-0.5 cursor-pointer"
+                                title="候補タグを初期状態にリセット"
+                              >
+                                <RotateCcw className="w-2.5 h-2.5" />
+                                <span>初期化</span>
+                              </button>
+                            )}
+                          </div>
 
                       {/* トピック入力フィールド */}
                       {(() => {
@@ -1382,9 +1590,24 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                           })}
                         </div>
                       )}
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
+              )}
+
+              {bottomDockTab === 'reply' && replySettings && onUpdateReplySettings && onSetResolvedReplyTarget && onClearReplyTarget && (
+                <ReplySettingsSection
+                  replySettings={replySettings}
+                  postToBluesky={postToBluesky}
+                  postToThreads={postToThreads}
+                  credentials={credentials}
+                  isDemoMode={Boolean(isDemo)}
+                  onUpdateSettings={onUpdateReplySettings}
+                  onSetResolvedTarget={onSetResolvedReplyTarget}
+                  onClearTarget={onClearReplyTarget}
+                />
               )}
 
               {bottomDockTab === 'ogp' && (
@@ -1541,6 +1764,86 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               </div>
             )}
 
+            {/* リプライ投稿ステータス表示 & バリデーション警告 */}
+            {isReplyActive && (
+              <div className="space-y-1.5 animate-in fade-in duration-150">
+                {isThreadsReplyInvalid ? (
+                  <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-200 text-xs flex items-start justify-between gap-2 shadow-sm">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5 min-w-0">
+                        <span className="font-bold text-rose-300">Threadsのリプライ先要確認:</span>
+                        <p className="text-[11px] text-rose-300/90 leading-tight">
+                          {!replySettings?.threadsResolved
+                            ? 'Threads返信先の照合が完了していません。'
+                            : '他者の投稿には返信できません（本人投稿のみ許可）。'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setBottomDockTab('reply')}
+                      className="px-2 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-100 rounded text-[11px] font-medium shrink-0 transition cursor-pointer"
+                    >
+                      設定を開く
+                    </button>
+                  </div>
+                ) : isBlueskyReplyInvalid ? (
+                  <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-200 text-xs flex items-start justify-between gap-2 shadow-sm">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5 min-w-0">
+                        <span className="font-bold text-rose-300">Blueskyのリプライ先要確認:</span>
+                        <p className="text-[11px] text-rose-300/90 leading-tight">
+                          Bluesky返信先の照合が完了していません。
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setBottomDockTab('reply')}
+                      className="px-2 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-100 rounded text-[11px] font-medium shrink-0 transition cursor-pointer"
+                    >
+                      設定を開く
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-2 rounded-xl bg-indigo-950/30 border border-indigo-800/50 text-indigo-200 text-xs flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <MessageSquare className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                      <span className="text-[11px] font-medium truncate">
+                        リプライ（返信）モードが有効です
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {replySettings?.blueskyResolved && (
+                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-sky-950 border border-sky-800 text-sky-300">
+                          {isDemoMode ? 'BskyデモシミュレートOK' : 'Bsky返信先設定済'}
+                        </span>
+                      )}
+                      {replySettings?.threadsResolved && (
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[10px] border ${
+                            replySettings.threadsResolved.isDemoSkipped || isDemoMode
+                              ? 'bg-amber-950/60 border-amber-800 text-amber-300'
+                              : replySettings.threadsResolved.verifiedCanReply
+                              ? 'bg-emerald-950 border-emerald-800 text-emerald-300'
+                              : 'bg-violet-950 border-violet-800 text-violet-300'
+                          }`}
+                        >
+                          {replySettings.threadsResolved.isDemoSkipped || isDemoMode
+                            ? 'ThreadsデモシミュレートOK'
+                            : replySettings.threadsResolved.verifiedCanReply
+                            ? 'Threads事前検証済'
+                            : 'Threads本人照合済'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* モード1: 同時投稿 (即時実行) */}
             {postMode === 'instant' && (
               <div className="space-y-1.5 animate-in fade-in duration-150">
@@ -1549,8 +1852,8 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     <button
                       id="submit-crosspost-button"
                       type="button"
-                      onClick={onSubmitPost}
-                      disabled={!hasContent || (!postToBluesky && !postToThreads)}
+                      onClick={handleSafeSubmitPost}
+                      disabled={!hasContent || (!postToBluesky && !postToThreads) || isReplyBlocked}
                       className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 active:bg-sky-500/35 border border-sky-400/40 hover:border-sky-400/60 disabled:opacity-40 disabled:cursor-not-allowed text-sky-100 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer shadow-sm"
                     >
                       <Sparkles className="w-4 h-4 text-sky-300/80" />
@@ -1564,8 +1867,8 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                   <button
                     id="submit-crosspost-button"
                     type="button"
-                    onClick={onSubmitPost}
-                    disabled={!hasContent || (!postToBluesky && !postToThreads)}
+                    onClick={handleSafeSubmitPost}
+                    disabled={!hasContent || (!postToBluesky && !postToThreads) || isReplyBlocked}
                     className="w-full py-2.5 sm:py-3 px-4 rounded-xl btn-accent disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer animate-in fade-in duration-150"
                   >
                     <Send className="w-3.5 h-3.5" />
@@ -1745,7 +2048,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                   id="submit-schedule-button"
                   type="button"
                   onClick={handleScheduleSubmit}
-                  disabled={!hasContent || (!postToBluesky && !postToThreads) || relativeJst.isPast}
+                  disabled={!hasContent || (!postToBluesky && !postToThreads) || relativeJst.isPast || isReplyBlocked}
                   className="w-full py-2.5 px-3 rounded-lg btn-accent disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg"
                 >
                   <Clock className="w-3.5 h-3.5" />
@@ -1759,6 +2062,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 </button>
               </div>
             )}
+          </div>
           </div>
         </div>
       </div>
@@ -1776,7 +2080,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               postToBluesky={postToBluesky}
               postToThreads={postToThreads}
               credentials={credentials}
-              replyTarget={replyTarget}
+              replySettings={replySettings}
             />
           </div>
 

@@ -66,7 +66,7 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
   return (
     <div
       id="app-root"
-      className="min-h-screen bg-[#0A0A0B] text-slate-200 flex flex-col font-sans selection:bg-sky-500 selection:text-white"
+      className="min-h-screen bg-[#0B0D13] text-slate-100 flex flex-col font-sans selection:bg-sky-500 selection:text-white"
     >
       {/* 1. ヘッダー (Passive View: 描画パラメータを注入しイベントをバブリング) */}
       <Header
@@ -114,8 +114,6 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
           onTogglePostToBluesky={(val) => dispatch({ type: 'TOGGLE_POST_TO_BLUESKY', payload: val })}
           postToThreads={viewModel.postToThreads}
           onTogglePostToThreads={(val) => dispatch({ type: 'TOGGLE_POST_TO_THREADS', payload: val })}
-          replyTarget={viewModel.replyTarget}
-          onSetReplyTarget={(target) => dispatch({ type: 'SET_REPLY_TARGET', payload: target })}
           threadsTopic={viewModel.threadsTopic}
           onChangeThreadsTopic={(val) => dispatch({ type: 'UPDATE_THREADS_TOPIC', payload: val })}
           autoSplit={viewModel.autoSplit}
@@ -151,6 +149,16 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
           draftStatus={viewModel.draftStatus}
           draftError={viewModel.draftError}
           onClearDraft={() => dispatch({ type: 'CLEAR_DRAFT' })}
+          replySettings={viewModel.replySettings}
+          onUpdateReplySettings={(settings) =>
+            dispatch({ type: 'UPDATE_REPLY_SETTINGS', payload: settings })
+          }
+          onSetResolvedReplyTarget={(platform, target) =>
+            dispatch({ type: 'SET_RESOLVED_REPLY_TARGET', payload: { platform, target } })
+          }
+          onClearReplyTarget={(platform) =>
+            dispatch({ type: 'CLEAR_REPLY_TARGET', payload: platform || 'all' })
+          }
         />
       </main>
 
@@ -228,11 +236,11 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         credentials={viewModel.credentials}
         postToBluesky={viewModel.postToBluesky}
         postToThreads={viewModel.postToThreads}
-        replyTarget={viewModel.replyTarget}
         blueskyPosts={viewModel.blueskySplits.map((s) => s.text)}
         threadsPosts={viewModel.threadsSplits.map((s) => s.text)}
         threadsTopic={viewModel.threadsTopic}
         images={viewModel.images}
+        replySettings={viewModel.replySettings}
         onComplete={(item) => dispatch({ type: 'POSTING_COMPLETE', payload: item })}
         onApiError={(err) => dispatch({ type: 'API_ERROR', payload: err })}
         onOpenSettings={() => {

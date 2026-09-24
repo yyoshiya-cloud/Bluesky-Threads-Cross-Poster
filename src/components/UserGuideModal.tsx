@@ -23,7 +23,6 @@ import {
   Layers,
   MousePointerClick,
   BarChart3,
-  MessageSquare,
 } from 'lucide-react';
 
 interface UserGuideModalProps {
@@ -92,20 +91,6 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
         '投稿完了時には各SNSの実際の投稿URLを直接開けるリンクを表示。',
       ],
       tips: 'アカウント設定前の場合は「DEMOモード」で投稿フローとプレビューを安全にお試しいただけます。',
-    },
-    {
-      id: 'feature-reply',
-      title: '💬 特定の投稿へのリプライ（返信）投稿機能',
-      category: 'core',
-      icon: MessageSquare,
-      summary: '既存のBlueskyまたはThreadsの投稿URL・IDを指定して、直接リプライ（返信）を投稿できます。',
-      details: [
-        '【URLからSNSを自動判断】「💬 特定の投稿にリプライする」を開き、投稿URL（bsky.app または threads.net / threads.com / shareリンク等）を貼り付けると、対象プラットフォーム（Bluesky / Threads）が自動判別されます。',
-        '【ワンクリック入力クリア】URL入力欄右端の「✕（クリア）」ボタンを押すことで、貼り付けたURL・エラー・自動判定を一括で素早く消去して再入力できます。',
-        '【キャンセル・解除で両方表示に復帰】フォーム右上のキャンセルボタン（✕マーク）または設定カードの「解除」ボタンを押すと、リプライ設定が安全に解除され、プレビュー画面も即座に通常の「BlueskyとThreadsの両方表示」に戻ります。',
-        '【返信先プレビュー & 誤投稿ガード】リプライ対象の投稿者アイコン・表示名・本文抜粋がエディタおよびプレビュー画面にリアルタイム表示されます。また、Blueskyへのリプライ時はBlueskyのみ、Threadsへのリプライ時はThreadsのみに自動制限され、異なるSNSへ返信文面が同時投稿される事故を確実に防止します。',
-      ],
-      tips: 'リプライ時も長文の自動スレッド分割や画像・動画（最大20件）の添付がそのまま利用可能です。',
     },
     {
       id: 'feature-preview',
@@ -378,12 +363,6 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
       description: 'Threadsの全分割投稿に公式トピックタグを一括適用。AI・キーワード解析によるタグ提案やオリジナルタグの保存も可能。',
     },
     {
-      id: 'ov-reply',
-      icon: MessageSquare,
-      title: '💬 特定投稿へのリプライ（返信）',
-      description: 'URLを入力するだけでBlueskyまたはThreadsを自動判定。誤投稿ガード機能や、キャンセル（✕）でプレビューを両方表示に戻す安心設計を備えています。',
-    },
-    {
       id: 'ov-preview',
       icon: Eye,
       title: '📱 公式UIスキン＆リアルタイム比較',
@@ -399,8 +378,8 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
     },
     {
       step: 2,
-      title: '本文を入力 & リプライ指定・個別書き分け・メディア添付',
-      description: 'エディタに投稿文を入力します。特定の投稿に返信したい場合は「💬 特定の投稿にリプライする」からURLを入力（自動判別対応、✕でクリアや両方表示に戻すことも可能）。「共通テキスト」のほか、「Bluesky専用」「Threads専用」タブで文面を個別に書き分けることも可能です。「ハッシュタグ候補」や「定型文（スニペット）」から素早く挿入したり、Threads専用トピックタグを設定。画像や動画（最大20件）はドラッグ＆ドロップで添付でき、直感的なドラッグ操作で順序を並び替えられます。',
+      title: '本文を入力 & 個別書き分け・メディア添付',
+      description: 'エディタに投稿文を入力します。「共通テキスト」のほか、「Bluesky専用」「Threads専用」タブで文面を個別に書き分けることも可能です。「ハッシュタグ候補」や「定型文（スニペット）」から素早く挿入したり、Threads専用トピックタグを設定。画像や動画（最大20件）はドラッグ＆ドロップで添付でき、直感的なドラッグ操作で順序を並び替えられます。',
     },
     {
       step: 3,
@@ -415,11 +394,6 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   ];
 
   const faqItems: FaqItem[] = [
-    {
-      id: 'faq-reply',
-      question: '既存の投稿にリプライ（返信）投稿するにはどうすればよいですか？',
-      answer: 'エディタ上部の「💬 特定の投稿にリプライする」をクリックし、BlueskyまたはThreadsの投稿URLを入力してください。WebブラウザのURL（threads.net / threads.com / bsky.app）や、Threads公式アプリの共有ボタンでコピーしたシェアリンク（threads.com/share/...）にも完全対応しており、対象SNSを自動判別して投稿情報を取得・設定します。入力欄右端の「✕」ボタンで入力を素早くクリアでき、右上キャンセル（✕）または設定カードの「解除」を押すことで、いつでもプレビュー画面を通常の「Bluesky・Threads両方表示」に戻せます。',
-    },
     {
       id: 'faq-ai',
       question: 'AIアシスト機能でエラーが出たり動作が遅いときはどうすればよいですか？',
@@ -488,12 +462,6 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   ];
 
   const tipsItems: TipItem[] = [
-    {
-      id: 'tip-reply',
-      icon: '💬',
-      title: 'リプライURLの自動判別とプレビュー両方表示復帰',
-      description: '返信先URLを貼り付けるだけでBlueskyかThreadsかを自動判別。入力欄の「✕」でクリアでき、設定をキャンセルまたは解除すればプレビュー画面も即座に通常の「両方表示」に戻せます。',
-    },
     {
       id: 'tip-context-menu',
       icon: '🖱️',

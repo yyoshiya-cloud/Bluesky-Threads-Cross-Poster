@@ -32,6 +32,7 @@ export const loadDraftFromStorage = (): DraftData | null => {
         autoSplit: typeof parsed.autoSplit === 'boolean' ? parsed.autoSplit : true,
         includeNumbering: typeof parsed.includeNumbering === 'boolean' ? parsed.includeNumbering : true,
         lastSavedAt: parsed.lastSavedAt || Date.now(),
+        replySettings: parsed.replySettings && typeof parsed.replySettings === 'object' ? parsed.replySettings : undefined,
       };
     }
   } catch (err) {

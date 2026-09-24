@@ -14,7 +14,8 @@ import {
   ThemeAccentId,
   ScheduledPostItem,
   SnippetItem,
-  ReplyTarget,
+  ReplySettings,
+  ReplyTargetInfo,
 } from '../../types';
 import { splitForBluesky, splitForThreads } from '../../utils/textSplitter';
 import {
@@ -82,7 +83,13 @@ export class AppMediator implements IMediatorArbitrator {
   private threadsTopic: string = '';
   private autoSplit: boolean = true;
   private includeNumbering: boolean = true;
-  private replyTarget: ReplyTarget | undefined = undefined;
+  private replySettings: ReplySettings = {
+    enabled: false,
+    blueskyTargetUrl: '',
+    threadsTargetUrl: '',
+    blueskyResolved: null,
+    threadsResolved: null,
+  };
 
   // 下書き状態
   private lastSavedAt: number | null = null;
@@ -212,10 +219,10 @@ export class AppMediator implements IMediatorArbitrator {
       images: [...this.images],
       postToBluesky: this.postToBluesky,
       postToThreads: this.postToThreads,
-      replyTarget: this.replyTarget,
       threadsTopic: this.threadsTopic,
       autoSplit: this.autoSplit,
       includeNumbering: this.includeNumbering,
+      replySettings: { ...this.replySettings },
       blueskySplits,
       threadsSplits,
       credentials: { ...this.credentials },
@@ -304,22 +311,6 @@ export class AppMediator implements IMediatorArbitrator {
         break;
 
       case 'TOGGLE_POST_TO_BLUESKY': {
-        if (this.replyTarget?.platform?.toLowerCase() === 'threads' && event.payload) {
-          this.addToast({
-            type: 'warning',
-            title: 'リプライ設定中は同時選択できません',
-            message: 'Threadsへのリプライ設定中のため、Blueskyを同時に選択することはできません。同時投稿するにはリプライ先を解除してください。',
-          });
-          return;
-        }
-        if (this.replyTarget?.platform?.toLowerCase() === 'bluesky' && !event.payload) {
-          this.replyTarget = undefined;
-          this.addToast({
-            type: 'info',
-            title: 'リプライ先を解除しました',
-            message: 'Blueskyの選択を解除したため、リプライ設定も解除されました。',
-          });
-        }
         this.postToBluesky = event.payload;
         this.scheduleDraftSave();
         this.notifyListeners();
@@ -327,60 +318,7 @@ export class AppMediator implements IMediatorArbitrator {
       }
 
       case 'TOGGLE_POST_TO_THREADS': {
-        if (this.replyTarget?.platform?.toLowerCase() === 'bluesky' && event.payload) {
-          this.addToast({
-            type: 'warning',
-            title: 'リプライ設定中は同時選択できません',
-            message: 'Blueskyへのリプライ設定中のため、Threadsを同時に選択することはできません。同時投稿するにはリプライ先を解除してください。',
-          });
-          return;
-        }
-        if (this.replyTarget?.platform?.toLowerCase() === 'threads' && !event.payload) {
-          this.replyTarget = undefined;
-          this.addToast({
-            type: 'info',
-            title: 'リプライ先を解除しました',
-            message: 'Threadsの選択を解除したため、リプライ設定も解除されました。',
-          });
-        }
         this.postToThreads = event.payload;
-        this.scheduleDraftSave();
-        this.notifyListeners();
-        break;
-      }
-
-      case 'SET_REPLY_TARGET': {
-        const target = event.payload;
-        if (target) {
-          this.replyTarget = target;
-          const isBluesky = target.platform?.toLowerCase() === 'bluesky';
-          if (isBluesky) {
-            this.postToBluesky = true;
-            this.postToThreads = false;
-            this.addToast({
-              type: 'info',
-              title: '💬 Blueskyリプライモード',
-              message: `Blueskyの投稿（${target.authorHandle || target.postId}）へのリプライを設定しました。Threadsへの投稿はオフになりました。`,
-            });
-          } else {
-            this.postToBluesky = false;
-            this.postToThreads = true;
-            this.addToast({
-              type: 'info',
-              title: '💬 Threadsリプライモード',
-              message: `Threadsの投稿（${target.authorHandle || target.postId}）へのリプライを設定しました。Blueskyへの投稿はオフになりました。`,
-            });
-          }
-        } else {
-          this.replyTarget = undefined;
-          this.postToBluesky = true;
-          this.postToThreads = true;
-          this.addToast({
-            type: 'info',
-            title: 'リプライ設定を解除しました',
-            message: '通常の同時投稿モードに戻りました（Bluesky・Threads両方を表示）。',
-          });
-        }
         this.scheduleDraftSave();
         this.notifyListeners();
         break;
@@ -535,6 +473,7 @@ export class AppMediator implements IMediatorArbitrator {
           });
           return;
         }
+
         // ステートを POSTING に遷移させ、モーダルを開く
         this.machineState = 'POSTING';
         this.modals.posting = true;
@@ -568,7 +507,7 @@ export class AppMediator implements IMediatorArbitrator {
           threadsTopic: this.threadsTopic || undefined,
           autoSplit: this.autoSplit,
           includeNumbering: this.includeNumbering,
-          replyTarget: this.replyTarget,
+          replySettings: this.replySettings.enabled ? { ...this.replySettings } : undefined,
         });
 
         this.scheduledPosts = loadScheduledPostsFromStorage();
@@ -613,7 +552,6 @@ export class AppMediator implements IMediatorArbitrator {
           threadsTopic: this.threadsTopic ? this.threadsTopic : undefined,
           images: this.images.map((i) => i.dataUrl),
           attachedImages: this.images,
-          replyTarget: this.replyTarget,
           status,
           blueskySuccess: res.blueskySuccess,
           threadsSuccess: res.threadsSuccess,
@@ -621,6 +559,7 @@ export class AppMediator implements IMediatorArbitrator {
           threadsUrls: res.threadsUrls,
           isDemo: res.isDemo,
           errorMessage: res.errorMessage,
+          replySettings: this.replySettings.enabled ? { ...this.replySettings } : undefined,
         };
 
         this.history = [historyItem, ...this.history];
@@ -628,9 +567,6 @@ export class AppMediator implements IMediatorArbitrator {
 
         if (this.threadsTopic && this.threadsTopic.trim()) {
           addSavedThreadsTopic(this.threadsTopic.trim());
-        }
-        if (isFullSuccess) {
-          this.replyTarget = undefined;
         }
         this.machineState = 'READY';
         this.modals.posting = false;
@@ -702,14 +638,6 @@ export class AppMediator implements IMediatorArbitrator {
         this.postToThreads = p.postToThreads;
         this.autoSplit = p.autoSplit;
         this.includeNumbering = p.includeNumbering;
-        this.replyTarget = p.replyTarget;
-        if (p.replyTarget?.platform?.toLowerCase() === 'bluesky') {
-          this.postToBluesky = true;
-          this.postToThreads = false;
-        } else if (p.replyTarget?.platform?.toLowerCase() === 'threads') {
-          this.postToBluesky = false;
-          this.postToThreads = true;
-        }
 
         this.modals.scheduled = false;
         this.addToast({
@@ -729,7 +657,13 @@ export class AppMediator implements IMediatorArbitrator {
         this.customPlatformText = false;
         this.images = [];
         this.threadsTopic = '';
-        this.replyTarget = undefined;
+        this.replySettings = {
+          enabled: false,
+          blueskyTargetUrl: '',
+          threadsTargetUrl: '',
+          blueskyResolved: null,
+          threadsResolved: null,
+        };
         this.lastSavedAt = null;
         this.draftStatus = 'saved';
         this.addToast({
@@ -896,6 +830,78 @@ export class AppMediator implements IMediatorArbitrator {
         break;
       }
 
+      case 'UPDATE_REPLY_SETTINGS': {
+        const next = {
+          ...this.replySettings,
+          ...event.payload,
+        };
+        const hasTarget = Boolean(
+          next.blueskyTargetUrl ||
+          next.threadsTargetUrl ||
+          next.blueskyResolved ||
+          next.threadsResolved
+        );
+        next.enabled = hasTarget;
+        this.replySettings = next;
+        this.scheduleDraftSave();
+        this.notifyListeners();
+        break;
+      }
+
+      case 'SET_RESOLVED_REPLY_TARGET':
+        if (event.payload.platform === 'Bluesky') {
+          this.replySettings = {
+            ...this.replySettings,
+            enabled: true,
+            blueskyResolved: event.payload.target,
+            blueskyTargetUrl: this.replySettings.blueskyTargetUrl || event.payload.target.urlOrId || '',
+            threadsResolved: null,
+            threadsTargetUrl: '',
+          };
+        } else if (event.payload.platform === 'Threads') {
+          this.replySettings = {
+            ...this.replySettings,
+            enabled: true,
+            threadsResolved: event.payload.target,
+            threadsTargetUrl: this.replySettings.threadsTargetUrl || event.payload.target.urlOrId || '',
+            blueskyResolved: null,
+            blueskyTargetUrl: '',
+          };
+        }
+        this.scheduleDraftSave();
+        this.notifyListeners();
+        break;
+
+      case 'CLEAR_REPLY_TARGET':
+        if (event.payload === 'Bluesky') {
+          const nextTh = this.replySettings.threadsResolved;
+          this.replySettings = {
+            ...this.replySettings,
+            blueskyTargetUrl: '',
+            blueskyResolved: null,
+            enabled: Boolean(nextTh),
+          };
+        } else if (event.payload === 'Threads') {
+          const nextBk = this.replySettings.blueskyResolved;
+          this.replySettings = {
+            ...this.replySettings,
+            threadsTargetUrl: '',
+            threadsResolved: null,
+            enabled: Boolean(nextBk),
+          };
+        } else {
+          this.replySettings = {
+            enabled: false,
+            blueskyTargetUrl: '',
+            threadsTargetUrl: '',
+            blueskyResolved: null,
+            threadsResolved: null,
+          };
+        }
+        this.scheduleDraftSave();
+        this.notifyListeners();
+        break;
+
       case 'REFRESH_SCHEDULED_POSTS':
         this.scheduledPosts = loadScheduledPostsFromStorage();
         this.notifyListeners();
@@ -1036,8 +1042,8 @@ export class AppMediator implements IMediatorArbitrator {
       threadsTopic: this.threadsTopic,
       autoSplit: this.autoSplit,
       includeNumbering: this.includeNumbering,
-      replyTarget: this.replyTarget,
       lastSavedAt: now,
+      replySettings: this.replySettings,
     };
     const result = saveDraftToStorage(draft);
     if (result.success) {
@@ -1051,6 +1057,14 @@ export class AppMediator implements IMediatorArbitrator {
   }
 
   private addToast(toast: Omit<ToastMessage, 'id'>): void {
+    // 同一のタイトルおよびメッセージを持つトーストが現在既に表示されている場合は多重追加を防ぐ
+    const isDuplicate = this.toasts.some(
+      (existing) => existing.title === toast.title && existing.message === toast.message
+    );
+    if (isDuplicate) {
+      return;
+    }
+
     const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const newToast: ToastMessage = { ...toast, id };
     this.toasts = [...this.toasts.slice(-4), newToast];
