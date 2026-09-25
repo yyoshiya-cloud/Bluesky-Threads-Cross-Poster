@@ -65,121 +65,6 @@ def _safe_print(*args, **kwargs):
 print = _safe_print
 
 # -------------------------------------------------------------
-# OSクリップボード連携 (デスクトップアプリ内テキスト操作の確実化)
-# -------------------------------------------------------------
-def get_system_clipboard() -> str:
-    """OSシステムクリップボードからテキストを取得"""
-    # 1. Windows ctypes (外部依存なし・高速)
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            CF_UNICODETEXT = 13
-            user32 = ctypes.windll.user32
-            kernel32 = ctypes.windll.kernel32
-            if user32.OpenClipboard(None):
-                try:
-                    handle = user32.GetClipboardData(CF_UNICODETEXT)
-                    if handle:
-                        ptr = kernel32.GlobalLock(handle)
-                        if ptr:
-                            try:
-                                return ctypes.c_wchar_p(ptr).value or ""
-                            finally:
-                                kernel32.GlobalUnlock(handle)
-                finally:
-                    user32.CloseClipboard()
-        except Exception:
-            pass
-
-    # 2. Tkinter フォールバック
-    try:
-        import tkinter as tk
-        r = tk.Tk()
-        r.withdraw()
-        text = r.clipboard_get()
-        r.destroy()
-        return text or ""
-    except Exception:
-        pass
-
-    # 3. macOS pbpaste
-    if sys.platform == "darwin":
-        try:
-            out = subprocess.check_output(["pbpaste"], timeout=1)
-            return out.decode("utf-8", errors="replace")
-        except Exception:
-            pass
-
-    # 4. Windows PowerShell フォールバック
-    if sys.platform == "win32":
-        try:
-            out = subprocess.check_output(
-                ["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
-                timeout=1.5,
-                creationflags=0x08000000 if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
-            )
-            return out.decode("utf-8", errors="replace").rstrip("\r\n")
-        except Exception:
-            pass
-
-    return ""
-
-
-def set_system_clipboard(text: str) -> bool:
-    """OSシステムクリップボードにテキストを書き込み"""
-    if not isinstance(text, str):
-        text = str(text)
-
-    # 1. Windows ctypes
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            CF_UNICODETEXT = 13
-            user32 = ctypes.windll.user32
-            kernel32 = ctypes.windll.kernel32
-            if user32.OpenClipboard(None):
-                try:
-                    user32.EmptyClipboard()
-                    encoded = text.encode("utf-16le") + b"\x00\x00"
-                    h_mem = kernel32.GlobalAlloc(0x0042, len(encoded))  # GMEM_MOVEABLE | GMEM_ZEROINIT
-                    if h_mem:
-                        ptr = kernel32.GlobalLock(h_mem)
-                        if ptr:
-                            ctypes.memmove(ptr, encoded, len(encoded))
-                            kernel32.GlobalUnlock(h_mem)
-                            user32.SetClipboardData(CF_UNICODETEXT, h_mem)
-                            return True
-                finally:
-                    user32.CloseClipboard()
-        except Exception:
-            pass
-
-    # 2. macOS pbcopy
-    if sys.platform == "darwin":
-        try:
-            p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
-            p.communicate(text.encode("utf-8"), timeout=1)
-            return True
-        except Exception:
-            pass
-
-    # 3. Windows PowerShell フォールバック
-    if sys.platform == "win32":
-        try:
-            p = subprocess.Popen(
-                ["powershell", "-NoProfile", "-Command", "$input | Set-Clipboard"],
-                stdin=subprocess.PIPE,
-                creationflags=0x08000000 if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
-            )
-            p.communicate(text.encode("utf-8"), timeout=1.5)
-            return True
-        except Exception:
-            pass
-
-    return False
-
-
-# -------------------------------------------------------------
 # 定数 & メディアキャッシュ設定
 # -------------------------------------------------------------
 APP_NAME = "CrossPost Desktop Studio"
@@ -209,12 +94,6 @@ def sanitize_input(val):
 
 
 def get_extension_from_mime(mime_type: str) -> str:
-    if "mp4" in mime_type:
-        return "mp4"
-    if "quicktime" in mime_type or "mov" in mime_type:
-        return "mov"
-    if "webm" in mime_type:
-        return "webm"
     if "png" in mime_type:
         return "png"
     if "webp" in mime_type:
@@ -229,151 +108,17 @@ def get_extension_from_mime(mime_type: str) -> str:
 
 
 # -------------------------------------------------------------
-# メディアバッファ解決ヘルパー (mediaId または Base64)
-# -------------------------------------------------------------
-def resolve_media_buffer(item: dict):
-    """
-    item から (buffer: bytes, mime_type: str, filename: str, is_video: bool) を解決
-    """
-    if not isinstance(item, dict):
-        return None
-    media_id = item.get("mediaId")
-    name = item.get("name") or "media"
-    ext = name.split(".")[-1].lower() if "." in name else ""
-    is_explicit_video = item.get("mediaType") == "video" or ext in ("mp4", "mov", "webm", "m4v")
-
-    if media_id and media_id in MEDIA_STORAGE:
-        stored = MEDIA_STORAGE[media_id]
-        buf = stored["data"]
-        mime = stored.get("mime", "application/octet-stream")
-        stored_name = stored.get("name") or name
-        if is_explicit_video and (not mime.startswith("video/") or mime == "application/octet-stream"):
-            mime = "video/quicktime" if ext == "mov" else "video/mp4"
-        return buf, mime, stored_name, True if is_explicit_video else mime.startswith("video/")
-
-    data_url = item.get("dataUrl", "")
-    if data_url and isinstance(data_url, str):
-        match = re.match(r"^data:([^;]+);base64,(.+)$", data_url)
-        if match:
-            mime = match.group(1)
-            # サムネイル画像Base64が動画実体として誤認されるのを防ぐガード
-            if is_explicit_video and mime.startswith("image/"):
-                print(f"[Desktop/Media] Warning: dataUrl is thumbnail image for video {name}, skipping as video payload")
-                return None
-
-            import base64
-            buf = base64.b64decode(match.group(2))
-            is_video = is_explicit_video or mime.startswith("video/")
-            if is_video and not mime.startswith("video/"):
-                mime = "video/quicktime" if ext == "mov" else "video/mp4"
-            return buf, mime, name, is_video
-
-    return None
-
-
-# -------------------------------------------------------------
-# Bluesky 公式動画アップロードAPI
-# -------------------------------------------------------------
-def upload_bluesky_video(
-    buffer: bytes, mime_type: str, file_name: str, did: str, access_jwt: str, pds_endpoint: str
-):
-    """
-    Bluesky 公式動画アップロードAPI (video.bsky.app) または PDSフォールバック
-    """
-    clean_name = file_name or "video.mp4"
-    if not clean_name.lower().endswith((".mp4", ".mov", ".webm")):
-        clean_name = f"{clean_name}.mp4"
-
-    clean_mime = mime_type if (mime_type.startswith("video/") and "quicktime" not in mime_type and "webm" not in mime_type) else "video/mp4"
-
-    # Service Auth Token (com.atproto.server.getServiceAuth) の取得試行 (video.bsky.app 必須要件)
-    service_auth_token = access_jwt
-    try:
-        auth_url = f"{pds_endpoint.rstrip('/')}/xrpc/com.atproto.server.getServiceAuth?aud=did:web:video.bsky.app&lxm=app.bsky.video.uploadVideo"
-        auth_req = urllib.request.Request(
-            auth_url,
-            headers={"Authorization": f"Bearer {access_jwt}"},
-            method="GET",
-        )
-        with urllib.request.urlopen(auth_req, timeout=10) as s_res:
-            s_data = json.loads(s_res.read().decode("utf-8"))
-            if s_data.get("token"):
-                service_auth_token = s_data["token"]
-                print("[Desktop/Bluesky] Successfully obtained Service Auth Token for video.bsky.app")
-    except Exception as sae:
-        print(f"[Desktop/Bluesky] Note on getServiceAuth ({sae}), using accessJwt...")
-
-    # 1. 公式動画エンドポイント video.bsky.app
-    try:
-        query = urllib.parse.urlencode({"did": did, "name": clean_name})
-        url = f"https://video.bsky.app/xrpc/app.bsky.video.uploadVideo?{query}"
-        req = urllib.request.Request(
-            url,
-            data=buffer,
-            headers={
-                "Authorization": f"Bearer {service_auth_token}",
-                "Content-Type": clean_mime,
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=45) as res:
-            res_data = json.loads(res.read().decode("utf-8"))
-            if res_data.get("jobStatus"):
-                job_id = res_data["jobStatus"].get("jobId")
-                if job_id:
-                    for _ in range(30):
-                        time.sleep(1.5)
-                        st_url = f"https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId={urllib.parse.quote(job_id)}"
-                        st_req = urllib.request.Request(
-                            st_url,
-                            headers={"Authorization": f"Bearer {service_auth_token}"},
-                            method="GET",
-                        )
-                        with urllib.request.urlopen(st_req, timeout=10) as st_res:
-                            st_data = json.loads(st_res.read().decode("utf-8"))
-                            job = st_data.get("jobStatus", {})
-                            if job.get("state") == "JOB_STATE_COMPLETED" and job.get("blob"):
-                                print("[Desktop/Bluesky] Video processed successfully via video.bsky.app")
-                                return job["blob"]
-                            if job.get("state") == "JOB_STATE_FAILED":
-                                raise RuntimeError(f"Bluesky動画変換失敗: {job.get('error')}")
-            if res_data.get("blob"):
-                return res_data["blob"]
-    except Exception as e:
-        print(f"[Bluesky Video] Official endpoint note ({e}), trying PDS uploadBlob...")
-
-    # 2. PDS uploadBlob フォールバック
-    blob_req = urllib.request.Request(
-        f"{pds_endpoint.rstrip('/')}/xrpc/com.atproto.repo.uploadBlob",
-        data=buffer,
-        headers={
-            "Authorization": f"Bearer {access_jwt}",
-            "Content-Type": "video/mp4",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(blob_req, timeout=35) as b_res:
-        b_data = json.loads(b_res.read().decode("utf-8"))
-        if b_data.get("blob"):
-            print("[Desktop/Bluesky] Video uploaded successfully via PDS uploadBlob fallback")
-            return b_data["blob"]
-    raise RuntimeError("Blueskyへの動画アップロードに失敗しました。ファイル形式(MP4/MOV)および容量(最大50MB)をご確認ください。")
-
-
-# -------------------------------------------------------------
-# 画像/動画アップロード（Threads API用 公開静的ホスト）
+# 画像アップロード（Threads API用 公開静的ホスト）
 # -------------------------------------------------------------
 def upload_image_to_public_host(buffer: bytes, mime_type: str, file_name: str) -> str:
     """
-    Threads APIがダウンロード可能な公開CDN（Catbox/Litterbox, tmpfiles.org, Uguu）へ一時アップロード
+    Threads APIがダウンロード可能な公開CDN（Litterbox / Uguu）へ一時アップロード
     """
     ext = get_extension_from_mime(mime_type)
-    safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", file_name or "media")
+    safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", file_name or "image")
     upload_name = f"{safe_name}.{ext}"
-    is_vid = mime_type.startswith("video/") or ext in ("mp4", "mov", "webm", "m4v")
-    timeout_sec = 45 if is_vid else 15
 
-    # 1. Litterbox (Catbox 24h一時保持: 無料・画像/動画対応)
+    # 1. Litterbox (24h保持)
     try:
         boundary = f"----WebKitFormBoundary{secrets.token_hex(16)}"
         body = bytearray()
@@ -398,54 +143,18 @@ def upload_image_to_public_host(buffer: bytes, mime_type: str, file_name: str) -
         req = urllib.request.Request(
             "https://litterbox.catbox.moe/resources/internals/api.php",
             data=bytes(body),
-            headers={
-                "Content-Type": f"multipart/form-data; boundary={boundary}",
-                "User-Agent": "CrossPostDesktop/1.0",
-            },
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout_sec) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             res_text = response.read().decode("utf-8", errors="ignore").strip()
             if res_text.startswith("http"):
-                print(f"[Desktop/Media] Uploaded to Litterbox: {res_text}")
+                print(f"[Desktop/Image] Uploaded to Litterbox: {res_text}")
                 return res_text
     except Exception as e:
-        print(f"[Desktop/Media] Litterbox upload note: {e}")
+        print(f"[Desktop/Image] Litterbox upload failed: {e}")
 
-    # 2. tmpfiles.org (大容量・動画・画像両対応の高速一時ファイルホスト)
-    try:
-        boundary = f"----WebKitFormBoundary{secrets.token_hex(16)}"
-        body = bytearray()
-        body.extend(f"--{boundary}\r\n".encode("utf-8"))
-        body.extend(
-            f'Content-Disposition: form-data; name="input"; filename="{upload_name}"\r\n'.encode("utf-8")
-        )
-        body.extend(f"Content-Type: {mime_type}\r\n\r\n".encode("utf-8"))
-        body.extend(buffer)
-        body.extend(b"\r\n")
-        body.extend(f"--{boundary}--\r\n".encode("utf-8"))
-
-        req = urllib.request.Request(
-            "https://tmpfiles.org/api/v1/upload",
-            data=bytes(body),
-            headers={
-                "Content-Type": f"multipart/form-data; boundary={boundary}",
-                "User-Agent": "CrossPostDesktop/1.0",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=timeout_sec) as response:
-            resp_json = json.loads(response.read().decode("utf-8", errors="ignore"))
-            raw_url = resp_json.get("data", {}).get("url", "")
-            if raw_url and "tmpfiles.org/" in raw_url:
-                # 直リンク化: https://tmpfiles.org/123/name -> https://tmpfiles.org/dl/123/name
-                direct_url = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
-                print(f"[Desktop/Media] Uploaded to tmpfiles: {direct_url}")
-                return direct_url
-    except Exception as e:
-        print(f"[Desktop/Media] tmpfiles.org upload note: {e}")
-
-    # 3. Uguu (100MBまで対応の一時ホスト)
+    # 2. Uguu
     try:
         boundary = f"----WebKitFormBoundary{secrets.token_hex(16)}"
         body = bytearray()
@@ -461,20 +170,17 @@ def upload_image_to_public_host(buffer: bytes, mime_type: str, file_name: str) -
         req = urllib.request.Request(
             "https://uguu.se/upload",
             data=bytes(body),
-            headers={
-                "Content-Type": f"multipart/form-data; boundary={boundary}",
-                "User-Agent": "CrossPostDesktop/1.0",
-            },
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout_sec) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             data = json.loads(response.read().decode("utf-8", errors="ignore"))
             url = data.get("files", [{}])[0].get("url")
             if url and url.startswith("http"):
-                print(f"[Desktop/Media] Uploaded to Uguu: {url}")
+                print(f"[Desktop/Image] Uploaded to Uguu: {url}")
                 return url
     except Exception as e:
-        print(f"[Desktop/Media] Uguu upload note: {e}")
+        print(f"[Desktop/Image] Uguu upload failed: {e}")
 
     return ""
 
@@ -791,27 +497,12 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
         self.dist_dir = find_frontend_dir()
         super().__init__(*args, directory=str(self.dist_dir), **kwargs)
 
-    def get_client_browser(self):
-        ua = self.headers.get("User-Agent", "")
-        if "Edg" in ua:
-            return "Microsoft Edge"
-        elif "Chrome" in ua and "Edg" not in ua:
-            return "Google Chrome"
-        elif "Firefox" in ua:
-            return "Mozilla Firefox"
-        elif "Safari" in ua and "Chrome" not in ua:
-            return "Apple Safari"
-        elif "pywebview" in ua:
-            return "CrossPost Desktop (pywebview)"
-        return ua[:40] if ua else "Unknown Client"
-
     def log_message(self, format, *args):
         # APIリクエスト時はコンソール出力
         try:
             msg = format % args
             if "api" in msg:
-                browser = self.get_client_browser()
-                print(f"[Desktop API] [{browser}] {msg}")
+                print(f"[Desktop API] {msg}")
         except Exception:
             pass
 
@@ -856,12 +547,6 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
             self.send_json({"status": "ok", "mode": "python_desktop", "time": time.time()})
             return
 
-        # API: クリップボード読み取り
-        if path == "/api/clipboard/read":
-            text = get_system_clipboard()
-            self.send_json({"text": text})
-            return
-
         # 2. API: 一時メディア配信
         if path.startswith("/api/media/"):
             media_id = path.replace("/api/media/", "")
@@ -899,24 +584,6 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/")
-
-        # ---------------------------------------------------------
-        # 一時メディアアップロード (動画・画像)
-        # ---------------------------------------------------------
-        if path == "/api/media/upload":
-            self.handle_media_upload()
-            return
-
-        # ---------------------------------------------------------
-        # クリップボード書き込み
-        # ---------------------------------------------------------
-        if path == "/api/clipboard/write":
-            body = self.get_json_body()
-            text = body.get("text", "")
-            ok = set_system_clipboard(text)
-            self.send_json({"status": "ok" if ok else "error"})
-            return
-
         body = self.get_json_body()
 
         # ---------------------------------------------------------
@@ -959,8 +626,8 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
         # ---------------------------------------------------------
         if path == "/api/app/quit":
             self.send_json({"success": True, "message": "シャットダウンします"})
-            def immediate_quit():
-                time.sleep(0.05)
+            def delayed_quit():
+                time.sleep(0.3)
                 try:
                     import webview
                     for w in getattr(webview, "windows", []):
@@ -968,83 +635,13 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                 except Exception:
                     pass
                 os._exit(0)
-            threading.Thread(target=immediate_quit, daemon=True).start()
+            threading.Thread(target=delayed_quit, daemon=True).start()
             return
 
         self.send_error(404, "Endpoint not found")
 
     # ---------------------------------------------------------
     # 各エンドポイントの処理実装
-    # ---------------------------------------------------------
-    def handle_media_upload(self):
-        content_type = self.headers.get("Content-Type", "")
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len == 0:
-            self.send_json({"success": False, "error": "アップロードデータが空です"}, 400)
-            return
-
-        raw_data = self.rfile.read(content_len)
-        media_id = f"media_{int(time.time()*1000)}_{secrets.token_hex(6)}"
-        mime_type = "application/octet-stream"
-        filename = "media"
-        file_data = b""
-
-        if "multipart/form-data" in content_type:
-            boundary = None
-            for part in content_type.split(";"):
-                part = part.strip()
-                if part.startswith("boundary="):
-                    boundary = part[len("boundary="):].strip('"\'')
-                    break
-            if boundary:
-                b_boundary = f"--{boundary}".encode("latin1")
-                parts = raw_data.split(b_boundary)
-                for p in parts:
-                    if b'name="file"' in p or b"filename=" in p:
-                        header_body_split = p.split(b"\r\n\r\n", 1)
-                        if len(header_body_split) == 2:
-                            h_bytes, b_bytes = header_body_split
-                            h_str = h_bytes.decode("utf-8", errors="ignore")
-                            ct_match = re.search(r"Content-Type:\s*([^\r\n;]+)", h_str, re.IGNORECASE)
-                            if ct_match:
-                                mime_type = ct_match.group(1).strip()
-                            fn_match = re.search(r'filename="([^"]+)"', h_str)
-                            if fn_match:
-                                filename = fn_match.group(1).strip()
-                            if b_bytes.endswith(b"\r\n"):
-                                b_bytes = b_bytes[:-2]
-                            if b_bytes.endswith(b"--"):
-                                b_bytes = b_bytes[:-2]
-                            if b_bytes.endswith(b"\r\n"):
-                                b_bytes = b_bytes[:-2]
-                            file_data = b_bytes
-                            break
-        if not file_data:
-            file_data = raw_data
-
-        ext = filename.split(".")[-1].lower() if "." in filename else ""
-        if ext in ("mp4", "m4v"):
-            mime_type = "video/mp4"
-        elif ext == "mov":
-            mime_type = "video/quicktime"
-        elif ext == "webm":
-            mime_type = "video/webm"
-        elif ext in ("jpg", "jpeg"):
-            mime_type = "image/jpeg"
-        elif ext == "png":
-            mime_type = "image/png"
-
-        if ext in ("mp4", "m4v", "mov", "webm") and not mime_type.startswith("video/"):
-            mime_type = "video/mp4"
-
-        MEDIA_STORAGE[media_id] = {
-            "data": file_data,
-            "mime": mime_type,
-            "name": filename,
-            "created_at": time.time(),
-        }
-        cleanup_media_storage()
-        self.send_json({"success": True, "mediaId": media_id})
     # ---------------------------------------------------------
     def handle_bluesky_auth(self, body):
         identifier = sanitize_input(body.get("identifier", "")).lstrip("@")
@@ -1123,7 +720,7 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                 "postsCount": total_count,
                 "postIds": [u.split("/")[-1] for u in demo_urls],
                 "urls": demo_urls,
-                "message": "【DEMOモード】デスクトップ版シミュレーション投稿が完了しました。",
+                "message": "【デモモード】デスクトップ版シミュレーション投稿が完了しました。",
             })
             return
 
@@ -1148,31 +745,21 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
             handle = auth_data["handle"]
             access_jwt = auth_data["accessJwt"]
 
-            # 2. メディア（画像・動画）のアップロード処理 (動画・画像の複数添付・混在に完全対応)
-            uploaded_media_items = []
-            if isinstance(images, list) and images:
+            # 2. 画像アップロード (uploadBlob)
+            uploaded_blobs = []
+            if isinstance(images, list):
                 for b_idx, img in enumerate(images):
-                    resolved = resolve_media_buffer(img)
-                    if not resolved:
-                        continue
-                    buf, mime_type, name, is_vid = resolved
-                    alt_text = (img.get("alt") or "").strip()
+                    data_url = img.get("dataUrl", "")
+                    match = re.match(r"^data:([^;]+);base64,(.+)$", data_url)
+                    if match:
+                        mime_type = match.group(1)
+                        import base64
+                        img_bytes = base64.b64decode(match.group(2))
+                        alt_text = (img.get("alt") or "").strip()
 
-                    if is_vid:
-                        try:
-                            v_blob = upload_bluesky_video(buf, mime_type, name, did, access_jwt, pds)
-                            uploaded_media_items.append({
-                                "type": "video",
-                                "video": {"blob": v_blob, "alt": alt_text}
-                            })
-                        except Exception as ve:
-                            print(f"[Desktop/Bluesky] Video #{b_idx+1} upload error: {ve}")
-                            self.send_json({"success": False, "error": f"Bluesky動画アップロード失敗 (#{b_idx+1}): {str(ve)}"}, 400)
-                            return
-                    else:
                         blob_req = urllib.request.Request(
                             f"{pds}/xrpc/com.atproto.repo.uploadBlob",
-                            data=buf,
+                            data=img_bytes,
                             headers={
                                 "Authorization": f"Bearer {access_jwt}",
                                 "Content-Type": mime_type,
@@ -1182,36 +769,10 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                         with urllib.request.urlopen(blob_req, timeout=15) as b_res:
                             b_data = json.loads(b_res.read().decode("utf-8"))
                             if b_data.get("blob"):
-                                uploaded_media_items.append({
-                                    "type": "image",
-                                    "image": {"blob": b_data["blob"], "alt": alt_text}
-                                })
+                                uploaded_blobs.append({"blob": b_data["blob"], "alt": alt_text})
 
-            # チャンク化: 1投稿につき動画1本 または 画像最大4枚 (Bluesky公式仕様準拠・4枚超過エラー防止)
-            media_chunks = []
-            curr_images = []
-            for it in uploaded_media_items:
-                if it["type"] == "video":
-                    if curr_images:
-                        media_chunks.append({"type": "images", "images": curr_images})
-                        curr_images = []
-                    media_chunks.append(it)
-                else:
-                    curr_images.append(it["image"])
-                    if len(curr_images) == 4:
-                        media_chunks.append({"type": "images", "images": curr_images})
-                        curr_images = []
-            if curr_images:
-                media_chunks.append({"type": "images", "images": curr_images})
-
-            # メディアのみ投稿で、メディアの読み込み/アップロードが1件も成功しなかった場合のガード
-            has_valid_text = any(isinstance(p, str) and p.strip() for p in posts)
-            if not has_valid_text and not media_chunks:
-                self.send_json({
-                    "success": False,
-                    "error": "投稿テキストが空で、添付メディアのアップロードにも失敗しました。画像/動画の形式をご確認ください。"
-                }, 400)
-                return
+            # 4枚ずつチャンク化
+            blob_chunks = [uploaded_blobs[i : i + 4] for i in range(0, len(uploaded_blobs), 4)]
 
             # 3. レコード作成（スレッド）
             created_keys = []
@@ -1219,10 +780,10 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
             root_ref = None
             parent_ref = None
 
-            total_post_count = max(len(posts), len(media_chunks), 1)
+            total_post_count = max(len(posts), len(blob_chunks))
             for i in range(total_post_count):
                 post_text = posts[i] if i < len(posts) else (f"({i+1}/{total_post_count})" if total_post_count > 1 else "")
-                facets = generate_bluesky_facets(post_text, pds) if post_text else []
+                facets = generate_bluesky_facets(post_text, pds)
 
                 import datetime
                 record = {
@@ -1233,21 +794,13 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                 if facets:
                     record["facets"] = facets
 
-                if i < len(media_chunks):
-                    chunk = media_chunks[i]
-                    if chunk["type"] == "video":
-                        record["embed"] = {
-                            "$type": "app.bsky.embed.video",
-                            "video": chunk["video"]["blob"],
-                            "alt": chunk["video"]["alt"],
-                        }
-                    elif chunk["type"] == "images" and chunk["images"]:
-                        record["embed"] = {
-                            "$type": "app.bsky.embed.images",
-                            "images": [
-                                {"image": it["blob"], "alt": it["alt"]} for it in chunk["images"]
-                            ],
-                        }
+                if i < len(blob_chunks) and blob_chunks[i]:
+                    record["embed"] = {
+                        "$type": "app.bsky.embed.images",
+                        "images": [
+                            {"image": it["blob"], "alt": it["alt"]} for it in blob_chunks[i]
+                        ],
+                    }
 
                 if root_ref and parent_ref:
                     record["reply"] = {"root": root_ref, "parent": parent_ref}
@@ -1342,7 +895,7 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                 "expiresIn": expires_in,
                 "expiresAt": int(time.time() * 1000) + expires_in * 1000,
                 "refreshedAt": int(time.time() * 1000),
-                "message": "【DEMOモード】Long-Lived Tokenの有効期限を60日間延長しました。",
+                "message": "【デモモード】Long-Lived Tokenの有効期限を60日間延長しました。",
             })
             return
 
@@ -1383,12 +936,7 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
         creds = body.get("credentials", {})
         posts = body.get("posts", [])
         images = body.get("images", [])
-        # Meta Threads API 準拠トピックタグ整形 (最大50文字、UTF-8 50バイト制限クリア、. & 除去)
-        raw_topic = sanitize_input(body.get("topic", "")).lstrip("#").replace(".", "").replace("&", "").strip()
-        topic = raw_topic[:50]
-        while len(topic.encode("utf-8")) > 50 and len(topic) > 0:
-            topic = topic[:-1]
-        topic = topic.strip()
+        topic = sanitize_input(body.get("topic", "")).lstrip("#")
         is_demo = body.get("isDemo", False) or creds.get("isDemoMode", False)
 
         token = sanitize_input(creds.get("threadsAccessToken", ""))
@@ -1406,74 +954,41 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                 "topic": topic or None,
                 "postIds": [u.split("/")[-1] for u in urls],
                 "urls": urls,
-                "message": "【DEMOモード】デスクトップ版Threads投稿シミュレーションが完了しました。",
+                "message": "【デモモード】デスクトップ版Threads投稿シミュレーションが完了しました。",
             })
             return
 
         try:
-            # 画像・動画を公開ホストへアップロード
-            media_items = []
+            # 画像を公開ホストへアップロード
+            media_urls = []
             if isinstance(images, list):
                 for idx, img in enumerate(images[:20]):
-                    resolved = resolve_media_buffer(img)
-                    if not resolved:
+                    data_url = img.get("dataUrl", "")
+                    if data_url.startswith("http://") or data_url.startswith("https://"):
+                        media_urls.append(data_url)
                         continue
-                    buf, mime_type, filename, is_video = resolved
-                    pub_url = upload_image_to_public_host(buf, mime_type, filename or f"media_{idx+1}")
-                    if pub_url:
-                        media_items.append({
-                            "url": pub_url,
-                            "isVideo": is_video,
-                        })
+                    match = re.match(r"^data:([^;]+);base64,(.+)$", data_url)
+                    if match:
+                        import base64
+                        mime_type = match.group(1)
+                        buf = base64.b64decode(match.group(2))
+                        pub_url = upload_image_to_public_host(buf, mime_type, img.get("name") or f"image_{idx+1}")
+                        if pub_url:
+                            media_urls.append(pub_url)
 
             # 20枚単位チャンク
-            media_chunks = [media_items[i : i + 20] for i in range(0, len(media_items), 20)]
-
-            # テキストが空かつメディアアップロードも失敗した場合のガード
-            has_valid_text = any(isinstance(p, str) and p.strip() for p in posts)
-            if not has_valid_text and not media_items:
-                self.send_json({
-                    "success": False,
-                    "error": "投稿テキストが空で、添付メディア（画像・動画）のアップロードにも失敗しました。ファイル形式またはネットワーク接続をご確認ください。"
-                }, 400)
-                return
-
-            total_count = max(len(posts), len(media_chunks)) or 1
+            media_chunks = [media_urls[i : i + 20] for i in range(0, len(media_urls), 20)]
+            total_count = max(len(posts), len(media_chunks))
             post_texts = []
             for p in range(total_count):
                 if p < len(posts):
                     post_texts.append(posts[p])
-                elif not posts and p == 0:
-                    post_texts.append("")
                 else:
-                    post_texts.append(f"📷 添付メディア ({p*20+1}〜{min((p+1)*20, len(media_items))})")
+                    post_texts.append(f"📷 添付画像 ({p*20+1}〜{min((p+1)*20, len(media_urls))})")
 
             created_ids = []
             created_urls = []
             prev_published_id = None
-
-            def make_container_req(payload):
-                p_req = urllib.request.Request(
-                    f"https://graph.threads.net/v1.0/{user_id}/threads",
-                    data=urllib.parse.urlencode(payload).encode("utf-8"),
-                    method="POST",
-                )
-                try:
-                    with urllib.request.urlopen(p_req, timeout=20) as p_res:
-                        return json.loads(p_res.read().decode("utf-8"))["id"]
-                except urllib.error.HTTPError as he:
-                    err_txt = he.read().decode("utf-8", errors="ignore")
-                    if "topic_tag" in err_txt and "topic_tag" in payload:
-                        # topic_tag 拒否時は topic_tag を除外して自動フォールバック再試行
-                        del payload["topic_tag"]
-                        p_req2 = urllib.request.Request(
-                            f"https://graph.threads.net/v1.0/{user_id}/threads",
-                            data=urllib.parse.urlencode(payload).encode("utf-8"),
-                            method="POST",
-                        )
-                        with urllib.request.urlopen(p_req2, timeout=20) as p_res2:
-                            return json.loads(p_res2.read().decode("utf-8"))["id"]
-                    raise
 
             for i, p_text in enumerate(post_texts):
                 curr_medias = media_chunks[i] if i < len(media_chunks) else []
@@ -1482,57 +997,61 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                 if len(curr_medias) > 1:
                     # カルーセル
                     child_ids = []
-                    for m_obj in curr_medias:
-                        m_url = m_obj["url"]
-                        m_type = "VIDEO" if m_obj.get("isVideo") else "IMAGE"
-                        m_param_key = "video_url" if m_type == "VIDEO" else "image_url"
-
+                    for m_url in curr_medias:
                         params = urllib.parse.urlencode({
                             "access_token": token,
-                            "media_type": m_type,
-                            m_param_key: m_url,
+                            "media_type": "IMAGE",
+                            "image_url": m_url,
                             "is_carousel_item": "true",
                         }).encode("utf-8")
                         c_req = urllib.request.Request(f"https://graph.threads.net/v1.0/{user_id}/threads", data=params, method="POST")
-                        with urllib.request.urlopen(c_req, timeout=20) as c_res:
+                        with urllib.request.urlopen(c_req, timeout=15) as c_res:
                             child_ids.append(json.loads(c_res.read().decode("utf-8"))["id"])
 
                     # 完了待機
                     for cid in child_ids:
-                        self.wait_for_container_finished(cid, token, max_wait=60)
+                        self.wait_for_container_finished(cid, token)
 
                     # 親カルーセル
                     carousel_data = {
                         "access_token": token,
                         "media_type": "CAROUSEL",
                         "children": ",".join(child_ids),
+                        "text": p_text,
                     }
-                    if p_text and p_text.strip():
-                        carousel_data["text"] = p_text.strip()
                     if topic:
                         carousel_data["topic_tag"] = topic
                     if prev_published_id:
                         carousel_data["reply_to_id"] = prev_published_id
 
-                    container_id = make_container_req(carousel_data)
+                    p_req = urllib.request.Request(
+                        f"https://graph.threads.net/v1.0/{user_id}/threads",
+                        data=urllib.parse.urlencode(carousel_data).encode("utf-8"),
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(p_req, timeout=15) as p_res:
+                        container_id = json.loads(p_res.read().decode("utf-8"))["id"]
 
                 elif len(curr_medias) == 1:
-                    # 単一画像または動画
-                    m_obj = curr_medias[0]
-                    is_vid = m_obj.get("isVideo")
-                    med_data = {
+                    # 単一画像
+                    img_data = {
                         "access_token": token,
-                        "media_type": "VIDEO" if is_vid else "IMAGE",
-                        ("video_url" if is_vid else "image_url"): m_obj["url"],
+                        "media_type": "IMAGE",
+                        "image_url": curr_medias[0],
+                        "text": p_text,
                     }
-                    if p_text and p_text.strip():
-                        med_data["text"] = p_text.strip()
                     if topic:
-                        med_data["topic_tag"] = topic
+                        img_data["topic_tag"] = topic
                     if prev_published_id:
-                        med_data["reply_to_id"] = prev_published_id
+                        img_data["reply_to_id"] = prev_published_id
 
-                    container_id = make_container_req(med_data)
+                    p_req = urllib.request.Request(
+                        f"https://graph.threads.net/v1.0/{user_id}/threads",
+                        data=urllib.parse.urlencode(img_data).encode("utf-8"),
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(p_req, timeout=15) as p_res:
+                        container_id = json.loads(p_res.read().decode("utf-8"))["id"]
 
                 else:
                     # テキストのみ
@@ -1546,45 +1065,30 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                     if prev_published_id:
                         txt_data["reply_to_id"] = prev_published_id
 
-                    container_id = make_container_req(txt_data)
+                    p_req = urllib.request.Request(
+                        f"https://graph.threads.net/v1.0/{user_id}/threads",
+                        data=urllib.parse.urlencode(txt_data).encode("utf-8"),
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(p_req, timeout=15) as p_res:
+                        container_id = json.loads(p_res.read().decode("utf-8"))["id"]
 
-                # 処理完了待機 (動画の場合は最長75秒)
-                is_any_video = any(m.get("isVideo") for m in curr_medias)
-                self.wait_for_container_finished(container_id, token, max_wait=75 if is_any_video else 30)
+                # 処理完了待機
+                self.wait_for_container_finished(container_id, token)
 
-                # 公開 (Publish) - 伝播遅延対応のリトライ
-                published_id = None
-                last_pub_err = None
+                # 公開 (Publish)
                 pub_params = urllib.parse.urlencode({
                     "access_token": token,
                     "creation_id": container_id,
                 }).encode("utf-8")
-
-                for attempt in range(5):
-                    try:
-                        pub_req = urllib.request.Request(
-                            f"https://graph.threads.net/v1.0/{user_id}/threads_publish",
-                            data=pub_params,
-                            method="POST",
-                        )
-                        with urllib.request.urlopen(pub_req, timeout=15) as pub_res:
-                            pub_data = json.loads(pub_res.read().decode("utf-8"))
-                            published_id = pub_data.get("id")
-                            if published_id:
-                                break
-                    except urllib.error.HTTPError as he:
-                        err_body = he.read().decode("utf-8", errors="ignore")
-                        last_pub_err = err_body
-                        print(f"[Desktop/Threads] Publish attempt {attempt+1} note: {err_body}")
-                        if attempt < 4:
-                            time.sleep(3.5 if is_any_video else 2.0)
-                    except Exception as pe:
-                        last_pub_err = str(pe)
-                        if attempt < 4:
-                            time.sleep(2.0)
-
-                if not published_id:
-                    raise RuntimeError(f"Threads公開に失敗しました: {last_pub_err or '不明なエラー'}")
+                pub_req = urllib.request.Request(
+                    f"https://graph.threads.net/v1.0/{user_id}/threads_publish",
+                    data=pub_params,
+                    method="POST",
+                )
+                with urllib.request.urlopen(pub_req, timeout=15) as pub_res:
+                    pub_data = json.loads(pub_res.read().decode("utf-8"))
+                    published_id = pub_data["id"]
 
                 created_ids.append(published_id)
                 prev_published_id = published_id
@@ -1605,32 +1109,22 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"success": False, "error": f"Threads投稿エラー: {str(e)}"}, 500)
 
-    def wait_for_container_finished(self, container_id: str, access_token: str, max_wait=60):
+    def wait_for_container_finished(self, container_id: str, access_token: str, max_wait=25):
         start = time.time()
-        last_status = "UNKNOWN"
         while time.time() - start < max_wait:
             try:
-                url = f"https://graph.threads.net/v1.0/{container_id}?fields=status,status_code,error_message&access_token={urllib.parse.quote(access_token)}"
+                url = f"https://graph.threads.net/v1.0/{container_id}?fields=status,error_message&access_token={urllib.parse.quote(access_token)}"
                 req = urllib.request.Request(url, method="GET")
-                with urllib.request.urlopen(req, timeout=10) as res:
+                with urllib.request.urlopen(req, timeout=8) as res:
                     data = json.loads(res.read().decode("utf-8"))
-                    status = data.get("status") or data.get("status_code")
-                    last_status = status or "UNKNOWN"
+                    status = data.get("status")
                     if status in ("FINISHED", "PUBLISHED"):
-                        time.sleep(1.2)  # Metaサーバー反映安定化待ち
                         return
                     if status == "ERROR":
-                        err_msg = data.get("error_message") or "Meta側でのメディア（動画/画像）処理に失敗しました"
-                        raise RuntimeError(f"Threadsメディア処理エラー: {err_msg}")
-                    if status == "EXPIRED":
-                        raise RuntimeError("Threadsコンテナの有効期限が切れました")
-            except RuntimeError:
-                raise
-            except Exception as e:
-                print(f"[Desktop/Threads] Polling note for {container_id}: {e}")
-            time.sleep(1.5)
-        if last_status in ("IN_PROGRESS", "UNKNOWN"):
-            raise RuntimeError(f"Threadsの動画エンコード処理がタイムアウトしました（Meta側ステータス: {last_status}）。Meta側の処理に時間がかかっています。少し時間をおいてから再試行してください。")
+                        raise RuntimeError(f"Threads画像処理エラー: {data.get('error_message')}")
+            except Exception:
+                pass
+            time.sleep(0.8)
 
 
 # -------------------------------------------------------------
@@ -1679,14 +1173,6 @@ class DesktopAppApi:
     def get_app_info(self):
         return {"name": APP_NAME, "version": "1.0.0", "platform": sys.platform}
 
-    def read_clipboard(self):
-        """クリップボードからテキストを取得"""
-        return get_system_clipboard()
-
-    def write_clipboard(self, text: str):
-        """クリップボードにテキストを書き込み"""
-        return set_system_clipboard(text)
-
 
 # -------------------------------------------------------------
 # 単体デスクトップアプリ・ウィンドウ起動エンジン
@@ -1694,16 +1180,23 @@ class DesktopAppApi:
 def launch_standalone_app_window(url: str, title: str, width: int = 1280, height: int = 860) -> bool:
     """
     通常のWebブラウザ（タブやアドレスバーのあるブラウザ）を起動させず、
-    独立した単体デスクトップアプリケーション（専用ウィンドウ）として最大化起動する
+    独立した単体デスクトップアプリケーション（専用ウィンドウ）として起動する
     """
     is_frozen = getattr(sys, "frozen", False)
     app_api = DesktopAppApi()
+
+    # pywebview 用 日本語ローカライゼーション
+    pywebview_localization = {
+        "global.quitConfirmation": "終了しますか？",
+        "global.ok": "OK",
+        "global.cancel": "キャンセル",
+    }
 
     # 1. pywebview による純粋ネイティブウィンドウ起動
     try:
         import webview
 
-        print("[CrossPost] Starting native app window with pywebview in maximized mode...")
+        print("[CrossPost] Starting native app window with pywebview...")
         window = webview.create_window(
             title=title,
             url=url,
@@ -1711,32 +1204,31 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
             height=height,
             min_size=(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT),
             text_select=True,
-            confirm_close=False,
-            maximized=True,
+            confirm_close=True,
             js_api=app_api,
         )
         app_api.set_window(window)
 
-        def on_window_loaded():
+        # 閉じるイベント時のフック: React側にダークモーダル表示を指示
+        def on_window_closing():
+            if app_api._is_force_closing:
+                return True
             try:
-                window.maximize()
+                # フロントエンドのダークモード終了確認ダイアログを開く
+                res = window.evaluate_js(
+                    "window.__showDarkQuitModal ? (window.__showDarkQuitModal(), true) : false;"
+                )
+                if res:
+                    # ダークモーダルをトリガーできた場合はOSの標準ダイアログを出さずに閉じるのを一旦阻止
+                    return False
             except Exception:
                 pass
+            # 万一JS側が呼べない場合は pywebview の確認ダイアログ（終了しますか？）にフォールバック
+            return True
 
-        def on_window_closed():
-            """ウィンドウが閉じられた際に安全・即座にプロセスを終了"""
-            try:
-                time.sleep(0.05)
-            finally:
-                os._exit(0)
+        window.events.closing += on_window_closing
 
-        window.events.loaded += on_window_loaded
-        window.events.closed += on_window_closed
-
-        try:
-            webview.start(debug=False)
-        finally:
-            os._exit(0)
+        webview.start(debug=False, localization=pywebview_localization)
         return True
     except (ImportError, OSError, Exception) as e:
         print(f"[INFO] pywebview is not active ({e}). Trying standalone app mode...")
@@ -1753,7 +1245,7 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
             if res.returncode == 0:
                 import webview
 
-                print("[OK] pywebview engine ready. Launching window in maximized mode...")
+                print("[OK] pywebview engine ready. Launching window...")
                 window = webview.create_window(
                     title=title,
                     url=url,
@@ -1761,37 +1253,33 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
                     height=height,
                     min_size=(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT),
                     text_select=True,
-                    confirm_close=False,
-                    maximized=True,
+                    confirm_close=True,
                     js_api=app_api,
                 )
                 app_api.set_window(window)
 
-                def on_window_loaded_retry():
+                def on_window_closing_retry():
+                    if app_api._is_force_closing:
+                        return True
                     try:
-                        window.maximize()
+                        res = window.evaluate_js(
+                            "window.__showDarkQuitModal ? (window.__showDarkQuitModal(), true) : false;"
+                        )
+                        if res:
+                            return False
                     except Exception:
                         pass
+                    return True
 
-                def on_window_closed_retry():
-                    try:
-                        time.sleep(0.05)
-                    finally:
-                        os._exit(0)
+                window.events.closing += on_window_closing_retry
 
-                window.events.loaded += on_window_loaded_retry
-                window.events.closed += on_window_closed_retry
-
-                try:
-                    webview.start(debug=False)
-                finally:
-                    os._exit(0)
+                webview.start(debug=False, localization=pywebview_localization)
                 return True
         except Exception as e:
             print(f"[INFO] Auto-install skipped: {e}")
 
     # 2. Windows / OS標準のスタンドアロン・アプリモード (--app)
-    # ブラウザのURLバー・タブ・メニューを一切表示させず、単体の独立したアプリウィンドウとして最大化起動
+    # ブラウザのURLバー・タブ・メニューを一切表示させず、単体の独立したアプリウィンドウとして起動
     subproc = None
     app_launched = False
 
@@ -1811,7 +1299,8 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
                 cmd = [
                     exe,
                     f"--app={url}",
-                    "--start-maximized",
+                    f"--window-size={width},{height}",
+                    "--window-position=center",
                     f"--app-id=crosspost-studio-{title}",
                 ]
                 subproc = subprocess.Popen(cmd)
@@ -1827,7 +1316,7 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
         for exe in mac_candidates:
             if os.path.exists(exe):
                 print(f"[CrossPost] Launching standalone app window: {exe}")
-                cmd = [exe, f"--app={url}", "--start-maximized"]
+                cmd = [exe, f"--app={url}", f"--window-size={width},{height}"]
                 subproc = subprocess.Popen(cmd)
                 app_launched = True
                 break
@@ -1837,20 +1326,18 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
         for exe in linux_candidates:
             if shutil.which(exe):
                 print(f"[CrossPost] Launching standalone app window: {exe}")
-                cmd = [exe, f"--app={url}", "--start-maximized"]
+                cmd = [exe, f"--app={url}", f"--window-size={width},{height}"]
                 subproc = subprocess.Popen(cmd)
                 app_launched = True
                 break
 
     if app_launched and subproc:
-        print("[OK] Standalone app window opened in maximized mode.")
+        print("[OK] Standalone app window opened (no browser URL bar or tabs).")
         print("     Close the window to exit the application.")
         try:
             subproc.wait()
         except KeyboardInterrupt:
             subproc.terminate()
-        finally:
-            os._exit(0)
         return True
 
     # 3. 万一スタンドアロンエンジンが起動できない場合のフォールバック待機案内
@@ -1862,8 +1349,6 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
             time.sleep(1)
     except KeyboardInterrupt:
         pass
-    finally:
-        os._exit(0)
     return False
 
 

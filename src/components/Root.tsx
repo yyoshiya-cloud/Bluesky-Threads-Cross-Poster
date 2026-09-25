@@ -12,6 +12,8 @@ import { QuitConfirmModal } from './QuitConfirmModal';
 import { ModeSwitchPasswordModal } from './ModeSwitchPasswordModal';
 import { CommErrorModal } from './CommErrorModal';
 import { AboutAppModal } from './AboutAppModal';
+import { ServerVaultViewerModal } from './ServerVaultViewerModal';
+import { DesktopContextMenu } from './DesktopContextMenu';
 import { ToastContainer } from './ToastContainer';
 import { DEMO_CREDENTIALS } from '../utils/postApi';
 
@@ -89,6 +91,7 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         onOpenUserGuide={() => dispatch({ type: 'OPEN_MODAL', payload: 'userGuide' })}
         onOpenQuitConfirm={() => dispatch({ type: 'OPEN_MODAL', payload: 'quitConfirm' })}
         onOpenAboutApp={() => dispatch({ type: 'OPEN_MODAL', payload: 'aboutApp' })}
+        onOpenServerVault={() => dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' })}
         currentTheme={viewModel.theme}
         onSelectTheme={(theme) => dispatch({ type: 'SELECT_THEME', payload: theme })}
         onLogout={(platform) => dispatch({ type: 'LOGOUT', payload: platform })}
@@ -146,6 +149,7 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
           onDeleteSavedAccount={(platform) => dispatch({ type: 'DELETE_SAVED_ACCOUNT', payload: platform })}
           onOpenUserGuide={() => dispatch({ type: 'OPEN_MODAL', payload: 'userGuide' })}
           onOpenCommErrors={() => setIsCommErrorModalOpen(true)}
+          onOpenServerVault={() => dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' })}
           onNotify={(toast) => dispatch({ type: 'NOTIFY', payload: toast })}
           lastSavedAt={viewModel.lastSavedAt}
           draftStatus={viewModel.draftStatus}
@@ -270,6 +274,22 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
       <AboutAppModal
         isOpen={Boolean(viewModel.modals.aboutApp)}
         onClose={() => dispatch({ type: 'CLOSE_MODAL', payload: 'aboutApp' })}
+      />
+
+      <ServerVaultViewerModal
+        isOpen={Boolean(viewModel.modals.serverVault)}
+        onClose={() => dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' })}
+        onOpenSettings={() => {
+          dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
+          dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
+        }}
+        isBlueskyLoggedIn={Boolean(
+          viewModel.credentials.blueskyConnected ||
+          (viewModel.credentials.blueskyIdentifier && viewModel.credentials.blueskyAppPassword)
+        )}
+        isThreadsLoggedIn={Boolean(
+          viewModel.credentials.threadsConnected || viewModel.credentials.threadsAccessToken
+        )}
       />
 
       {/* 5. グローバルトースト通知コンテナ */}

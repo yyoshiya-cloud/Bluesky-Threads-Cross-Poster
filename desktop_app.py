@@ -24,6 +24,9 @@ import urllib.error
 import urllib.parse
 import subprocess
 import shutil
+import hashlib
+import zipfile
+import io
 
 # -------------------------------------------------------------
 # Windows / CP932 文字コード安全化 & 出力ハンドラ
@@ -781,6 +784,66 @@ def get_missing_dist_html(checked_path: Path) -> str:
 
 
 # -------------------------------------------------------------
+# アカウント保管庫 (Vault) & セキュリティ設定 (Windowsローカル永続化)
+# -------------------------------------------------------------
+DATA_DIR = Path(__file__).parent / "data"
+VAULT_FILE = DATA_DIR / "account_vault.json"
+SECURITY_FILE = DATA_DIR / "mode_security.json"
+
+
+def get_vault_data() -> dict:
+    try:
+        if VAULT_FILE.exists():
+            with open(VAULT_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+    except Exception as e:
+        print(f"[Desktop/Vault] Read error: {e}")
+    return {}
+
+
+def save_vault_data(vault: dict) -> bool:
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(VAULT_FILE, "w", encoding="utf-8") as f:
+            json.dump(vault, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"[Desktop/Vault] Save error: {e}")
+        return False
+
+
+def get_mode_security_data() -> dict:
+    default_config = {
+        "passwordHash": "",
+        "isPasswordProtected": False,
+        "hint": "",
+        "updatedAt": 0,
+    }
+    try:
+        if SECURITY_FILE.exists():
+            with open(SECURITY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return {**default_config, **data}
+    except Exception as e:
+        print(f"[Desktop/Security] Read error: {e}")
+    return default_config
+
+
+def save_mode_security_data(config: dict) -> bool:
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(SECURITY_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"[Desktop/Security] Save error: {e}")
+        return False
+
+
+# -------------------------------------------------------------
 # HTTP リクエストハンドラ (API + 静的ファイル配信)
 # -------------------------------------------------------------
 class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
@@ -817,7 +880,7 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS, HEAD")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         if self.path.endswith(".html") or self.path == "/" or self.path == "":
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -860,6 +923,26 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/clipboard/read":
             text = get_system_clipboard()
             self.send_json({"text": text})
+            return
+
+        # API: アカウント保管庫 (Vault) 取得
+        if path == "/api/credentials/vault":
+            vault = get_vault_data()
+            self.send_json({"vault": vault, "source": "local_disk"})
+            return
+
+        # API: モードセキュリティ設定取得
+        if path == "/api/mode/security":
+            sec = get_mode_security_data()
+            self.send_json({
+                "isPasswordProtected": sec.get("isPasswordProtected", False),
+                "hint": sec.get("hint", ""),
+            })
+            return
+
+        # API: デスクトップパッケージZIP配信
+        if path == "/api/desktop-package":
+            self.handle_desktop_package()
             return
 
         # 2. API: 一時メディア配信
@@ -920,6 +1003,24 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
         body = self.get_json_body()
 
         # ---------------------------------------------------------
+        # アカウント保管庫 (Vault) 保存
+        # ---------------------------------------------------------
+        if path == "/api/credentials/vault":
+            self.handle_vault_save(body)
+            return
+
+        # ---------------------------------------------------------
+        # モードセキュリティ設定
+        # ---------------------------------------------------------
+        if path == "/api/mode/security":
+            self.handle_mode_security_save(body)
+            return
+
+        if path == "/api/mode/verify":
+            self.handle_mode_verify(body)
+            return
+
+        # ---------------------------------------------------------
         # Bluesky 認証
         # ---------------------------------------------------------
         if path == "/api/bluesky/auth":
@@ -955,6 +1056,13 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
             return
 
         # ---------------------------------------------------------
+        # 統合投稿 (Bluesky & Threads 同時投稿)
+        # ---------------------------------------------------------
+        if path == "/api/post":
+            self.handle_unified_post(body)
+            return
+
+        # ---------------------------------------------------------
         # アプリ終了 (Quit API)
         # ---------------------------------------------------------
         if path == "/api/app/quit":
@@ -972,6 +1080,221 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
             return
 
         self.send_error(404, "Endpoint not found")
+
+    def do_DELETE(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip("/")
+
+        if path == "/api/credentials/vault":
+            body = self.get_json_body()
+            platform = body.get("platform")
+            vault = get_vault_data()
+            if platform in ["bluesky", "threads"]:
+                if platform in vault:
+                    del vault[platform]
+            else:
+                vault = {}
+            save_vault_data(vault)
+            self.send_json({"success": True, "vault": vault})
+            return
+
+        self.send_error(404, "Endpoint not found")
+
+    def handle_vault_save(self, body):
+        new_vault = body.get("vault", {})
+        preserve_password = body.get("preservePassword", True)
+        existing = get_vault_data()
+
+        merged = {**existing}
+        if "bluesky" in new_vault:
+            b_new = new_vault["bluesky"]
+            b_old = merged.get("bluesky", {})
+            b_pass = b_new.get("appPassword")
+            if preserve_password and (not b_pass or b_pass == "********"):
+                b_pass = b_old.get("appPassword", "")
+            merged["bluesky"] = {
+                **b_old,
+                **b_new,
+                "appPassword": b_pass,
+                "savedAt": b_new.get("savedAt") or int(time.time() * 1000),
+            }
+
+        if "threads" in new_vault:
+            t_new = new_vault["threads"]
+            t_old = merged.get("threads", {})
+            t_token = t_new.get("accessToken")
+            if preserve_password and (not t_token or (isinstance(t_token, str) and t_token.startswith("TH_") and "*" in t_token)):
+                t_token = t_old.get("accessToken", "")
+            merged["threads"] = {
+                **t_old,
+                **t_new,
+                "accessToken": t_token,
+                "savedAt": t_new.get("savedAt") or int(time.time() * 1000),
+            }
+
+        merged["encryptedAt"] = int(time.time() * 1000)
+        save_vault_data(merged)
+        self.send_json({"success": True, "vault": merged})
+
+    def handle_mode_security_save(self, body):
+        pwd = body.get("password")
+        hint = body.get("hint", "")
+        current_pwd = body.get("currentPassword")
+
+        existing = get_mode_security_data()
+        if existing.get("isPasswordProtected") and existing.get("passwordHash"):
+            if not current_pwd:
+                self.send_json({"success": False, "error": "現在のパスワードを入力してください。"}, 400)
+                return
+            curr_hash = hashlib.sha256(current_pwd.encode("utf-8")).hexdigest()
+            if curr_hash != existing["passwordHash"]:
+                self.send_json({"success": False, "error": "現在のパスワードが正しくありません。"}, 403)
+                return
+
+        if pwd:
+            pwd_hash = hashlib.sha256(pwd.encode("utf-8")).hexdigest()
+            new_sec = {
+                "passwordHash": pwd_hash,
+                "isPasswordProtected": True,
+                "hint": hint,
+                "updatedAt": int(time.time() * 1000),
+            }
+        else:
+            new_sec = {
+                "passwordHash": "",
+                "isPasswordProtected": False,
+                "hint": "",
+                "updatedAt": int(time.time() * 1000),
+            }
+        save_mode_security_data(new_sec)
+        self.send_json({"success": True, "isPasswordProtected": new_sec["isPasswordProtected"]})
+
+    def handle_mode_verify(self, body):
+        pwd = body.get("password", "")
+        existing = get_mode_security_data()
+        if not existing.get("isPasswordProtected") or not existing.get("passwordHash"):
+            self.send_json({"valid": True})
+            return
+        pwd_hash = hashlib.sha256(pwd.encode("utf-8")).hexdigest()
+        self.send_json({"valid": pwd_hash == existing["passwordHash"]})
+
+    def handle_unified_post(self, body):
+        # 統合同時投稿
+        creds = body.get("credentials", {})
+        post_bsky = body.get("postToBluesky", True)
+        post_th = body.get("postToThreads", True)
+        images = body.get("images", [])
+        threads_topic = body.get("threadsTopic", "")
+
+        bsky_posts = body.get("blueskyPosts") or [body.get("blueskyText") or body.get("text", "")]
+        threads_posts = body.get("threadsPosts") or [body.get("threadsText") or body.get("text", "")]
+
+        response_payload = {
+            "success": True,
+            "bluesky": None,
+            "threads": None,
+            "message": "",
+        }
+
+        # 1. Bluesky
+        if post_bsky:
+            try:
+                b_body = {
+                    "credentials": creds,
+                    "posts": bsky_posts,
+                    "images": images,
+                    "replySettings": body.get("replySettings"),
+                    "isDemo": body.get("isDemo", False),
+                }
+                # 自前のメソッドを実行
+                b_result = self._execute_bluesky_post(b_body)
+                response_payload["bluesky"] = b_result
+            except Exception as e:
+                response_payload["bluesky"] = {"success": False, "error": str(e)}
+                response_payload["success"] = False
+
+        # 2. Threads
+        if post_th:
+            try:
+                th_body = {
+                    "credentials": creds,
+                    "posts": threads_posts,
+                    "images": images,
+                    "threadsTopic": threads_topic,
+                    "replySettings": body.get("replySettings"),
+                    "isDemo": body.get("isDemo", False),
+                }
+                th_result = self._execute_threads_post(th_body)
+                response_payload["threads"] = th_result
+            except Exception as e:
+                response_payload["threads"] = {"success": False, "error": str(e)}
+                response_payload["success"] = False
+
+        msg_parts = []
+        if response_payload.get("bluesky", {}).get("success"):
+            msg_parts.append("Bluesky投稿完了")
+        if response_payload.get("threads", {}).get("success"):
+            msg_parts.append("Threads投稿完了")
+        response_payload["message"] = " & ".join(msg_parts) or "投稿処理が完了しました"
+
+        self.send_json(response_payload)
+
+    def handle_desktop_package(self):
+        try:
+            base_dir = Path(__file__).parent
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                root_files = [
+                    "desktop_app.py",
+                    "requirements.txt",
+                    "run_desktop.bat",
+                    "run_desktop_silent.vbs",
+                    "run_desktop.sh",
+                    "make_windows_exe.bat",
+                    "build_exe.py",
+                    "README_DESKTOP.md",
+                ]
+                for f_name in root_files:
+                    p = base_dir / f_name
+                    if p.exists():
+                        zf.write(p, f_name)
+
+                ui_dir = base_dir / "desktop_ui"
+                if not ui_dir.exists():
+                    ui_dir = base_dir / "dist"
+
+                if ui_dir.exists():
+                    for file_path in ui_dir.rglob("*"):
+                        if file_path.is_file() and not file_path.name.endswith(".cjs") and not file_path.name.endswith(".map"):
+                            rel_p = file_path.relative_to(ui_dir)
+                            zf.write(file_path, f"desktop_ui/{rel_p.as_posix()}")
+                            zf.write(file_path, f"dist/{rel_p.as_posix()}")
+
+                start_txt = (
+                    "============================================================\n"
+                    " CrossPost Desktop Studio (Windows / Pythonデスクトップアプリ)\n"
+                    "============================================================\n\n"
+                    "【Windowsでの起動手順】\n"
+                    "1. 本ZIPファイルを右クリックし、「すべて展開」で解凍します。\n"
+                    "2. 「run_desktop.bat」をダブルクリックします。\n"
+                    "   ※ 自動的に専用GUIウィンドウが起動します。\n\n"
+                    "【単体EXEファイル（CrossPostStudio.exe）を作りたい場合】\n"
+                    "・「make_windows_exe.bat」をダブルクリックすると自動生成されます。\n\n"
+                    "【コマンドラインから起動する場合】\n"
+                    "   python desktop_app.py\n"
+                )
+                zf.writestr("START_HERE.txt", start_txt)
+
+            val = buf.getvalue()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", 'attachment; filename="crosspost-desktop-python.zip"')
+            self.send_header("Content-Length", str(len(val)))
+            self.end_headers()
+            self.wfile.write(val)
+        except Exception as e:
+            print(f"[Desktop/Package] Error creating zip: {e}")
+            self.send_json({"success": False, "error": str(e)}, 500)
 
     # ---------------------------------------------------------
     # 各エンドポイントの処理実装
@@ -1102,6 +1425,10 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
             self.send_json({"success": False, "error": f"通信エラー: {str(e)}"}, 500)
 
     def handle_bluesky_post(self, body):
+        res = self._execute_bluesky_post(body)
+        self.send_json(res, 200 if res.get("success") else 400)
+
+    def _execute_bluesky_post(self, body):
         creds = body.get("credentials", {})
         posts = body.get("posts", [])
         images = body.get("images", [])
@@ -1117,15 +1444,14 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
             img_count = len(images) if isinstance(images, list) else 0
             total_count = max(len(posts) if isinstance(posts, list) else 0, (img_count + 3) // 4) or 1
             demo_urls = [f"https://bsky.app/profile/{handle}/post/demo-{int(time.time()*1000)}-{i+1}" for i in range(total_count)]
-            self.send_json({
+            return {
                 "success": True,
                 "isDemo": True,
                 "postsCount": total_count,
                 "postIds": [u.split("/")[-1] for u in demo_urls],
                 "urls": demo_urls,
                 "message": "【DEMOモード】デスクトップ版シミュレーション投稿が完了しました。",
-            })
-            return
+            }
 
         if "." not in b_id:
             b_id = f"{b_id}.bsky.social"
@@ -1283,14 +1609,14 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                 if i < total_post_count - 1:
                     time.sleep(0.5)
 
-            self.send_json({
+            return {
                 "success": True,
                 "postsCount": len(created_urls),
                 "postIds": created_keys,
                 "urls": created_urls,
-            })
+            }
         except Exception as e:
-            self.send_json({"success": False, "error": f"Bluesky投稿エラー: {str(e)}"}, 500)
+            return {"success": False, "error": f"Bluesky投稿エラー: {str(e)}"}
 
     def handle_threads_verify(self, body):
         token = sanitize_input(body.get("accessToken", ""))
@@ -1380,10 +1706,14 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
             self.send_json({"success": False, "error": f"Threads通信エラー: {str(e)}"}, 500)
 
     def handle_threads_post(self, body):
+        res = self._execute_threads_post(body)
+        self.send_json(res, 200 if res.get("success") else 400)
+
+    def _execute_threads_post(self, body):
         creds = body.get("credentials", {})
         posts = body.get("posts", [])
         images = body.get("images", [])
-        # Meta Threads API 準拠トピックタグ整形 (最大50文字、UTF-8 50バイト制限クリア、. & 除去)
+        # Meta Threads API 準拠トピックタグ整形
         raw_topic = sanitize_input(body.get("topic", "")).lstrip("#").replace(".", "").replace("&", "").strip()
         topic = raw_topic[:50]
         while len(topic.encode("utf-8")) > 50 and len(topic) > 0:
@@ -1398,7 +1728,7 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
         # デモ判定
         if is_demo or "demo" in token.lower() or not token:
             urls = [f"https://www.threads.net/{username}/post/demo-{int(time.time()*1000)}-{i+1}" for i in range(len(posts) or 1)]
-            self.send_json({
+            return {
                 "success": True,
                 "isDemo": True,
                 "postsCount": len(urls),
@@ -1407,8 +1737,7 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                 "postIds": [u.split("/")[-1] for u in urls],
                 "urls": urls,
                 "message": "【DEMOモード】デスクトップ版Threads投稿シミュレーションが完了しました。",
-            })
-            return
+            }
 
         try:
             # 画像・動画を公開ホストへアップロード
@@ -1596,14 +1925,14 @@ class CrossPostAppRequestHandler(SimpleHTTPRequestHandler):
                 if i < len(post_texts) - 1:
                     time.sleep(1.0)
 
-            self.send_json({
+            return {
                 "success": True,
                 "postsCount": len(created_urls),
                 "postIds": created_ids,
                 "urls": created_urls,
-            })
+            }
         except Exception as e:
-            self.send_json({"success": False, "error": f"Threads投稿エラー: {str(e)}"}, 500)
+            return {"success": False, "error": f"Threads投稿エラー: {str(e)}"}
 
     def wait_for_container_finished(self, container_id: str, access_token: str, max_wait=60):
         start = time.time()
@@ -1703,6 +2032,13 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
     try:
         import webview
 
+        try:
+            webview.settings["ALLOW_DOWNLOADS"] = True
+            webview.settings["ALLOW_FILE_URLS"] = True
+            webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
+        except Exception:
+            pass
+
         print("[CrossPost] Starting native app window with pywebview in maximized mode...")
         window = webview.create_window(
             title=title,
@@ -1711,6 +2047,7 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
             height=height,
             min_size=(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT),
             text_select=True,
+            easy_drag=False,
             confirm_close=False,
             maximized=True,
             js_api=app_api,
@@ -1753,6 +2090,13 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
             if res.returncode == 0:
                 import webview
 
+                try:
+                    webview.settings["ALLOW_DOWNLOADS"] = True
+                    webview.settings["ALLOW_FILE_URLS"] = True
+                    webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
+                except Exception:
+                    pass
+
                 print("[OK] pywebview engine ready. Launching window in maximized mode...")
                 window = webview.create_window(
                     title=title,
@@ -1761,6 +2105,7 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
                     height=height,
                     min_size=(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT),
                     text_select=True,
+                    easy_drag=False,
                     confirm_close=False,
                     maximized=True,
                     js_api=app_api,

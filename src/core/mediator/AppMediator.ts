@@ -50,6 +50,7 @@ import {
   saveCredentialsToVault,
   getSavedAccountVault,
   restoreFromVault,
+  restoreFromVaultAsync,
   deleteFromVault,
   syncVaultWithServer,
 } from '../../utils/accountVault';
@@ -223,7 +224,7 @@ export class AppMediator implements IMediatorArbitrator {
       if (hasBluesky || hasThreads) {
         const { blueskyIsDemo, threadsIsDemo } = checkIsDemoCredentials(this.credentials);
         if (this.credentials.isDemoMode || blueskyIsDemo || threadsIsDemo) {
-          const restored = restoreFromVault(this.credentials, 'all');
+          const restored = await restoreFromVaultAsync(this.credentials, 'all');
           restored.isDemoMode = false;
           this.credentials = restored;
           try {
@@ -503,6 +504,13 @@ export class AppMediator implements IMediatorArbitrator {
           restored.isDemoMode = false;
           this.credentials = restored;
           localStorage.setItem('cross_poster_creds', JSON.stringify(restored));
+
+          // バックグラウンドで完全復号化を完了して反映
+          restoreFromVaultAsync(this.credentials, 'all').then((full) => {
+            this.credentials = { ...full, isDemoMode: false };
+            localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
+            this.notifyListeners();
+          });
 
           if (prevWasDemo) {
             performCleanStateInitialization({
@@ -1099,6 +1107,13 @@ export class AppMediator implements IMediatorArbitrator {
         restoredCreds.isDemoMode = false;
         this.credentials = restoredCreds;
         localStorage.setItem('cross_poster_creds', JSON.stringify(restoredCreds));
+
+        // バックグラウンドで完全復号化を完了して反映
+        restoreFromVaultAsync(restoredCreds, 'all').then((full) => {
+          this.credentials = { ...full, isDemoMode: false };
+          localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
+          this.notifyListeners();
+        });
 
         this.addToast({
           type: 'success',

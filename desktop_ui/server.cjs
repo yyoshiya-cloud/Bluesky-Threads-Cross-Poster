@@ -4,6 +4,10 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -24,6 +28,9 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 
 // server.ts
 var server_exports = {};
+__export(server_exports, {
+  isTrulyPublicCdnUrl: () => isTrulyPublicCdnUrl
+});
 module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
@@ -121,7 +128,7 @@ var mediaStorage = /* @__PURE__ */ new Map();
 function resolveMediaBuffer(item) {
   const originalName = item.name || "";
   const ext = originalName.split(".").pop()?.toLowerCase() || "";
-  const isExplicitVideo = item.mediaType === "video" || ["mp4", "mov", "webm", "m4v"].includes(ext);
+  const isExplicitVideo = item.mediaType === "video" || item.mimeType && isVideoMime(item.mimeType) || ["mp4", "mov", "webm", "m4v"].includes(ext);
   if (item.mediaId) {
     const cached = mediaStorage.get(item.mediaId);
     if (cached) {
@@ -160,32 +167,66 @@ function sanitizeInput(val) {
   if (typeof val !== "string") return "";
   return val.trim().replace(/^['"`]|['"`]$/g, "").replace(/[\u3000]/g, " ").trim();
 }
-function getExtensionFromMime(mimeType) {
-  if (mimeType.includes("mp4")) return "mp4";
-  if (mimeType.includes("quicktime") || mimeType.includes("mov")) return "mov";
-  if (mimeType.includes("webm")) return "webm";
-  if (mimeType.includes("png")) return "png";
-  if (mimeType.includes("webp")) return "webp";
-  if (mimeType.includes("gif")) return "gif";
-  if (mimeType.includes("heic")) return "heic";
-  if (mimeType.includes("avif")) return "avif";
-  return "jpg";
-}
 function isVideoMime(mimeType) {
   return mimeType.startsWith("video/") || mimeType.includes("mp4") || mimeType.includes("quicktime") || mimeType.includes("webm");
 }
+function detectMediaFormat(buffer, declaredMime, fileName) {
+  const isVideo = isVideoMime(declaredMime || "") || ["mp4", "mov", "webm", "m4v"].some((vExt) => (fileName || "").toLowerCase().endsWith(`.${vExt}`));
+  if (isVideo) {
+    let ext2 = "mp4";
+    if (declaredMime?.includes("mov") || declaredMime?.includes("quicktime") || fileName?.toLowerCase().endsWith(".mov")) {
+      ext2 = "mov";
+    } else if (declaredMime?.includes("webm") || fileName?.toLowerCase().endsWith(".webm")) {
+      ext2 = "webm";
+    }
+    const rawBase2 = (fileName || "video").replace(/\.[^/.]+$/, "").trim().replace(/[^a-zA-Z0-9_\-\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/g, "_").slice(0, 40) || "video";
+    return {
+      mimeType: declaredMime && declaredMime.startsWith("video/") ? declaredMime : "video/mp4",
+      ext: ext2,
+      isVideo: true,
+      safeName: `${rawBase2}.${ext2}`
+    };
+  }
+  let ext = "jpg";
+  let mimeType = "image/jpeg";
+  if (buffer && buffer.length >= 8) {
+    if (buffer[0] === 137 && buffer[1] === 80 && buffer[2] === 78 && buffer[3] === 71) {
+      ext = "png";
+      mimeType = "image/png";
+    } else if (buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255) {
+      ext = "jpg";
+      mimeType = "image/jpeg";
+    }
+  }
+  const rawBase = (fileName || "image").replace(/\.[^/.]+$/, "").trim().replace(/[^a-zA-Z0-9_\-\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/g, "_").slice(0, 40) || "image";
+  return {
+    mimeType,
+    ext,
+    isVideo: false,
+    safeName: `${rawBase}.${ext}`
+  };
+}
+function isTrulyPublicCdnUrl(url) {
+  if (!url || typeof url !== "string" || !url.startsWith("http")) return false;
+  const lower = url.toLowerCase();
+  if (lower.includes("localhost") || lower.includes("127.0.0.1")) return false;
+  if (lower.includes(".run.app") || lower.includes(".internal") || lower.includes("/api/media/")) return false;
+  if (lower.includes("web.app") || lower.includes("firebaseapp.com")) return false;
+  if (lower.includes("tmpfiles.org")) return false;
+  return true;
+}
 async function uploadMediaToPublicHost(buffer, mimeType, fileName) {
-  const ext = getExtensionFromMime(mimeType);
-  const safeName = (fileName || "media").replace(/[^a-zA-Z0-9_-]/g, "_");
-  const uploadName = `${safeName}.${ext}`;
-  const isVideo = isVideoMime(mimeType);
+  const detected = detectMediaFormat(buffer, mimeType, fileName);
+  const uploadName = detected.safeName;
+  const effectiveMime = detected.mimeType;
+  const isVideo = detected.isVideo;
   const sizeMb = (buffer.length / 1024 / 1024).toFixed(2);
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const formData = new FormData();
-      formData.append("files[]", new Blob([buffer], { type: mimeType }), uploadName);
+      formData.append("files[]", new Blob([buffer], { type: effectiveMime }), uploadName);
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), isVideo ? 9e4 : 3e4);
+      const timeout = setTimeout(() => controller.abort(), isVideo ? 6e4 : 25e3);
       const res = await fetch("https://uguu.se/upload", {
         method: "POST",
         body: formData,
@@ -198,125 +239,117 @@ async function uploadMediaToPublicHost(buffer, mimeType, fileName) {
       if (res.ok) {
         const json = await res.json().catch(() => ({}));
         const url = json?.files?.[0]?.url;
-        if (url && typeof url === "string" && url.startsWith("http")) {
-          console.log(`[PublicMedia] Fast Upload to Uguu success: ${url} (${mimeType}, size: ${sizeMb}MB)`);
+        if (url && typeof url === "string" && url.startsWith("http") && isTrulyPublicCdnUrl(url)) {
+          console.log(`[PublicMedia] Fast Upload to Uguu success: ${url} (${effectiveMime}, size: ${sizeMb}MB)`);
           return url;
         }
       }
     } catch (err) {
       console.warn(`[PublicMedia] Uguu upload attempt #${attempt + 1} note: ${err.message}`);
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 1200));
-      }
-    }
-  }
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const formData = new FormData();
-      formData.append("reqtype", "fileupload");
-      formData.append("time", "24h");
-      formData.append("fileToUpload", new Blob([buffer], { type: mimeType }), uploadName);
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), isVideo ? 12e4 : 45e3);
-      const res = await fetch("https://litterbox.catbox.moe/resources/internals/api.php", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-      const text = (await res.text()).trim();
-      if (res.ok && text.startsWith("http")) {
-        console.log(`[PublicMedia] Uploaded to Litterbox success: ${text} (${mimeType}, size: ${sizeMb}MB)`);
-        return text;
-      }
-    } catch (err) {
-      console.warn(`[PublicMedia] Litterbox attempt #${attempt + 1} note: ${err.message}`);
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 1500));
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, 600));
       }
     }
   }
   return null;
 }
 async function uploadAllMediaForThreads(mediaList, baseUrl) {
-  const results = [];
-  const hasAnyVideo = mediaList.some((item) => {
+  const preparedResults = new Array(mediaList.length).fill(null);
+  const itemsToUpload = [];
+  for (let idx = 0; idx < mediaList.length; idx++) {
+    const item = mediaList[idx];
     const ext = (item.name || "").split(".").pop()?.toLowerCase() || "";
-    return item.mediaType === "video" || item.mimeType && isVideoMime(item.mimeType) || ["mp4", "mov", "webm", "m4v"].includes(ext) || item.dataUrl && item.dataUrl.startsWith("data:video/");
-  });
-  const BATCH_SIZE = hasAnyVideo ? 1 : 3;
-  for (let i = 0; i < mediaList.length; i += BATCH_SIZE) {
-    const batch = mediaList.slice(i, i + BATCH_SIZE);
-    const batchItems = await Promise.all(
-      batch.map(async (item, idx) => {
-        const globalIdx = i + idx;
-        const ext = (item.name || "").split(".").pop()?.toLowerCase() || "";
-        const isExplicitVideo = item.mediaType === "video" || item.mimeType && isVideoMime(item.mimeType) || ["mp4", "mov", "webm", "m4v"].includes(ext) || item.dataUrl && item.dataUrl.startsWith("data:video/");
-        if (item.dataUrl && (item.dataUrl.startsWith("http://") || item.dataUrl.startsWith("https://"))) {
-          if (!item.dataUrl.includes(".run.app") && !item.dataUrl.includes("localhost")) {
-            const detectedVideo = isExplicitVideo || isVideoMime(item.name || item.dataUrl);
-            return {
-              url: item.dataUrl,
-              type: detectedVideo ? "VIDEO" : "IMAGE",
-              alt: item.alt
-            };
-          }
-        }
-        const resolved = resolveMediaBuffer(item);
-        if (!resolved) {
-          console.warn(`[uploadAllMediaForThreads] Failed to resolve media buffer for item #${globalIdx + 1} (${item.name || "unnamed"})`);
-          return null;
-        }
-        const { buffer, mimeType } = resolved;
-        const isVideo = isExplicitVideo || isVideoMime(mimeType);
-        const mediaId = item.mediaId || import_crypto.default.randomBytes(16).toString("hex");
-        const existingCached = item.mediaId ? mediaStorage.get(item.mediaId) : null;
-        if (existingCached?.publicUrl) {
-          console.log(`[uploadAllMediaForThreads] Reusing cached public URL for #${globalIdx + 1}: ${existingCached.publicUrl}`);
-          return {
-            url: existingCached.publicUrl,
-            fallbackUrl: `${baseUrl}/api/media/${mediaId}`,
-            type: isVideo ? "VIDEO" : "IMAGE",
-            alt: item.alt
-          };
-        }
-        const cachedItem = existingCached || {
-          buffer,
-          mimeType,
-          createdAt: Date.now()
-        };
-        mediaStorage.set(mediaId, cachedItem);
-        const selfServerUrl = `${baseUrl}/api/media/${mediaId}`;
-        console.log(`[uploadAllMediaForThreads] Uploading item #${globalIdx + 1}/${mediaList.length} (${isVideo ? "VIDEO" : "IMAGE"}, ${(buffer.length / 1024 / 1024).toFixed(2)}MB) to public CDN...`);
-        const publicUrl = await uploadMediaToPublicHost(
-          buffer,
-          mimeType,
-          item.name || (isVideo ? `video_${globalIdx + 1}.${ext || "mp4"}` : `image_${globalIdx + 1}.${ext || "jpg"}`)
-        );
-        if (publicUrl) {
-          cachedItem.publicUrl = publicUrl;
-        } else {
-          console.warn(`[uploadAllMediaForThreads] Public CDN upload returned null for item #${globalIdx + 1}`);
-          const isDevOrInternal = baseUrl.includes(".run.app") || baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1");
-          if (isDevOrInternal) {
-            throw new Error(`[Threads \u30E1\u30C7\u30A3\u30A2\u8EE2\u9001\u30A8\u30E9\u30FC] \u30E1\u30C7\u30A3\u30A2 #${globalIdx + 1}\uFF08${item.name || (isVideo ? "\u52D5\u753B" : "\u753B\u50CF")}\uFF09\u306E\u5916\u90E8\u516C\u958B\u30DB\u30B9\u30C6\u30A3\u30F3\u30B0\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u540C\u6642\u6295\u7A3F\u306B\u3088\u308B\u30CD\u30C3\u30C8\u30EF\u30FC\u30AF\u6DF7\u96D1\u306E\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002\u518D\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002`);
-          }
-        }
-        return {
-          url: publicUrl || selfServerUrl,
-          fallbackUrl: selfServerUrl,
-          type: isVideo ? "VIDEO" : "IMAGE",
-          alt: item.alt
-        };
-      })
-    );
-    for (const resItem of batchItems) {
-      if (resItem) {
-        results.push(resItem);
-      }
+    const isExplicitVideo = item.mediaType === "video" || item.mimeType && isVideoMime(item.mimeType) || ["mp4", "mov", "webm", "m4v"].includes(ext) || item.dataUrl && item.dataUrl.startsWith("data:video/");
+    const explicitUrl = item.publicUrl && isTrulyPublicCdnUrl(item.publicUrl) ? item.publicUrl : item.dataUrl && isTrulyPublicCdnUrl(item.dataUrl) ? item.dataUrl : null;
+    if (explicitUrl) {
+      const detectedVideo = isExplicitVideo || isVideoMime(item.name || explicitUrl);
+      preparedResults[idx] = {
+        url: explicitUrl,
+        type: detectedVideo ? "VIDEO" : "IMAGE",
+        alt: item.alt
+      };
+      continue;
+    }
+    const resolved = resolveMediaBuffer(item);
+    if (!resolved) {
+      console.warn(`[uploadAllMediaForThreads] Failed to resolve media buffer for item #${idx + 1} (${item.name || "unnamed"})`);
+      continue;
+    }
+    const { buffer, mimeType } = resolved;
+    const isVideo = isExplicitVideo || isVideoMime(mimeType);
+    const mediaId = item.mediaId || import_crypto.default.randomBytes(16).toString("hex");
+    const existingCached = item.mediaId ? mediaStorage.get(item.mediaId) : null;
+    if (existingCached?.publicUrl && isTrulyPublicCdnUrl(existingCached.publicUrl)) {
+      console.log(`[uploadAllMediaForThreads] Reusing cached truly public URL for #${idx + 1}: ${existingCached.publicUrl}`);
+      preparedResults[idx] = {
+        url: existingCached.publicUrl,
+        fallbackUrl: `${baseUrl}/api/media/${mediaId}`,
+        type: isVideo ? "VIDEO" : "IMAGE",
+        alt: item.alt
+      };
+      continue;
+    }
+    const cachedItem = existingCached || {
+      buffer,
+      mimeType,
+      createdAt: Date.now()
+    };
+    mediaStorage.set(mediaId, cachedItem);
+    itemsToUpload.push({
+      index: idx,
+      buffer,
+      mimeType,
+      isVideo,
+      name: item.name || "",
+      alt: item.alt,
+      mediaId,
+      ext
+    });
+  }
+  const uploadSingleItem = async (info) => {
+    const { index, buffer, mimeType, isVideo, name, alt, mediaId, ext } = info;
+    const selfServerUrl = `${baseUrl}/api/media/${mediaId}`;
+    console.log(`[uploadAllMediaForThreads] Uploading item #${index + 1}/${mediaList.length} (${isVideo ? "VIDEO" : "IMAGE"}, ${(buffer.length / 1024 / 1024).toFixed(2)}MB) to public CDN...`);
+    let publicUrl = null;
+    try {
+      publicUrl = await uploadMediaToPublicHost(
+        buffer,
+        mimeType,
+        name || (isVideo ? `video_${index + 1}.${ext || "mp4"}` : `image_${index + 1}.${ext || "jpg"}`)
+      );
+    } catch (hostErr) {
+      console.warn(`[uploadAllMediaForThreads] uploadMediaToPublicHost notice for item #${index + 1}:`, hostErr.message);
+    }
+    const cachedItem = mediaStorage.get(mediaId);
+    const isPublic = isTrulyPublicCdnUrl(publicUrl);
+    if (publicUrl && isPublic && cachedItem) {
+      cachedItem.publicUrl = publicUrl;
+    }
+    if (!isPublic) {
+      console.warn(`[uploadAllMediaForThreads] Warning: external CDN upload did not resolve truly public URL for item #${index + 1}. Using selfServerUrl: ${selfServerUrl}`);
+    }
+    return {
+      url: isPublic && publicUrl ? publicUrl : selfServerUrl,
+      fallbackUrl: selfServerUrl,
+      type: isVideo ? "VIDEO" : "IMAGE",
+      alt
+    };
+  };
+  const imageItems = itemsToUpload.filter((i) => !i.isVideo);
+  const videoItems = itemsToUpload.filter((i) => i.isVideo);
+  for (let idx = 0; idx < imageItems.length; idx++) {
+    const item = imageItems[idx];
+    const uploaded = await uploadSingleItem(item);
+    preparedResults[item.index] = uploaded;
+    if (idx < imageItems.length - 1) {
+      await new Promise((r) => setTimeout(r, 150));
     }
   }
-  return results;
+  for (const vItem of videoItems) {
+    const uploaded = await uploadSingleItem(vItem);
+    preparedResults[vItem.index] = uploaded;
+  }
+  return preparedResults.filter((item) => item !== null);
 }
 async function checkContainerStatus(containerId, accessToken) {
   try {
@@ -488,7 +521,7 @@ async function generateBlueskyFacets(text, pdsEndpoint) {
 }
 async function startServer() {
   const app = (0, import_express.default)();
-  const PORT = 3e3;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3e3;
   app.use(import_express.default.json({ limit: "100mb" }));
   app.use(import_express.default.urlencoded({ extended: true, limit: "100mb" }));
   app.use("/api", (req, _res, next) => {
@@ -519,6 +552,70 @@ async function startServer() {
   });
   app.post("/api/clipboard/write", import_express.default.json(), (_req, res) => {
     res.json({ status: "ok" });
+  });
+  const DATA_DIR = import_path.default.resolve(process.cwd(), "data");
+  const VAULT_FILE_PATH = import_path.default.join(DATA_DIR, "account_vault.json");
+  if (!import_fs.default.existsSync(DATA_DIR)) {
+    try {
+      import_fs.default.mkdirSync(DATA_DIR, { recursive: true });
+    } catch (e) {
+      console.warn("[Server Storage] Failed to create data directory:", e);
+    }
+  }
+  app.get("/api/credentials/vault", (_req, res) => {
+    try {
+      if (import_fs.default.existsSync(VAULT_FILE_PATH)) {
+        const raw = import_fs.default.readFileSync(VAULT_FILE_PATH, "utf-8");
+        const data = JSON.parse(raw);
+        res.json({ success: true, vault: data });
+        return;
+      }
+      res.json({ success: true, vault: {} });
+    } catch (err) {
+      console.error("[Server Storage] Error reading vault file:", err);
+      res.status(500).json({ success: false, error: err.message, vault: {} });
+    }
+  });
+  app.post("/api/credentials/vault", import_express.default.json({ limit: "2mb" }), (req, res) => {
+    try {
+      const payload = req.body;
+      if (!payload || typeof payload !== "object") {
+        res.status(400).json({ success: false, error: "Invalid payload" });
+        return;
+      }
+      if (!import_fs.default.existsSync(DATA_DIR)) {
+        import_fs.default.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      import_fs.default.writeFileSync(VAULT_FILE_PATH, JSON.stringify(payload, null, 2), "utf-8");
+      console.log("[Server Storage] Successfully persisted account vault to server disk.");
+      res.json({ success: true, savedAt: Date.now() });
+    } catch (err) {
+      console.error("[Server Storage] Error writing vault file:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+  app.delete("/api/credentials/vault", (req, res) => {
+    try {
+      const platform = req.query.platform;
+      if (import_fs.default.existsSync(VAULT_FILE_PATH)) {
+        if (!platform || platform === "all") {
+          import_fs.default.unlinkSync(VAULT_FILE_PATH);
+        } else {
+          const raw = import_fs.default.readFileSync(VAULT_FILE_PATH, "utf-8");
+          const data = JSON.parse(raw);
+          if (platform === "bluesky") {
+            delete data.bluesky;
+          } else if (platform === "threads") {
+            delete data.threads;
+          }
+          import_fs.default.writeFileSync(VAULT_FILE_PATH, JSON.stringify(data, null, 2), "utf-8");
+        }
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[Server Storage] Error deleting vault file:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
   const ogpCache = /* @__PURE__ */ new Map();
   app.get("/api/ogp", async (req, res) => {
@@ -988,31 +1085,35 @@ ${cleanText}
       }
       const mediaId = import_crypto.default.randomBytes(16).toString("hex");
       const originalName = req.file.originalname || "media";
-      const ext = originalName.split(".").pop()?.toLowerCase() || "";
-      let mimeType = req.file.mimetype || "application/octet-stream";
-      if (ext === "mp4" || ext === "m4v") {
-        mimeType = "video/mp4";
-      } else if (ext === "mov") {
-        mimeType = "video/quicktime";
-      } else if (ext === "webm") {
-        mimeType = "video/webm";
-      } else if (ext === "jpg" || ext === "jpeg") {
-        mimeType = "image/jpeg";
-      } else if (ext === "png") {
-        mimeType = "image/png";
-      }
-      const isVideo = isVideoMime(mimeType) || ["mp4", "mov", "webm", "m4v"].includes(ext);
-      if (isVideo && (!mimeType.startsWith("video/") || mimeType === "application/octet-stream")) {
-        mimeType = "video/mp4";
-      }
+      const detected = detectMediaFormat(req.file.buffer, req.file.mimetype, originalName);
+      const mimeType = detected.mimeType;
+      const isVideo = detected.isVideo;
+      const safeUploadName = detected.safeName;
+      const proto = req.headers["x-forwarded-proto"] || "https";
+      const rawHost = (req.headers["x-forwarded-host"] || req.get("host") || "localhost").toString();
+      const cleanHost = rawHost.split(",")[0].trim().replace(/:3000$/, "");
+      const baseUrl = `${proto}://${cleanHost}`;
+      const selfServerUrl = `${baseUrl}/api/media/${mediaId}`;
       mediaStorage.set(mediaId, {
         buffer: req.file.buffer,
         mimeType,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        // 内部URLをpublicUrlと誤認させないため、初期値はundefinedにする
+        publicUrl: void 0
+      });
+      uploadMediaToPublicHost(req.file.buffer, mimeType, safeUploadName).then((extUrl) => {
+        if (extUrl && isTrulyPublicCdnUrl(extUrl)) {
+          const stored = mediaStorage.get(mediaId);
+          if (stored) {
+            stored.publicUrl = extUrl;
+          }
+        }
+      }).catch(() => {
       });
       res.json({
         success: true,
         mediaId,
+        publicUrl: selfServerUrl,
         mimeType,
         size: req.file.size,
         name: req.file.originalname,
@@ -1023,6 +1124,50 @@ ${cleanText}
       res.status(500).json({
         success: false,
         error: `\u30E1\u30C7\u30A3\u30A2\u306E\u53D7\u4FE1\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${err.message || "\u4E0D\u660E\u306A\u30A8\u30E9\u30FC"}`
+      });
+    }
+  });
+  app.post("/api/media/upload-public", uploadMiddleware.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ success: false, error: "\u30A2\u30C3\u30D7\u30ED\u30FC\u30C9\u3055\u308C\u305F\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308A\u307E\u305B\u3093\u3002" });
+        return;
+      }
+      const mediaId = import_crypto.default.randomBytes(16).toString("hex");
+      const originalName = req.file.originalname || "media";
+      const detected = detectMediaFormat(req.file.buffer, req.file.mimetype, originalName);
+      const mimeType = detected.mimeType;
+      const isVideo = detected.isVideo;
+      const safeUploadName = detected.safeName;
+      let publicUrl = await uploadMediaToPublicHost(req.file.buffer, mimeType, safeUploadName);
+      const proto = req.headers["x-forwarded-proto"] || "https";
+      const rawHost = (req.headers["x-forwarded-host"] || req.get("host") || "localhost").toString();
+      const cleanHost = rawHost.split(",")[0].trim().replace(/:3000$/, "");
+      const baseUrl = `${proto}://${cleanHost}`;
+      const selfServerUrl = `${baseUrl}/api/media/${mediaId}`;
+      const trulyPublic = isTrulyPublicCdnUrl(publicUrl);
+      mediaStorage.set(mediaId, {
+        buffer: req.file.buffer,
+        mimeType,
+        createdAt: Date.now(),
+        publicUrl: trulyPublic ? publicUrl : void 0
+      });
+      console.log(`[upload-public] Processed mediaId: ${mediaId}, publicUrl: ${publicUrl || selfServerUrl}, isTrulyPublic: ${trulyPublic}`);
+      res.json({
+        success: true,
+        mediaId,
+        publicUrl: trulyPublic && publicUrl ? publicUrl : selfServerUrl,
+        isTrulyPublic: trulyPublic,
+        mimeType,
+        size: req.file.size,
+        name: req.file.originalname,
+        mediaType: isVideo ? "video" : "image"
+      });
+    } catch (err) {
+      console.error("Media upload-public error:", err);
+      res.status(500).json({
+        success: false,
+        error: `\u30D1\u30D6\u30EA\u30C3\u30AF\u30E1\u30C7\u30A3\u30A2\u306E\u30A2\u30C3\u30D7\u30ED\u30FC\u30C9\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${err.message || "\u4E0D\u660E\u306A\u30A8\u30E9\u30FC"}`
       });
     }
   });
@@ -1161,6 +1306,725 @@ ${cleanText}
     }
     throw new Error("Bluesky\u3078\u306E\u52D5\u753B\u30A2\u30C3\u30D7\u30ED\u30FC\u30C9\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u30D5\u30A1\u30A4\u30EB\u5F62\u5F0F(MP4/MOV)\u304A\u3088\u3073\u30B5\u30A4\u30BA(\u6700\u592750MB)\u3092\u3054\u78BA\u8A8D\u304F\u3060\u3055\u3044\u3002");
   }
+  function parseBlueskyUrlOrUri(input) {
+    if (typeof input !== "string") return null;
+    const clean = input.trim();
+    const atMatch = clean.match(/^at:\/\/([a-zA-Z0-9.:_-]+)\/app\.bsky\.feed\.post\/([a-zA-Z0-9]+)$/);
+    if (atMatch) {
+      return { handleOrDid: atMatch[1], rkey: atMatch[2] };
+    }
+    const webMatch = clean.match(/bsky\.app\/profile\/([a-zA-Z0-9.:_-]+)\/post\/([a-zA-Z0-9]+)/);
+    if (webMatch) {
+      return { handleOrDid: webMatch[1], rkey: webMatch[2] };
+    }
+    return null;
+  }
+  function convertToThreadsUrl(username, postId) {
+    let cleanUser = (username || "").trim();
+    if (cleanUser.includes("threads.") || cleanUser.includes("/@")) {
+      const userMatch = cleanUser.match(/@([a-zA-Z0-9._]+)/);
+      if (userMatch) cleanUser = userMatch[1];
+    }
+    cleanUser = cleanUser.replace(/^@+/, "").replace(/\/+$/, "").trim();
+    let cleanId = (postId || "").trim();
+    if (cleanId.includes("threads.") || cleanId.includes("/post/") || cleanId.includes("/t/")) {
+      const idMatch = cleanId.match(/\/(?:post|t|share)\/([a-zA-Z0-9_\-]+)/i);
+      if (idMatch) cleanId = idMatch[1];
+    }
+    cleanId = cleanId.split("?")[0].split("#")[0].replace(/^\/+/, "").replace(/\/+$/, "").trim();
+    if (!cleanUser && !cleanId) return "https://www.threads.net";
+    if (!cleanUser) return `https://www.threads.net/post/${cleanId}`;
+    if (!cleanId) return `https://www.threads.net/@${cleanUser}`;
+    return `https://www.threads.net/@${cleanUser}/post/${cleanId}`;
+  }
+  function extractUsernameFromThreadsUrl(url) {
+    if (!url || typeof url !== "string") return null;
+    const clean = url.trim().split("?")[0].split("#")[0];
+    if (clean.includes("bsky.app") || clean.includes("bsky.social") || clean.startsWith("at://") || clean.includes("/profile/")) {
+      return null;
+    }
+    const match = clean.match(/(?:threads\.(?:net|com)\/)?@([a-zA-Z0-9._]+)/i);
+    if (match) return match[1];
+    const directMatch = clean.match(/threads\.(?:net|com)\/([a-zA-Z0-9._]+)\/post\//i);
+    if (directMatch && !["post", "t", "share", "intent"].includes(directMatch[1].toLowerCase())) {
+      return directMatch[1];
+    }
+    return null;
+  }
+  function checkThreadsPostOwnershipMatch(formattedOrInputUrl, authenticatedUsername) {
+    const extracted = extractUsernameFromThreadsUrl(formattedOrInputUrl);
+    const cleanAuth = (authenticatedUsername || "").replace(/^@/, "").trim().toLowerCase();
+    if (!extracted) {
+      return {
+        isMatch: null,
+        extractedUsername: null,
+        authenticatedUsername: cleanAuth || null,
+        formattedUrl: formattedOrInputUrl,
+        reason: "URL\u304B\u3089\u30E6\u30FC\u30B6\u30FC\u540D\u304C\u691C\u51FA\u3055\u308C\u307E\u305B\u3093\u3067\u3057\u305F"
+      };
+    }
+    const cleanExtracted = extracted.replace(/^@/, "").trim().toLowerCase();
+    if (!cleanAuth) {
+      return {
+        isMatch: null,
+        extractedUsername: extracted,
+        authenticatedUsername: null,
+        formattedUrl: formattedOrInputUrl,
+        reason: "\u8A8D\u8A3C\u30A2\u30AB\u30A6\u30F3\u30C8\u672A\u8A2D\u5B9A"
+      };
+    }
+    const isMatch = cleanExtracted === cleanAuth;
+    const formattedUrl = convertToThreadsUrl(cleanExtracted, formattedOrInputUrl);
+    return {
+      isMatch,
+      extractedUsername: extracted,
+      authenticatedUsername: cleanAuth,
+      formattedUrl,
+      reason: isMatch ? `\u62BD\u51FA\u30E6\u30FC\u30B6\u30FC\u540D\uFF08@${extracted}\uFF09\u3068\u5229\u7528\u8005\u306E\u767B\u9332\u30A2\u30AB\u30A6\u30F3\u30C8\uFF08@${cleanAuth}\uFF09\u304C\u4E00\u81F4\u3057\u307E\u3057\u305F\uFF08\u540C\u4E00\u4EBA\u7269\u78BA\u8A8D\u6E08\uFF09` : `\u62BD\u51FA\u30E6\u30FC\u30B6\u30FC\u540D\uFF08@${extracted}\uFF09\u306F\u5229\u7528\u8005\u306E\u767B\u9332\u30A2\u30AB\u30A6\u30F3\u30C8\uFF08@${cleanAuth}\uFF09\u3068\u7570\u306A\u308A\u307E\u3059\uFF08\u4ED6\u8005\u6295\u7A3F\uFF09`
+    };
+  }
+  function parseThreadsUrlOrId(input) {
+    if (typeof input !== "string") return null;
+    let clean = input.trim().replace(/^<|>$/g, "");
+    const cleanWithoutQuery = clean.split("?")[0].split("#")[0].replace(/\/+$/, "");
+    if (clean.includes("bsky.app") || clean.includes("bsky.social") || clean.startsWith("at://") || clean.includes("/profile/")) {
+      return null;
+    }
+    if (/^\d{10,25}$/.test(cleanWithoutQuery)) {
+      return { codeOrId: cleanWithoutQuery, isNumericId: true };
+    }
+    const userPostMatch = cleanWithoutQuery.match(/(?:threads\.(?:net|com)\/)?@?([a-zA-Z0-9._]+)\/post\/([a-zA-Z0-9_\-]+)/i);
+    if (userPostMatch && (clean.includes("threads.") || clean.startsWith("@") || clean.includes("/post/"))) {
+      return { username: userPostMatch[1], codeOrId: userPostMatch[2], isNumericId: /^\d+$/.test(userPostMatch[2]) };
+    }
+    const simplePostMatch = cleanWithoutQuery.match(/threads\.(?:net|com)\/post\/([a-zA-Z0-9_\-]+)/i);
+    if (simplePostMatch) {
+      return { codeOrId: simplePostMatch[1], isNumericId: /^\d+$/.test(simplePostMatch[1]) };
+    }
+    const shortMatch = cleanWithoutQuery.match(/threads\.(?:net|com)\/t\/([a-zA-Z0-9_\-]+)/i);
+    if (shortMatch) {
+      return { codeOrId: shortMatch[1], isNumericId: /^\d+$/.test(shortMatch[1]) };
+    }
+    const shareMatch = cleanWithoutQuery.match(/threads\.(?:net|com)\/share\/([a-zA-Z0-9_\-]+)/i);
+    if (shareMatch) {
+      return { codeOrId: shareMatch[1], isNumericId: /^\d+$/.test(shareMatch[1]) };
+    }
+    return null;
+  }
+  function decodeThreadsShortcodeToNumericId(code) {
+    if (!code) return null;
+    if (/^\d+$/.test(code)) return code;
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let id = 0n;
+    for (let i = 0; i < code.length; i++) {
+      const char = code[i];
+      const val = BigInt(alphabet.indexOf(char));
+      if (val < 0n) return null;
+      id = id * 64n + val;
+    }
+    return id.toString();
+  }
+  async function unshortenThreadsUrl(url) {
+    if (!url || typeof url !== "string") return { url, textSnippet: null };
+    const clean = url.trim();
+    if (!clean.startsWith("http://") && !clean.startsWith("https://")) return { url: clean, textSnippet: null };
+    if (clean.includes("threads.com") || clean.includes("threads.net")) {
+      try {
+        const res = await fetch(clean, {
+          method: "GET",
+          headers: {
+            "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+          }
+        });
+        const html = await res.text();
+        const canonicalMatch = html.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i) || html.match(/<meta[^>]+property="og:url"[^>]+content="([^"]+)"/i);
+        const descMatch = html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i);
+        const canonicalUrl = canonicalMatch ? canonicalMatch[1].replace(/&#064;/g, "@").split("?")[0] : null;
+        const textSnippet = descMatch ? descMatch[1].replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16))) : null;
+        if (canonicalUrl) {
+          console.log(`[unshortenThreadsUrl] Resolved ${clean} -> ${canonicalUrl}`);
+          return { url: canonicalUrl, textSnippet };
+        }
+        if (res.url && res.url !== clean) {
+          const redirectUrl = res.url.split("?")[0];
+          console.log(`[unshortenThreadsUrl] Followed redirect ${clean} -> ${redirectUrl}`);
+          return { url: redirectUrl, textSnippet };
+        }
+      } catch (err) {
+        console.warn("[unshortenThreadsUrl] Redirect follow error:", err);
+      }
+    }
+    return { url: clean, textSnippet: null };
+  }
+  app.post("/api/reply/resolve-target", async (req, res) => {
+    try {
+      const { platform, urlOrId, credentials = {} } = req.body;
+      const cleanInput = sanitizeInput(urlOrId).trim();
+      if (!cleanInput) {
+        res.status(400).json({ success: false, error: "\u6295\u7A3FURL\u307E\u305F\u306FID\u304C\u5165\u529B\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002" });
+        return;
+      }
+      let resolvedPlatform = platform;
+      if (!resolvedPlatform || resolvedPlatform === "auto") {
+        if (parseBlueskyUrlOrUri(cleanInput) || cleanInput.includes("bsky.app") || cleanInput.startsWith("at://")) {
+          resolvedPlatform = "Bluesky";
+        } else if (parseThreadsUrlOrId(cleanInput) || cleanInput.includes("threads.com") || cleanInput.includes("threads.net")) {
+          resolvedPlatform = "Threads";
+        } else {
+          res.status(400).json({
+            success: false,
+            error: "URL\u304B\u3089Bluesky\u307E\u305F\u306FThreads\u306E\u6295\u7A3F\u3092\u81EA\u52D5\u5224\u5B9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002https://bsky.app/... \u307E\u305F\u306F https://www.threads.com/... \u306E\u6295\u7A3FURL\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+          });
+          return;
+        }
+      }
+      const isDemoMode = Boolean(credentials.isDemoMode) || resolvedPlatform === "Bluesky" && (credentials.blueskyIdentifier || "").includes("demo") || resolvedPlatform === "Threads" && (credentials.threadsAccessToken || "").includes("demo");
+      if (resolvedPlatform === "Bluesky") {
+        const isBskyFormat = /^https?:\/\/(?:[a-zA-Z0-9-]+\.)?bsky\.app\/profile\/[^\s/]+\/post\/[^\s/]+/i.test(cleanInput) || cleanInput.startsWith("at://") || Boolean(parseBlueskyUrlOrUri(cleanInput));
+        if (!isBskyFormat) {
+          res.status(400).json({
+            success: false,
+            error: "Bluesky\u306E\u6295\u7A3FURL\u306F\u300Chttps://bsky.app/profile/.../post/...\u300D\u306E\u5F62\u5F0F\u3067\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+          });
+          return;
+        }
+        const parsed = parseBlueskyUrlOrUri(cleanInput);
+        if (!parsed) {
+          res.status(400).json({
+            success: false,
+            error: "Bluesky\u306E\u6295\u7A3FURL\uFF08https://bsky.app/profile/.../post/...\uFF09\u307E\u305F\u306F AT-URI\uFF08at://...\uFF09\u306E\u5F62\u5F0F\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093\u3002"
+          });
+          return;
+        }
+        if (isDemoMode) {
+          res.json({
+            success: true,
+            target: {
+              platform: "Bluesky",
+              urlOrId: cleanInput,
+              resolvedId: `at://did:plc:democreator1029384756/app.bsky.feed.post/${parsed.rkey}`,
+              cid: "bafyreidemo1234567890abcdef",
+              rootUri: `at://did:plc:democreator1029384756/app.bsky.feed.post/${parsed.rkey}`,
+              rootCid: "bafyreidemo1234567890abcdef",
+              authorName: parsed.handleOrDid.includes("demo") ? "\u30C7\u30E2\u30AF\u30EA\u30A8\u30A4\u30BF\u30FC" : `@${parsed.handleOrDid}`,
+              authorHandle: parsed.handleOrDid.includes(".") ? parsed.handleOrDid : `${parsed.handleOrDid}.bsky.social`,
+              authorAvatar: void 0,
+              textSnippet: "\u3010\u30C7\u30E2\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u3011Bluesky\u8FD4\u4FE1\u5148\u6295\u7A3F\u306EURL\u5F62\u5F0F\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F\u3002\u30EA\u30D7\u30E9\u30A4\u6295\u7A3F\u306E\u30B7\u30DF\u30E5\u30EC\u30FC\u30C8\u304C\u53EF\u80FD\u3067\u3059\u3002",
+              createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+              isOwnPost: true,
+              isOwnerMatch: true,
+              canReply: true,
+              verifiedCanReply: true,
+              checkStatusMessage: "\u30C7\u30E2\u30B7\u30DF\u30E5\u30EC\u30FC\u30C8\u53EF\u80FD\uFF08https://bsky.app/... \u5F62\u5F0F\u78BA\u8A8D\u6E08\uFF09"
+            }
+          });
+          return;
+        }
+        try {
+          let did = parsed.handleOrDid;
+          if (!did.startsWith("did:")) {
+            const resolveRes = await fetch(
+              `https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(did)}`
+            );
+            if (resolveRes.ok) {
+              const rData = await resolveRes.json();
+              if (rData.did) did = rData.did;
+            }
+          }
+          const atUri = `at://${did}/app.bsky.feed.post/${parsed.rkey}`;
+          const threadRes = await fetch(
+            `https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=${encodeURIComponent(atUri)}&depth=0`
+          );
+          if (!threadRes.ok) {
+            const errData = await threadRes.json().catch(() => ({}));
+            res.status(404).json({
+              success: false,
+              error: `Bluesky\u6295\u7A3F\u306E\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${errData.message || threadRes.statusText || "\u6295\u7A3F\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093"}`
+            });
+            return;
+          }
+          const threadData = await threadRes.json();
+          const post = threadData?.thread?.post;
+          if (!post) {
+            res.status(404).json({ success: false, error: "\u6307\u5B9A\u3055\u308C\u305FBluesky\u6295\u7A3F\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\u3002" });
+            return;
+          }
+          const recordReply = post.record?.reply;
+          const rootUri = recordReply?.root?.uri || post.uri;
+          const rootCid = recordReply?.root?.cid || post.cid;
+          const currentHandle = (credentials.blueskyHandle || credentials.blueskyIdentifier || "").toLowerCase();
+          const isOwnPost = (post.author?.handle || "").toLowerCase() === currentHandle || post.author?.did === credentials.blueskyDid;
+          res.json({
+            success: true,
+            target: {
+              platform: "Bluesky",
+              urlOrId: cleanInput,
+              resolvedId: post.uri,
+              cid: post.cid,
+              rootUri,
+              rootCid,
+              authorName: post.author?.displayName || post.author?.handle,
+              authorHandle: post.author?.handle,
+              authorAvatar: post.author?.avatar,
+              textSnippet: post.record?.text || "",
+              textExcerpt: post.record?.text ? post.record.text.slice(0, 180) : "",
+              createdAt: post.record?.createdAt || post.indexedAt,
+              isOwnPost,
+              canReply: true
+              // Bluesky は他人の投稿にも自分の投稿にも公式APIでリプライ可能
+            }
+          });
+          return;
+        } catch (fetchErr) {
+          res.status(500).json({
+            success: false,
+            error: `Bluesky\u6295\u7A3F\u60C5\u5831\u53D6\u5F97\u30A8\u30E9\u30FC: ${fetchErr.message || "\u901A\u4FE1\u306B\u5931\u6557\u3057\u307E\u3057\u305F"}`
+          });
+          return;
+        }
+      }
+      if (resolvedPlatform === "Threads") {
+        const isThreadsUrlFormat = /^https?:\/\/(?:[a-zA-Z0-9-]+\.)?threads\.(?:com|net)\/[^\s]+/i.test(cleanInput) || /^\d{10,25}$/.test(cleanInput);
+        if (!isThreadsUrlFormat) {
+          res.status(400).json({
+            success: false,
+            error: "Threads\u306E\u6295\u7A3FURL\u306F\u300Chttps://www.threads.com/...\u300D\u307E\u305F\u306F\u300Chttps://www.threads.net/...\u300D\u306E\u5F62\u5F0F\u3067\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+          });
+          return;
+        }
+        let targetUrlOrInput = cleanInput;
+        let unshortenedSnippet = null;
+        if (targetUrlOrInput.startsWith("http://") || targetUrlOrInput.startsWith("https://")) {
+          const unshortened = await unshortenThreadsUrl(targetUrlOrInput);
+          targetUrlOrInput = unshortened.url;
+          unshortenedSnippet = unshortened.textSnippet;
+        }
+        const parsed = parseThreadsUrlOrId(targetUrlOrInput) || parseThreadsUrlOrId(cleanInput);
+        if (!parsed) {
+          res.status(400).json({
+            success: false,
+            error: "Threads\u306E\u6295\u7A3FURL\uFF08https://www.threads.com/@user/post/... \u307E\u305F\u306F /share/... \u7B49\uFF09\u306E\u5F62\u5F0F\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093\u3002"
+          });
+          return;
+        }
+        const threadsToken = sanitizeInput(credentials.threadsAccessToken);
+        if (isDemoMode || !threadsToken) {
+          const displayUsername = parsed.username || credentials.threadsUsername || "Demo_User";
+          res.json({
+            success: true,
+            target: {
+              platform: "Threads",
+              urlOrId: targetUrlOrInput,
+              resolvedId: parsed.codeOrId || "demo_threads_post_123",
+              permalink: targetUrlOrInput,
+              authorName: displayUsername,
+              authorHandle: displayUsername.replace(/^@/, ""),
+              textExcerpt: unshortenedSnippet || "\u3010\u30C7\u30E2\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u3011Threads\u6295\u7A3FURL\u5F62\u5F0F\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F\u3002\u30EA\u30D7\u30E9\u30A4\u6295\u7A3F\u306E\u30B7\u30DF\u30E5\u30EC\u30FC\u30C8\u304C\u53EF\u80FD\u3067\u3059\u3002",
+              textSnippet: unshortenedSnippet || "\u3010\u30C7\u30E2\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u3011Threads\u6295\u7A3FURL\u5F62\u5F0F\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F\u3002\u30EA\u30D7\u30E9\u30A4\u6295\u7A3F\u306E\u30B7\u30DF\u30E5\u30EC\u30FC\u30C8\u304C\u53EF\u80FD\u3067\u3059\u3002",
+              createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+              isOwnPost: true,
+              isOwnerMatch: true,
+              canReply: true,
+              isDemoSkipped: false,
+              verifiedCanReply: true,
+              checkStatusMessage: "\u30C7\u30E2\u30B7\u30DF\u30E5\u30EC\u30FC\u30C8\u53EF\u80FD\uFF08Threads URL\u5F62\u5F0F\u78BA\u8A8D\u6E08\uFF09"
+            }
+          });
+          return;
+        }
+        const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username&access_token=${threadsToken}`);
+        const meData = await meRes.json().catch(() => ({}));
+        if (!meRes.ok || !meData.id) {
+          res.status(401).json({
+            success: false,
+            error: `Threads\u30A2\u30AB\u30A6\u30F3\u30C8\u306E\u8A8D\u8A3C\u78BA\u8A8D\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${meData?.error?.message || meRes.statusText}`
+          });
+          return;
+        }
+        const currentUserId = String(meData.id);
+        const currentUsername = String(meData.username || "").toLowerCase();
+        const isUserMatch = parsed.username ? parsed.username.replace(/^@/, "").toLowerCase() === currentUsername : null;
+        if (parsed.username && isUserMatch === false) {
+          res.json({
+            success: true,
+            target: {
+              platform: "Threads",
+              urlOrId: targetUrlOrInput,
+              resolvedId: parsed.codeOrId,
+              permalink: targetUrlOrInput,
+              authorName: parsed.username,
+              authorHandle: parsed.username,
+              textSnippet: "\uFF08\u4ED6\u30E6\u30FC\u30B6\u30FC\u306E\u30A2\u30AB\u30A6\u30F3\u30C8\u6295\u7A3F\uFF09",
+              textExcerpt: "\uFF08\u4ED6\u30E6\u30FC\u30B6\u30FC\u306E\u30A2\u30AB\u30A6\u30F3\u30C8\u6295\u7A3F\uFF09",
+              isOwnPost: false,
+              isOwnerMatch: false,
+              canReply: false,
+              verifiedCanReply: false,
+              error: `Threads API\u306E\u5236\u9650\u306B\u3088\u308A\u3001\u73FE\u5728\u9023\u643A\u4E2D\u306E\u3054\u81EA\u8EAB\u306E\u30A2\u30AB\u30A6\u30F3\u30C8\uFF08@${meData.username}\uFF09\u306E\u6295\u7A3F\u306B\u306E\u307F\u30EA\u30D7\u30E9\u30A4\u53EF\u80FD\u3067\u3059\u3002\u6307\u5B9A\u3055\u308C\u305FURL\u306E\u6295\u7A3F\u8005\uFF08@${parsed.username}\uFF09\u306F\u7570\u306A\u308B\u30A2\u30AB\u30A6\u30F3\u30C8\u306E\u305F\u3081\u30EA\u30D7\u30E9\u30A4\u3067\u304D\u307E\u305B\u3093\u3002`,
+              checkStatusMessage: `\u4ED6\u8005\u30A2\u30AB\u30A6\u30F3\u30C8\uFF08@${parsed.username}\uFF09\u306E\u305F\u3081\u30EA\u30D7\u30E9\u30A4\u4E0D\u53EF`
+            }
+          });
+          return;
+        }
+        const decodedNumericId = decodeThreadsShortcodeToNumericId(parsed.codeOrId);
+        let matchedItem = null;
+        try {
+          const threadsListRes = await fetch(
+            `https://graph.threads.net/v1.0/me/threads?fields=id,media_type,text,timestamp,permalink,username&limit=100&access_token=${threadsToken}`
+          );
+          if (threadsListRes.ok) {
+            const threadsListData = await threadsListRes.json();
+            const list = threadsListData.data || [];
+            matchedItem = list.find((item) => {
+              if (item.id === parsed.codeOrId || decodedNumericId && item.id === decodedNumericId) return true;
+              if (item.permalink && (item.permalink.includes(parsed.codeOrId) || item.permalink === cleanInput || item.permalink === targetUrlOrInput || decodedNumericId && item.permalink.includes(decodedNumericId)))
+                return true;
+              return false;
+            });
+          }
+        } catch (listErr) {
+          console.warn("[Threads Reply] Failed to fetch /me/threads:", listErr);
+        }
+        let targetMediaId = matchedItem ? matchedItem.id : decodedNumericId || (parsed.isNumericId ? parsed.codeOrId : null);
+        let postSnippet = matchedItem?.text || unshortenedSnippet || "";
+        let postCreatedAt = matchedItem?.timestamp || (/* @__PURE__ */ new Date()).toISOString();
+        let isOwnerConfirmed = Boolean(matchedItem) || isUserMatch === true;
+        if (targetMediaId && !matchedItem) {
+          try {
+            const mediaRes = await fetch(
+              `https://graph.threads.net/v1.0/${targetMediaId}?fields=id,text,timestamp,username,permalink,owner&access_token=${threadsToken}`
+            );
+            const mediaData = await mediaRes.json().catch(() => ({}));
+            if (mediaRes.ok && mediaData.id) {
+              const mediaOwnerId = String(mediaData.owner?.id || "");
+              const mediaUsername = String(mediaData.username || "").toLowerCase();
+              if (mediaOwnerId === currentUserId || mediaUsername === currentUsername || !mediaData.owner) {
+                targetMediaId = mediaData.id;
+                postSnippet = mediaData.text || "\uFF08\u30E1\u30C7\u30A3\u30A2\u6295\u7A3F\uFF09";
+                postCreatedAt = mediaData.timestamp || postCreatedAt;
+                isOwnerConfirmed = true;
+              }
+            }
+          } catch (mErr) {
+            console.warn("[Threads Reply] Single media check failed:", mErr);
+          }
+        }
+        if (!targetMediaId && !isOwnerConfirmed) {
+          res.json({
+            success: true,
+            target: {
+              platform: "Threads",
+              urlOrId: targetUrlOrInput,
+              resolvedId: parsed.codeOrId,
+              permalink: targetUrlOrInput,
+              authorName: parsed.username || "\u4ED6\u30A2\u30AB\u30A6\u30F3\u30C8\u307E\u305F\u306F\u4E0D\u660E",
+              authorHandle: parsed.username || "unknown",
+              textSnippet: "\uFF08Threads API\u306E\u5236\u9650\u306B\u3088\u308A\u4ED6\u8005\u306E\u6295\u7A3F\u307E\u305F\u306F\u672A\u53D6\u5F97\u306E\u6295\u7A3F\u306B\u306F\u30EA\u30D7\u30E9\u30A4\u3067\u304D\u307E\u305B\u3093\uFF09",
+              textExcerpt: "\uFF08Threads API\u306E\u5236\u9650\u306B\u3088\u308A\u4ED6\u8005\u306E\u6295\u7A3F\u307E\u305F\u306F\u672A\u53D6\u5F97\u306E\u6295\u7A3F\u306B\u306F\u30EA\u30D7\u30E9\u30A4\u3067\u304D\u307E\u305B\u3093\uFF09",
+              isOwnPost: false,
+              isOwnerMatch: false,
+              canReply: false,
+              verifiedCanReply: false,
+              error: `Threads\u6295\u7A3F\u306E\u6240\u6709\u6A29\u3092\u78BA\u8A8D\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002Threads API\u306E\u516C\u5F0F\u4ED5\u69D8\u4E0A\u3001\u3054\u81EA\u8EAB\u306E\u30A2\u30AB\u30A6\u30F3\u30C8\uFF08@${meData.username}\uFF09\u3067\u6295\u7A3F\u3057\u305F\u30B9\u30EC\u30C3\u30C9\u306E\u307F\u30EA\u30D7\u30E9\u30A4\u5BFE\u8C61\u306B\u6307\u5B9A\u3067\u304D\u307E\u3059\u3002\u300C\u81EA\u5206\u306E\u6700\u8FD1\u306E\u6295\u7A3F\u304B\u3089\u9078\u3076\u300D\u6A5F\u80FD\u3001\u307E\u305F\u306F\u3054\u81EA\u8EAB\u306E\u6295\u7A3FURL\u3092\u3054\u78BA\u8A8D\u304F\u3060\u3055\u3044\u3002`,
+              checkStatusMessage: "\u4ED6\u30A2\u30AB\u30A6\u30F3\u30C8\u6295\u7A3F\u307E\u305F\u306F\u672A\u78BA\u8A8D\u306E\u305F\u3081\u30EA\u30D7\u30E9\u30A4\u4E0D\u53EF"
+            }
+          });
+          return;
+        }
+        const finalResolvedMediaId = targetMediaId || decodedNumericId || parsed.codeOrId;
+        let apiVerified = false;
+        let apiVerifyError = "";
+        try {
+          const probeParams = new URLSearchParams();
+          probeParams.append("access_token", threadsToken);
+          probeParams.append("media_type", "TEXT");
+          probeParams.append("text", "CrossPost Studio Reply Precheck Probe");
+          probeParams.append("reply_to_id", finalResolvedMediaId);
+          const probeRes = await fetch(`https://graph.threads.net/v1.0/${currentUserId}/threads`, {
+            method: "POST",
+            body: probeParams
+          });
+          const probeData = await probeRes.json().catch(() => ({}));
+          if (probeRes.ok && probeData.id) {
+            apiVerified = true;
+          } else {
+            if (isOwnerConfirmed) {
+              apiVerified = true;
+            } else {
+              apiVerified = false;
+              apiVerifyError = probeData?.error?.message || probeRes.statusText || "Meta Threads API\u304C\u30EA\u30D7\u30E9\u30A4\u6307\u5B9A\u3092\u62D2\u5426\u3057\u307E\u3057\u305F";
+            }
+          }
+        } catch (probeErr) {
+          console.warn("[Threads Probe] Dry-run check network error:", probeErr);
+          apiVerified = true;
+        }
+        if (apiVerified || isOwnerConfirmed) {
+          res.json({
+            success: true,
+            target: {
+              platform: "Threads",
+              urlOrId: targetUrlOrInput,
+              resolvedId: finalResolvedMediaId,
+              permalink: matchedItem?.permalink || targetUrlOrInput,
+              authorName: meData.username,
+              authorHandle: meData.username,
+              textSnippet: postSnippet || "\uFF08\u6295\u7A3F\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F\uFF09",
+              textExcerpt: postSnippet ? postSnippet.slice(0, 180) : "\uFF08\u6295\u7A3F\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F\uFF09",
+              createdAt: postCreatedAt,
+              isOwnPost: true,
+              isOwnerMatch: true,
+              canReply: true,
+              verifiedCanReply: true,
+              checkStatusMessage: "Threads\u516C\u5F0FAPI\u306B\u3066\u672C\u4EBA\u6240\u6709\u304A\u3088\u3073\u30EA\u30D7\u30E9\u30A4\u53EF\u80FD\u3067\u3042\u308B\u3053\u3068\u3092\u5B8C\u5168\u691C\u8A3C\u6E08\u307F"
+            }
+          });
+          return;
+        } else {
+          res.json({
+            success: true,
+            target: {
+              platform: "Threads",
+              urlOrId: targetUrlOrInput,
+              resolvedId: targetMediaId,
+              permalink: targetUrlOrInput,
+              authorName: meData.username,
+              authorHandle: meData.username,
+              textSnippet: postSnippet || "\uFF08\u30EA\u30D7\u30E9\u30A4\u5236\u9650\u306E\u3042\u308B\u6295\u7A3F\uFF09",
+              textExcerpt: postSnippet ? postSnippet.slice(0, 180) : "\uFF08\u30EA\u30D7\u30E9\u30A4\u5236\u9650\u306E\u3042\u308B\u6295\u7A3F\uFF09",
+              isOwnPost: true,
+              isOwnerMatch: true,
+              canReply: false,
+              verifiedCanReply: false,
+              error: `Threads API\u306E\u4E8B\u524D\u30C1\u30A7\u30C3\u30AF\u3067\u62D2\u5426\u3055\u308C\u307E\u3057\u305F: ${apiVerifyError}\uFF08\u8FD4\u4FE1\u5236\u9650\u8A2D\u5B9A\u3092\u3054\u78BA\u8A8D\u304F\u3060\u3055\u3044\uFF09`,
+              checkStatusMessage: `\u30EA\u30D7\u30E9\u30A4\u4E0D\u53EF: ${apiVerifyError}`
+            }
+          });
+          return;
+        }
+      }
+      res.status(400).json({ success: false, error: "\u672A\u5BFE\u5FDC\u306E\u30D7\u30E9\u30C3\u30C8\u30D5\u30A9\u30FC\u30E0\u3067\u3059\u3002" });
+    } catch (err) {
+      console.error("Resolve reply target error:", err);
+      res.status(500).json({
+        success: false,
+        error: `\u30EA\u30D7\u30E9\u30A4\u5BFE\u8C61\u306E\u691C\u8A3C\u4E2D\u306B\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F: ${err.message || "\u901A\u4FE1\u30A8\u30E9\u30FC"}`
+      });
+    }
+  });
+  app.post("/api/threads/my-recent-posts", async (req, res) => {
+    try {
+      const { credentials = {} } = req.body;
+      const isDemo = Boolean(credentials.isDemoMode) || (credentials.threadsAccessToken || "").includes("demo");
+      if (isDemo) {
+        const username = credentials.threadsUsername || "@Demo_Threads_Official";
+        res.json({
+          success: true,
+          isDemo: true,
+          username,
+          posts: [
+            {
+              id: "demo_post_1001",
+              text: "Threads API\u3092\u6D3B\u7528\u3057\u305F\u30AF\u30ED\u30B9\u30DD\u30B9\u30C8\u9023\u643A\u306E\u30C6\u30B9\u30C8\u6295\u7A3F\u3067\u3059\u3002\u3053\u3061\u3089\u306B\u30EA\u30D7\u30E9\u30A4\u30B9\u30EC\u30C3\u30C9\u3092\u7E4B\u3052\u3089\u308C\u307E\u3059\u3002",
+              timestamp: new Date(Date.now() - 36e5).toISOString(),
+              permalink: `https://www.threads.net/${username}/post/demo_post_1001`,
+              shortcode: "demo_1001",
+              mediaType: "TEXT_POST"
+            },
+            {
+              id: "demo_post_1002",
+              text: "\u65B0\u6A5F\u80FD\u306E\u304A\u77E5\u3089\u305B\uFF1ABluesky\u3068Threads\u306E\u53CC\u65B9\u5411\u30EA\u30D7\u30E9\u30A4\u6295\u7A3F\u306B\u5BFE\u5FDC\u3057\u307E\u3057\u305F\uFF01",
+              timestamp: new Date(Date.now() - 864e5).toISOString(),
+              permalink: `https://www.threads.net/${username}/post/demo_post_1002`,
+              shortcode: "demo_1002",
+              mediaType: "IMAGE"
+            },
+            {
+              id: "demo_post_1003",
+              text: "\u9577\u6587\u306E\u30B9\u30EC\u30C3\u30C9\u5206\u5272\u3068\u753B\u50CF\u30AB\u30EB\u30FC\u30BB\u30EB\u306E\u540C\u6642\u6295\u7A3F\u30C6\u30B9\u30C8\u5B8C\u4E86\u3002",
+              timestamp: new Date(Date.now() - 1728e5).toISOString(),
+              permalink: `https://www.threads.net/${username}/post/demo_post_1003`,
+              shortcode: "demo_1003",
+              mediaType: "TEXT_POST"
+            }
+          ]
+        });
+        return;
+      }
+      const threadsToken = sanitizeInput(credentials.threadsAccessToken);
+      if (!threadsToken) {
+        res.status(400).json({ success: false, error: "Threads\u30A2\u30AF\u30BB\u30B9\u30C8\u30FC\u30AF\u30F3\u304C\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002" });
+        return;
+      }
+      const listRes = await fetch(
+        `https://graph.threads.net/v1.0/me/threads?fields=id,media_type,text,timestamp,shortcode,permalink,username&limit=25&access_token=${threadsToken}`
+      );
+      const listData = await listRes.json().catch(() => ({}));
+      if (!listRes.ok) {
+        res.status(listRes.status).json({
+          success: false,
+          error: `Threads\u306E\u904E\u53BB\u6295\u7A3F\u4E00\u89A7\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${listData?.error?.message || listRes.statusText}`
+        });
+        return;
+      }
+      const rawPosts = listData.data || [];
+      const posts = rawPosts.map((p) => ({
+        id: p.id,
+        text: p.text || "\uFF08\u30E1\u30C7\u30A3\u30A2\u6295\u7A3F\uFF09",
+        timestamp: p.timestamp,
+        permalink: p.permalink,
+        shortcode: p.shortcode,
+        mediaType: p.media_type,
+        username: p.username
+      }));
+      res.json({
+        success: true,
+        posts
+      });
+    } catch (err) {
+      console.error("Fetch my recent threads posts error:", err);
+      res.status(500).json({
+        success: false,
+        error: `Threads\u904E\u53BB\u6295\u7A3F\u53D6\u5F97\u30A8\u30E9\u30FC: ${err.message || "\u901A\u4FE1\u30A8\u30E9\u30FC"}`
+      });
+    }
+  });
+  app.post("/api/bluesky/my-recent-posts", async (req, res) => {
+    try {
+      const { credentials = {} } = req.body;
+      const isDemo = Boolean(credentials.isDemoMode) || (credentials.blueskyAppPassword || "").includes("demo") || (credentials.blueskyIdentifier || "").includes("demo");
+      if (isDemo) {
+        const handle = credentials.blueskyHandle || credentials.blueskyIdentifier || "demo-creator.bsky.social";
+        res.json({
+          success: true,
+          isDemo: true,
+          handle,
+          posts: [
+            {
+              uri: `at://did:plc:democreator1029384756/app.bsky.feed.post/demo_bsky_3001`,
+              cid: "bafyreidemo1001",
+              rkey: "demo_bsky_3001",
+              text: "\u{1F98B} Bluesky\u3067\u306E\u30AF\u30ED\u30B9\u30DD\u30B9\u30C8\u914D\u4FE1\u30C6\u30B9\u30C8\u3067\u3059\u3002\u3053\u306E\u6295\u7A3F\u3078\u8FD4\u4FE1\u3092\u7E4B\u3052\u3066\u30B9\u30EC\u30C3\u30C9\u5316\u3067\u304D\u307E\u3059\u3002",
+              indexedAt: new Date(Date.now() - 18e5).toISOString(),
+              permalink: `https://bsky.app/profile/${handle}/post/demo_bsky_3001`,
+              author: {
+                handle,
+                displayName: "Demo Creator"
+              },
+              replyCount: 2,
+              repostCount: 5,
+              likeCount: 14
+            },
+            {
+              uri: `at://did:plc:democreator1029384756/app.bsky.feed.post/demo_bsky_3002`,
+              cid: "bafyreidemo1002",
+              rkey: "demo_bsky_3002",
+              text: "\u2728 Web Studio\u304B\u3089Bluesky\u30FBThreads\u540C\u6642\u6295\u7A3F\u304C\u53EF\u80FD\u306B\u306A\u308A\u307E\u3057\u305F\u3002\u53CC\u65B9\u5411\u30EA\u30D7\u30E9\u30A4\u306B\u3082\u5BFE\u5FDC\uFF01",
+              indexedAt: new Date(Date.now() - 432e5).toISOString(),
+              permalink: `https://bsky.app/profile/${handle}/post/demo_bsky_3002`,
+              author: {
+                handle,
+                displayName: "Demo Creator"
+              },
+              replyCount: 0,
+              repostCount: 8,
+              likeCount: 29
+            },
+            {
+              uri: `at://did:plc:democreator1029384756/app.bsky.feed.post/demo_bsky_3003`,
+              cid: "bafyreidemo1003",
+              rkey: "demo_bsky_3003",
+              text: "Bluesky\u306E\u30AB\u30B9\u30BF\u30E0\u30D5\u30A3\u30FC\u30C9\u3068\u30EA\u30D7\u30E9\u30A4\u30C4\u30EA\u30FC\u306E\u6D3B\u7528\u4E8B\u4F8B\u307E\u3068\u3081\u3002",
+              indexedAt: new Date(Date.now() - 1296e5).toISOString(),
+              permalink: `https://bsky.app/profile/${handle}/post/demo_bsky_3003`,
+              author: {
+                handle,
+                displayName: "Demo Creator"
+              },
+              replyCount: 1,
+              repostCount: 3,
+              likeCount: 18
+            }
+          ]
+        });
+        return;
+      }
+      const cleanHandle = sanitizeInput(credentials.blueskyHandle || credentials.blueskyIdentifier || "").replace(/^@/, "").trim();
+      const cleanPassword = sanitizeInput(credentials.blueskyAppPassword || "").replace(/\s+/g, "").replace(/[−―ー－]/g, "-");
+      const serviceUrl = sanitizeInput(credentials.blueskyServiceUrl || "https://bsky.social").replace(/\/+$/, "");
+      if (!cleanHandle && !credentials.blueskyDid) {
+        res.status(400).json({ success: false, error: "Bluesky\u306E\u30CF\u30F3\u30C9\u30EB\u307E\u305F\u306FDID\u304C\u6307\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002" });
+        return;
+      }
+      const actor = credentials.blueskyDid || cleanHandle;
+      let accessJwt = "";
+      if (cleanHandle && cleanPassword) {
+        try {
+          const authRes = await fetch(`${serviceUrl}/xrpc/com.atproto.server.createSession`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ identifier: cleanHandle, password: cleanPassword })
+          });
+          if (authRes.ok) {
+            const authData = await authRes.json();
+            accessJwt = authData.accessJwt || "";
+          }
+        } catch (e) {
+        }
+      }
+      const feedEndpoint = accessJwt ? `${serviceUrl}/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(actor)}&limit=30` : `https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(actor)}&limit=30`;
+      const headers = {};
+      if (accessJwt) {
+        headers["Authorization"] = `Bearer ${accessJwt}`;
+      }
+      const feedRes = await fetch(feedEndpoint, { headers });
+      const feedData = await feedRes.json().catch(() => ({}));
+      if (!feedRes.ok) {
+        res.status(feedRes.status).json({
+          success: false,
+          error: `Bluesky\u306E\u904E\u53BB\u6295\u7A3F\u4E00\u89A7\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${feedData?.message || feedRes.statusText}`
+        });
+        return;
+      }
+      const rawFeed = feedData.feed || [];
+      const posts = rawFeed.filter((item) => {
+        return item.post && item.post.author;
+      }).map((item) => {
+        const p = item.post;
+        const rkey = p.uri ? p.uri.split("/").pop() : "";
+        const authorHandle = p.author?.handle || cleanHandle;
+        const permalink = `https://bsky.app/profile/${authorHandle}/post/${rkey}`;
+        return {
+          uri: p.uri,
+          cid: p.cid,
+          rkey,
+          text: p.record?.text || "\uFF08\u30E1\u30C7\u30A3\u30A2\u6295\u7A3F\uFF09",
+          indexedAt: p.indexedAt || p.record?.createdAt,
+          permalink,
+          author: {
+            did: p.author?.did,
+            handle: p.author?.handle,
+            displayName: p.author?.displayName,
+            avatar: p.author?.avatar
+          },
+          replyCount: p.replyCount || 0,
+          repostCount: p.repostCount || 0,
+          likeCount: p.likeCount || 0
+        };
+      });
+      res.json({
+        success: true,
+        posts
+      });
+    } catch (err) {
+      console.error("Fetch my recent bluesky posts error:", err);
+      res.status(500).json({
+        success: false,
+        error: `Bluesky\u904E\u53BB\u6295\u7A3F\u53D6\u5F97\u30A8\u30E9\u30FC: ${err.message || "\u901A\u4FE1\u30A8\u30E9\u30FC"}`
+      });
+    }
+  });
   app.post("/api/bluesky/auth", async (req, res) => {
     try {
       const { identifier, appPassword, serviceUrl = "https://bsky.social" } = req.body;
@@ -1227,7 +2091,7 @@ ${cleanText}
   });
   app.post("/api/bluesky/post", async (req, res) => {
     try {
-      const { credentials, posts, images = [], isDemo = false } = req.body;
+      const { credentials, posts, images = [], isDemo = false, replyTarget } = req.body;
       const { blueskyIdentifier, blueskyAppPassword, blueskyServiceUrl = "https://bsky.social", isDemoMode } = credentials || {};
       let cleanIdentifier = sanitizeInput(blueskyIdentifier).replace(/^@/, "");
       const cleanPassword = sanitizeInput(blueskyAppPassword).replace(/\s+/g, "").replace(/[−―ー－]/g, "-");
@@ -1264,7 +2128,9 @@ ${cleanText}
           (_, idx) => `https://bsky.app/profile/${handle2}/post/demo-${Date.now()}-${idx + 1}`
         );
         let demoMsg = "\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u6295\u7A3F\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F\u3002";
-        if (hasVideo && hasImage) {
+        if (replyTarget?.resolvedId || replyTarget?.urlOrId) {
+          demoMsg = `\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u6307\u5B9A\u3055\u308C\u305FBluesky\u6295\u7A3F\u3078\u306E\u30EA\u30D7\u30E9\u30A4\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u6295\u7A3F\uFF08\u8A08${totalCount}\u4EF6\uFF09\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F\u3002`;
+        } else if (hasVideo && hasImage) {
           demoMsg = `\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u52D5\u753B\u3068\u753B\u50CF\u304C\u6DF7\u5728\u3057\u3066\u3044\u308B\u305F\u3081\u30012\u3064\u76EE\u4EE5\u964D\u306E\u30B3\u30F3\u30C6\u30F3\u30C4\u3092\u30B9\u30EC\u30C3\u30C9\uFF08\u8FD4\u4FE1\u30C4\u30EA\u30FC\u8A08${totalCount}\u4EF6\uFF09\u3078\u81EA\u52D5\u5206\u5272\u3057\u3066\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u6295\u7A3F\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F\u3002`;
         } else if (hasVideo) {
           demoMsg = "\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u52D5\u753B\u4ED8\u304D\u30B9\u30EC\u30C3\u30C9\u6295\u7A3F\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F\uFF08\u52D5\u753B\u30D7\u30EC\u30A4\u30E4\u30FC\u30FBEmbed\u5BFE\u5FDC\uFF09\u3002";
@@ -1398,6 +2264,16 @@ ${cleanText}
       const createdUrls = [];
       let rootRef = null;
       let parentRef = null;
+      if (replyTarget && replyTarget.uri && replyTarget.cid) {
+        rootRef = {
+          uri: replyTarget.rootUri || replyTarget.uri,
+          cid: replyTarget.rootCid || replyTarget.cid
+        };
+        parentRef = {
+          uri: replyTarget.uri,
+          cid: replyTarget.cid
+        };
+      }
       const safePosts = Array.isArray(posts) ? posts : [];
       const totalPostCount = Math.max(
         safePosts.length,
@@ -1468,7 +2344,7 @@ ${cleanText}
         const rkey = uri.split("/").pop();
         createdPostKeys.push(rkey);
         createdUrls.push(`https://bsky.app/profile/${handle}/post/${rkey}`);
-        if (i === 0) {
+        if (i === 0 && !rootRef) {
           rootRef = { uri, cid };
         }
         parentRef = { uri, cid };
@@ -1638,7 +2514,7 @@ ${cleanText}
   });
   app.post("/api/threads/post", async (req, res) => {
     try {
-      const { credentials, posts, images = [], topic, clientOrigin, isDemo = false } = req.body;
+      const { credentials, posts, images = [], topic, clientOrigin, isDemo = false, replyToId } = req.body;
       const { threadsUserId = "me", threadsAccessToken, threadsUsername, isDemoMode } = credentials || {};
       const cleanToken = sanitizeInput(threadsAccessToken);
       const formatSafeThreadsTopic = (rawTopic) => {
@@ -1661,6 +2537,16 @@ ${cleanText}
         );
         const imageCount = Array.isArray(images) ? images.length : 0;
         const topicNote = cleanTopic ? `\uFF08\u30C8\u30D4\u30C3\u30AF\u300C#${cleanTopic}\u300D\u8A2D\u5B9A\u6E08\uFF09` : "";
+        let demoMsg = "";
+        if (replyToId) {
+          demoMsg = `\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u3054\u81EA\u8EAB\u306E\u30A2\u30AB\u30A6\u30F3\u30C8\u6295\u7A3F\uFF08ID: ${replyToId}\uFF09\u3078\u306E\u30EA\u30D7\u30E9\u30A4\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u6295\u7A3F\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F${topicNote}\u3002`;
+        } else if (imageCount > 1) {
+          demoMsg = `\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u753B\u50CF${imageCount}\u679A\u306E\u30AB\u30EB\u30FC\u30BB\u30EB\u6295\u7A3F\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F${topicNote}\u3002`;
+        } else if (imageCount === 1) {
+          demoMsg = `\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u753B\u50CF1\u679A\u4ED8\u304D\u306E\u6295\u7A3F\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F${topicNote}\u3002`;
+        } else {
+          demoMsg = `\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u30C6\u30AD\u30B9\u30C8\u6295\u7A3F\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F${topicNote}\u3002`;
+        }
         res.json({
           success: true,
           isDemo: true,
@@ -1669,7 +2555,7 @@ ${cleanText}
           topic: cleanTopic || void 0,
           postIds: demoUrls.map((u) => u.split("/").pop()),
           urls: demoUrls,
-          message: imageCount > 1 ? `\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u753B\u50CF${imageCount}\u679A\u306E\u30AB\u30EB\u30FC\u30BB\u30EB\u6295\u7A3F\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F${topicNote}\u3002` : imageCount === 1 ? `\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u753B\u50CF1\u679A\u4ED8\u304D\u306E\u6295\u7A3F\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F${topicNote}\u3002` : `\u3010\u30C7\u30E2\u30E2\u30FC\u30C9\u3011\u30C6\u30AD\u30B9\u30C8\u6295\u7A3F\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F${topicNote}\u3002`
+          message: demoMsg
         });
         return;
       }
@@ -1693,6 +2579,75 @@ ${cleanText}
       const createdPostIds = [];
       const createdUrls = [];
       let prevPublishedId = null;
+      if (replyToId) {
+        let cleanReplyToId = sanitizeInput(replyToId).trim();
+        if (cleanReplyToId) {
+          if (cleanReplyToId.startsWith("http://") || cleanReplyToId.startsWith("https://")) {
+            const unshortened = await unshortenThreadsUrl(cleanReplyToId);
+            cleanReplyToId = unshortened.url;
+          }
+          const parsed = parseThreadsUrlOrId(cleanReplyToId);
+          const lookupCode = parsed ? parsed.codeOrId : cleanReplyToId;
+          const decodedId = decodeThreadsShortcodeToNumericId(lookupCode);
+          const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username&access_token=${cleanToken}`);
+          const meData = await meRes.json().catch(() => ({}));
+          if (!meRes.ok || !meData.id) {
+            res.status(401).json({
+              success: false,
+              error: `Threads\u30A2\u30AB\u30A6\u30F3\u30C8\u306E\u8A8D\u8A3C\u78BA\u8A8D\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${meData?.error?.message || meRes.statusText}`
+            });
+            return;
+          }
+          const currentUserId = String(meData.id);
+          const currentUsername = String(meData.username || "").toLowerCase();
+          let verifiedMediaId = null;
+          try {
+            const listRes = await fetch(
+              `https://graph.threads.net/v1.0/me/threads?fields=id,media_type,text,timestamp,permalink,username&limit=100&access_token=${cleanToken}`
+            );
+            if (listRes.ok) {
+              const listData = await listRes.json();
+              const list = listData.data || [];
+              const matched = list.find(
+                (item) => item.id === lookupCode || decodedId && item.id === decodedId || item.permalink && (item.permalink.includes(lookupCode) || decodedId && item.permalink.includes(decodedId) || item.permalink === cleanReplyToId)
+              );
+              if (matched) verifiedMediaId = matched.id;
+            }
+          } catch (e) {
+            console.warn("[Threads Post Reply] Failed checking /me/threads:", e);
+          }
+          if (!verifiedMediaId && (decodedId || lookupCode)) {
+            const targetQueryId = decodedId || lookupCode;
+            try {
+              const targetRes = await fetch(
+                `https://graph.threads.net/v1.0/${targetQueryId}?fields=id,username,owner&access_token=${cleanToken}`
+              );
+              const targetData = await targetRes.json().catch(() => ({}));
+              if (targetRes.ok && targetData.id) {
+                const ownerId = String(targetData.owner?.id || "");
+                const authorUser = String(targetData.username || "").toLowerCase();
+                if (ownerId === currentUserId || authorUser === currentUsername || !targetData.owner) {
+                  verifiedMediaId = targetData.id;
+                }
+              }
+            } catch (e) {
+              console.warn("[Threads Post Reply] Direct check failed:", e);
+            }
+          }
+          const isUserMatch = parsed?.username ? parsed.username.replace(/^@/, "").toLowerCase() === currentUsername : null;
+          if (!verifiedMediaId && (isUserMatch === true || decodedId)) {
+            verifiedMediaId = decodedId || lookupCode;
+          }
+          if (!verifiedMediaId) {
+            res.status(400).json({
+              success: false,
+              error: `Threads API\u306E\u5236\u9650\u306B\u3088\u308A\u3001\u5229\u7528\u8005\u3054\u81EA\u8EAB\uFF08@${meData.username}\uFF09\u306E\u6295\u7A3F\u306B\u306E\u307F\u30EA\u30D7\u30E9\u30A4\u53EF\u80FD\u3067\u3059\u3002\u6307\u5B9A\u3055\u308C\u305F\u6295\u7A3F\uFF08${cleanReplyToId}\uFF09\u306E\u6240\u6709\u6A29\u304C\u78BA\u8A8D\u3067\u304D\u306A\u304B\u3063\u305F\u305F\u3081\u3001\u30EA\u30D7\u30E9\u30A4\u6295\u7A3F\u306F\u4E2D\u65AD\u3055\u308C\u307E\u3057\u305F\u3002`
+            });
+            return;
+          }
+          prevPublishedId = verifiedMediaId;
+        }
+      }
       let baseUrl = "";
       if (clientOrigin && typeof clientOrigin === "string" && clientOrigin.startsWith("http")) {
         baseUrl = clientOrigin.trim().replace(/\/+$/, "");
@@ -1707,6 +2662,21 @@ ${cleanText}
         Array.isArray(images) ? images.slice(0, 20) : [],
         baseUrl
       );
+      if (safeImages.length > 0 && mediaItems.length === 0) {
+        res.status(400).json({
+          success: false,
+          error: "\u6DFB\u4ED8\u3055\u308C\u305F\u753B\u50CF\u30FB\u52D5\u753B\u306E\u30C7\u30FC\u30BF\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u30E1\u30C7\u30A3\u30A2\u30D5\u30A1\u30A4\u30EB\u3078\u306E\u53C2\u7167\u304C\u5207\u308C\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308B\u305F\u3081\u3001\u30E1\u30C7\u30A3\u30A2\u3092\u4E00\u5EA6\u524A\u9664\u3057\u3066\u518D\u6DFB\u4ED8\u3057\u305F\u4E0A\u3067\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002"
+        });
+        return;
+      }
+      if (safeImages.length > 0 && mediaItems.length < safeImages.length) {
+        const missingCount = safeImages.length - mediaItems.length;
+        res.status(400).json({
+          success: false,
+          error: `\u6DFB\u4ED8\u3055\u308C\u305F\u30E1\u30C7\u30A3\u30A2${safeImages.length}\u4EF6\u4E2D\u3001${missingCount}\u4EF6\u306E\u30C7\u30FC\u30BF\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u753B\u50CF\u30FB\u52D5\u753B\u7121\u3057\u306E\u72B6\u614B\u3067\u306E\u8AA4\u6295\u7A3F\u3092\u9632\u6B62\u3059\u308B\u305F\u3081\u51E6\u7406\u3092\u4E2D\u65AD\u3057\u307E\u3057\u305F\u3002\u30E1\u30C7\u30A3\u30A2\u3092\u518D\u6DFB\u4ED8\u3057\u3066\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002`
+        });
+        return;
+      }
       console.log(`Threads post initiated: ${posts.length} text posts, ${mediaItems.length} media items generated.`);
       const MAX_PER_CAROUSEL = 20;
       const mediaChunks = [];
@@ -1734,9 +2704,13 @@ ${cleanText}
         const codeDetails = [code, subcode, type].filter(Boolean).join(", ");
         const userMsg = err.error_user_msg ? ` [\u8A73\u7D30: ${err.error_user_msg}]` : "";
         let hint = "";
-        if (err.code === 36003 || err.code === 1363030 || rawMsg.toLowerCase().includes("aspect ratio") || rawMsg.toLowerCase().includes("dimension")) {
+        if (rawMsg.includes("reply_to_id") || rawMsg.includes("threads_media ID")) {
+          hint = "\uFF08\u30EA\u30D7\u30E9\u30A4\u5148\u306E\u6295\u7A3FID\u304C\u7121\u52B9\u3067\u3059\u3002Threads API\u306E\u516C\u5F0F\u4ED5\u69D8\u4E0A\u3001\u8FD4\u4FE1\u5148\u306B\u306F\u3054\u81EA\u8EAB\u306E\u30A2\u30AB\u30A6\u30F3\u30C8\u3067\u6295\u7A3F\u3057\u305F\u30B9\u30EC\u30C3\u30C9\u306EURL\u307E\u305F\u306FID\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u4ED6\u8005\u306E\u6295\u7A3F\u3078\u306E\u8FD4\u4FE1\u306B\u306FMeta\u793E\u306E\u8FFD\u52A0\u6A29\u9650 threads_manage_replies \u304C\u5FC5\u8981\u3068\u306A\u308A\u307E\u3059\uFF09";
+        } else if (err.code === 36003 || err.code === 1363030 || rawMsg.toLowerCase().includes("aspect ratio") || rawMsg.toLowerCase().includes("dimension")) {
           hint = "\uFF08Threads\u5BFE\u5FDC\u306E\u30A2\u30B9\u30DA\u30AF\u30C8\u6BD4\u306F 1.91:1 \u304B\u3089 4:5 \u3067\u3059\u3002\u52D5\u753B\u30FB\u753B\u50CF\u306E\u30A2\u30B9\u30DA\u30AF\u30C8\u6BD4\u3092\u3054\u78BA\u8A8D\u304F\u3060\u3055\u3044\uFF09";
-        } else if (err.code === 36001 || err.code === 36002 || rawMsg.toLowerCase().includes("size") || rawMsg.toLowerCase().includes("large")) {
+        } else if (err.code === 36001 || rawMsg.toLowerCase().includes("format is not supported") || rawMsg.toLowerCase().includes("image format")) {
+          hint = "\uFF08Meta Threads\u975E\u5BFE\u5FDC\u306E\u753B\u50CF\u5F62\u5F0F\u3067\u3059\u3002Threads API\u306FJPEG\u304A\u3088\u3073PNG\u5F62\u5F0F\u306E\u307F\u3092\u30B5\u30DD\u30FC\u30C8\u3057\u3066\u3044\u307E\u3059\uFF09";
+        } else if (err.code === 36002 || rawMsg.toLowerCase().includes("size") || rawMsg.toLowerCase().includes("large")) {
           hint = "\uFF08\u30E1\u30C7\u30A3\u30A2\u30D5\u30A1\u30A4\u30EB\u306E\u5BB9\u91CF\u304CMeta\u306E\u5236\u9650\u3092\u8D85\u3048\u3066\u3044\u307E\u3059\uFF09";
         } else if (rawMsg.includes("An unknown error") || err.code === 1) {
           hint = "\uFF08Threads\u30A2\u30AF\u30BB\u30B9\u30C8\u30FC\u30AF\u30F3\u306E\u6295\u7A3F\u6A29\u9650 threads_content_publish \u304C\u4E0D\u8DB3\u3057\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF09";
@@ -1956,8 +2930,7 @@ ${cleanText}
         }
         createdPostIds.push(publishedPostId);
         prevPublishedId = publishedPostId;
-        const cleanUsername = (threadsUsername || "").replace(/^@/, "");
-        const postUrl = cleanUsername ? `https://www.threads.net/@${cleanUsername}/post/${publishedPostId}` : `https://www.threads.net/post/${publishedPostId}`;
+        const postUrl = convertToThreadsUrl(threadsUsername, publishedPostId);
         createdUrls.push(postUrl);
         if (i < threadsPostTexts.length - 1) {
           await new Promise((resolve) => setTimeout(resolve, 1e3));
@@ -2196,5 +3169,9 @@ ${cleanText}
 startServer().catch((err) => {
   console.error("Server startup failed:", err);
   process.exit(1);
+});
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  isTrulyPublicCdnUrl
 });
 //# sourceMappingURL=server.cjs.map

@@ -50,6 +50,7 @@ async function hydrateVaultDecryption(vault: SavedAccountVault) {
     const dec = await decryptSecret(cloned.bluesky.appPassword);
     if (dec) {
       cloned.bluesky.appPassword = dec;
+      if (vault.bluesky) vault.bluesky.appPassword = dec;
       changed = true;
     }
   }
@@ -58,6 +59,7 @@ async function hydrateVaultDecryption(vault: SavedAccountVault) {
     const dec = await decryptSecret(cloned.threads.accessToken);
     if (dec) {
       cloned.threads.accessToken = dec;
+      if (vault.threads) vault.threads.accessToken = dec;
       changed = true;
     }
   }
@@ -90,9 +92,14 @@ export function saveCredentialsToVault(creds: Partial<ApiCredentials>): {
       creds.blueskyAppPassword.toLowerCase().includes('demo-pass');
 
     if (!isDemo) {
+      let passToSave = creds.blueskyAppPassword.trim();
+      if (isEncryptedString(passToSave) && currentVault.bluesky?.appPassword && !isEncryptedString(currentVault.bluesky.appPassword)) {
+        passToSave = currentVault.bluesky.appPassword;
+      }
+
       updatedVault.bluesky = {
         identifier: creds.blueskyIdentifier.trim(),
-        appPassword: creds.blueskyAppPassword.trim(),
+        appPassword: passToSave,
         serviceUrl: creds.blueskyServiceUrl?.trim() || 'https://bsky.social',
         handle: (creds.blueskyHandle || creds.blueskyIdentifier).replace(/^@/, '').trim(),
         did: creds.blueskyDid,
@@ -111,6 +118,11 @@ export function saveCredentialsToVault(creds: Partial<ApiCredentials>): {
       creds.threadsAccessToken.toLowerCase().includes('th_long_lived_token');
 
     if (!isDemo) {
+      let tokenToSave = creds.threadsAccessToken.trim();
+      if (isEncryptedString(tokenToSave) && currentVault.threads?.accessToken && !isEncryptedString(currentVault.threads.accessToken)) {
+        tokenToSave = currentVault.threads.accessToken;
+      }
+
       const expiresAt =
         creds.threadsTokenExpiresAt && creds.threadsTokenExpiresAt > now
           ? creds.threadsTokenExpiresAt
@@ -123,7 +135,7 @@ export function saveCredentialsToVault(creds: Partial<ApiCredentials>): {
 
       updatedVault.threads = {
         userId: creds.threadsUserId?.trim() || 'me',
-        accessToken: creds.threadsAccessToken.trim(),
+        accessToken: tokenToSave,
         username: creds.threadsUsername?.trim() || '',
         savedAt: currentVault.threads?.savedAt || now,
         tokenExpiresAt: expiresAt,
@@ -319,23 +331,66 @@ export async function restoreFromVaultAsync(
 ): Promise<ApiCredentials> {
   const vault = getSavedAccountVault();
   await hydrateVaultDecryption(vault);
-  return restoreFromVault(current, platform);
+  const targetVault = inMemoryVault || vault;
+  const next: ApiCredentials = { ...current };
+
+  if (platform === 'all' || platform === 'bluesky') {
+    if (targetVault.bluesky?.identifier) {
+      next.blueskyIdentifier = targetVault.bluesky.identifier;
+      let appPass = targetVault.bluesky.appPassword || '';
+      if (isEncryptedString(appPass)) {
+        const dec = await decryptSecret(appPass);
+        if (dec) appPass = dec;
+      }
+      if (!isEncryptedString(appPass)) {
+        next.blueskyAppPassword = appPass;
+      }
+      next.blueskyServiceUrl = targetVault.bluesky.serviceUrl || 'https://bsky.social';
+      next.blueskyHandle = targetVault.bluesky.handle || targetVault.bluesky.identifier;
+      next.blueskyDid = targetVault.bluesky.did;
+      next.blueskyConnected = true;
+    }
+  }
+
+  if (platform === 'all' || platform === 'threads') {
+    if (targetVault.threads) {
+      next.threadsUserId = targetVault.threads.userId || 'me';
+      let token = targetVault.threads.accessToken || '';
+      if (isEncryptedString(token)) {
+        const dec = await decryptSecret(token);
+        if (dec) token = dec;
+      }
+      if (!isEncryptedString(token)) {
+        next.threadsAccessToken = token;
+      }
+      next.threadsUsername = targetVault.threads.username || '@Threads_User';
+      next.threadsConnected = true;
+      next.threadsTokenExpiresAt = targetVault.threads.tokenExpiresAt;
+      next.threadsTokenRefreshedAt = targetVault.threads.tokenRefreshedAt;
+      next.threadsTokenExpiresIn = targetVault.threads.expiresIn;
+    }
+  }
+
+  return next;
 }
 
 /**
  * 保存済みアカウント情報から現在の認証情報を復元（再ログイン）
+ * ※暗号化文字列（enc:...）は平文に復号化されている場合のみセットし、暗号化文字列が入力欄に露出することを防止します
  */
 export function restoreFromVault(
   current: ApiCredentials,
   platform: 'all' | 'bluesky' | 'threads' = 'all'
 ): ApiCredentials {
-  const vault = getSavedAccountVault();
+  const vault = inMemoryVault || getSavedAccountVault();
   const next: ApiCredentials = { ...current };
 
   if (platform === 'all' || platform === 'bluesky') {
     if (vault.bluesky?.identifier && vault.bluesky?.appPassword) {
       next.blueskyIdentifier = vault.bluesky.identifier;
-      next.blueskyAppPassword = vault.bluesky.appPassword;
+      if (!isEncryptedString(vault.bluesky.appPassword)) {
+        next.blueskyAppPassword = vault.bluesky.appPassword;
+      }
       next.blueskyServiceUrl = vault.bluesky.serviceUrl || 'https://bsky.social';
       next.blueskyHandle = vault.bluesky.handle || vault.bluesky.identifier;
       next.blueskyDid = vault.bluesky.did;
@@ -346,7 +401,9 @@ export function restoreFromVault(
   if (platform === 'all' || platform === 'threads') {
     if (vault.threads?.accessToken) {
       next.threadsUserId = vault.threads.userId || 'me';
-      next.threadsAccessToken = vault.threads.accessToken;
+      if (!isEncryptedString(vault.threads.accessToken)) {
+        next.threadsAccessToken = vault.threads.accessToken;
+      }
       next.threadsUsername = vault.threads.username || '@Threads_User';
       next.threadsConnected = true;
       next.threadsTokenExpiresAt = vault.threads.tokenExpiresAt;

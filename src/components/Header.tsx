@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ApiCredentials, ThemeAccentId } from '../types';
-import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3, Info } from 'lucide-react';
+import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3, Info, Database } from 'lucide-react';
 import { hasSavedAccountInVault } from '../utils/accountVault';
 import { calculateTokenExpiryInfo } from '../utils/tokenExpiry';
 import { ThemeSelector } from './ThemeSelector';
@@ -23,6 +23,7 @@ interface HeaderProps {
   onOpenUserGuide?: () => void;
   onOpenQuitConfirm?: () => void;
   onOpenAboutApp?: () => void;
+  onOpenServerVault?: () => void;
   currentTheme: ThemeAccentId;
   onSelectTheme: (themeId: ThemeAccentId) => void;
   onLogout?: (platform?: 'all' | 'bluesky' | 'threads') => void;
@@ -45,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenUserGuide,
   onOpenQuitConfirm,
   onOpenAboutApp,
+  onOpenServerVault,
   currentTheme,
   onSelectTheme,
   onLogout,
@@ -368,6 +370,20 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
         </div>
+
+        {/* LIVEモード限定: サーバー登録情報一覧ボタン */}
+        {!isDemoMode && onOpenServerVault && (
+          <button
+            id="header-server-vault-button"
+            type="button"
+            onClick={onOpenServerVault}
+            className="relative bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 p-2 sm:px-3 sm:py-1.5 rounded-lg border border-emerald-500/40 hover:border-emerald-500/60 transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-xs"
+            title="LIVEモードでサーバー（/data/account_vault.json）に登録されているBluesky・Threadsのアカウント情報を一覧で確認"
+          >
+            <Database className="w-4 h-4 text-emerald-400" />
+            <span className="hidden sm:inline">サーバー登録情報</span>
+          </button>
+        )}
 
         {/* 分析・データボタン */}
         {onOpenAnalytics && (

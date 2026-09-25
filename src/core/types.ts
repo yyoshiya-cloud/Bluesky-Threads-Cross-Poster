@@ -212,18 +212,7 @@ export interface RootViewModel {
   snippets: SnippetItem[];
 
   // モーダル開閉状態
-  modals: {
-    settings: boolean;
-    history: boolean;
-    analytics: boolean;
-    scheduled: boolean;
-    snippetManager: boolean;
-    userGuide: boolean;
-    quitConfirm: boolean;
-    posting: boolean;
-    modePassword: boolean;
-    aboutApp: boolean;
-  };
+  modals: Record<ModalType, boolean>;
 
   // トースト通知
   toasts: ToastMessage[];
