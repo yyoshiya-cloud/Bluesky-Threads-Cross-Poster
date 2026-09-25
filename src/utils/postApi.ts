@@ -70,6 +70,32 @@ export interface RecentThreadsPostsResult {
   error?: string;
 }
 
+export interface RecentBlueskyPostItem {
+  uri: string;
+  cid: string;
+  rkey: string;
+  text: string;
+  indexedAt: string;
+  permalink: string;
+  author: {
+    did?: string;
+    handle?: string;
+    displayName?: string;
+    avatar?: string;
+  };
+  replyCount?: number;
+  repostCount?: number;
+  likeCount?: number;
+}
+
+export interface RecentBlueskyPostsResult {
+  success: boolean;
+  isDemo?: boolean;
+  handle?: string;
+  posts?: RecentBlueskyPostItem[];
+  error?: string;
+}
+
 /**
  * 入力されたURLやIDからBlueskyかThreadsかを自動判定
  */
@@ -92,6 +118,348 @@ export function detectReplyPlatform(input: string): 'Bluesky' | 'Threads' | null
     return 'Threads';
   }
   return null;
+}
+
+/**
+ * 投稿IDやユーザー名からThreadsの正規投稿URL (https://www.threads.net/@{username}/post/{postId}) を正規生成
+ */
+export function convertToThreadsUrl(username?: string | null, postId?: string | null, enableTrace = false): string {
+  // ユーザー名のサニタイズ（@の除去、URLが渡された場合はユーザー名を抽出）
+  let cleanUser = (username || '').trim();
+  if (cleanUser.includes('threads.') || cleanUser.includes('/@')) {
+    const userMatch = cleanUser.match(/@([a-zA-Z0-9._]+)/);
+    if (userMatch) {
+      cleanUser = userMatch[1];
+    }
+  }
+  cleanUser = cleanUser.replace(/^@+/, '').replace(/\/+$/, '').trim();
+
+  // 投稿IDのサニタイズ（URLやクエリパラメータ、先頭末尾のスラッシュを除去）
+  let cleanId = (postId || '').trim();
+  if (cleanId.includes('threads.') || cleanId.includes('/post/') || cleanId.includes('/t/')) {
+    const idMatch = cleanId.match(/\/(?:post|t|share)\/([a-zA-Z0-9_\-]+)/i);
+    if (idMatch) {
+      cleanId = idMatch[1];
+    }
+  }
+  // クエリパラメータ (?hl=ja, ?xmt=...) やハッシュ (#...) の除去
+  cleanId = cleanId.split('?')[0].split('#')[0].replace(/^\/+/, '').replace(/\/+$/, '').trim();
+
+  let result = '';
+  if (!cleanUser && !cleanId) {
+    result = 'https://www.threads.net';
+  } else if (!cleanUser) {
+    result = `https://www.threads.net/post/${cleanId}`;
+  } else if (!cleanId) {
+    result = `https://www.threads.net/@${cleanUser}`;
+  } else {
+    result = `https://www.threads.net/@${cleanUser}/post/${cleanId}`;
+  }
+
+  if (enableTrace || (typeof window !== 'undefined' && (window as any).__TRACE_THREADS_URL__)) {
+    console.log(`[Threads URL Generate] username="${username}" (clean="${cleanUser}"), postId="${postId}" (clean="${cleanId}") -> "${result}"`);
+  }
+  return result;
+}
+
+if (typeof window !== 'undefined') {
+  (window as any).convertToThreadsUrl = convertToThreadsUrl;
+}
+
+/**
+ * 生成された正規URLまたはThreads投稿URLからユーザー名を抽出
+ */
+export function extractUsernameFromThreadsUrl(url: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const clean = url.trim().split('?')[0].split('#')[0];
+  
+  if (clean.includes('bsky.app') || clean.includes('bsky.social') || clean.startsWith('at://') || clean.includes('/profile/')) {
+    return null;
+  }
+
+  // https://www.threads.net/@username/post/ID または threads.net/@username または @username/post/...
+  const match = clean.match(/(?:threads\.(?:net|com)\/)?@([a-zA-Z0-9._]+)/i);
+  if (match) {
+    return match[1];
+  }
+
+  // threads.net/username/post/ID 形式
+  const directMatch = clean.match(/threads\.(?:net|com)\/([a-zA-Z0-9._]+)\/post\//i);
+  if (directMatch && !['post', 't', 'share', 'intent'].includes(directMatch[1].toLowerCase())) {
+    return directMatch[1];
+  }
+
+  return null;
+}
+
+/**
+ * 生成された正規URLからユーザー名を抽出し、利用者のThreadsアカウント名とマッチングして投稿者と利用者が同一かをチェック
+ */
+export function checkThreadsPostOwnershipMatch(
+  formattedOrInputUrl: string,
+  authenticatedUsername?: string
+): {
+  isMatch: boolean | null;
+  extractedUsername: string | null;
+  authenticatedUsername: string | null;
+  formattedUrl: string;
+  reason: string;
+} {
+  const extracted = extractUsernameFromThreadsUrl(formattedOrInputUrl);
+  const cleanAuth = (authenticatedUsername || '').replace(/^@/, '').trim().toLowerCase();
+
+  if (!extracted) {
+    return {
+      isMatch: null,
+      extractedUsername: null,
+      authenticatedUsername: cleanAuth || null,
+      formattedUrl: formattedOrInputUrl,
+      reason: 'URLからユーザー名が検出されませんでした（短縮URLまたは投稿IDのみ。API照合が必要です）',
+    };
+  }
+
+  const cleanExtracted = extracted.replace(/^@/, '').trim().toLowerCase();
+
+  if (!cleanAuth) {
+    return {
+      isMatch: null,
+      extractedUsername: extracted,
+      authenticatedUsername: null,
+      formattedUrl: formattedOrInputUrl,
+      reason: 'アプリ側でThreadsアカウントが未認証/未設定のため、照合をスキップしました',
+    };
+  }
+
+  const isMatch = cleanExtracted === cleanAuth;
+  const formattedUrl = convertToThreadsUrl(cleanExtracted, formattedOrInputUrl);
+
+  return {
+    isMatch,
+    extractedUsername: extracted,
+    authenticatedUsername: cleanAuth,
+    formattedUrl,
+    reason: isMatch
+      ? `抽出ユーザー名（@${extracted}）と利用者の登録アカウント（@${cleanAuth}）が一致しました（同一人物確認済）`
+      : `抽出ユーザー名（@${extracted}）は利用者の登録アカウント（@${cleanAuth}）と異なります（他者投稿）`,
+  };
+}
+
+if (typeof window !== 'undefined') {
+  (window as any).extractUsernameFromThreadsUrl = extractUsernameFromThreadsUrl;
+  (window as any).checkThreadsPostOwnershipMatch = checkThreadsPostOwnershipMatch;
+}
+
+export interface ThreadsTraceStep {
+  step: number;
+  label: string;
+  status: 'info' | 'success' | 'warn' | 'error';
+  detail: string;
+  data?: Record<string, any>;
+  timestamp: string;
+}
+
+export interface ThreadsOwnershipCheckResult {
+  isThreadsUrl: boolean;
+  isOwnerMatch: boolean | null; // null: ユーザー名未記載の短縮URL等でAPI検証待ち
+  extractedUsername?: string;
+  extractedPostId?: string;
+  formattedUrl?: string;
+  reason?: string;
+  traceSteps: ThreadsTraceStep[];
+  traceLogs: string[];
+}
+
+/**
+ * 返信先URLがアプリ登録・認証中のThreadsユーザー本人の投稿かを判定（詳細トレース付き）
+ */
+export function verifyThreadsPostOwnership(
+  inputUrl: string,
+  authenticatedUsername?: string
+): ThreadsOwnershipCheckResult {
+  const traceSteps: ThreadsTraceStep[] = [];
+  const traceLogs: string[] = [];
+
+  const addTrace = (
+    label: string,
+    detail: string,
+    status: 'info' | 'success' | 'warn' | 'error' = 'info',
+    data?: Record<string, any>
+  ) => {
+    const time = new Date().toLocaleTimeString('ja-JP', { hour12: false }) + '.' + String(Date.now() % 1000).padStart(3, '0');
+    traceSteps.push({
+      step: traceSteps.length + 1,
+      label,
+      detail,
+      status,
+      data,
+      timestamp: time,
+    });
+    const logStr = `[${time}] [Step ${traceSteps.length}] ${label}: ${detail}`;
+    traceLogs.push(logStr);
+  };
+
+  addTrace('入力URLの取得', `入力値: "${inputUrl || ''}"`, 'info', { inputUrl, authenticatedUsername });
+
+  if (!inputUrl || !inputUrl.trim()) {
+    addTrace('入力値検証', 'URLが空のため判定をスキップ', 'warn');
+    return {
+      isThreadsUrl: false,
+      isOwnerMatch: null,
+      reason: 'URLが入力されていません',
+      traceSteps,
+      traceLogs,
+    };
+  }
+
+  // クエリパラメータや余分なスペース、囲み文字を除去
+  let clean = inputUrl.trim().replace(/^<|>$/g, '');
+  // URL末尾のクエリパラメータを抽出用に分離（postIdに混ざるのを防止）
+  const cleanWithoutQuery = clean.split('?')[0].split('#')[0].replace(/\/+$/, '');
+
+  // BlueskyのURLやATプロトコルURIの場合はThreads判定対象外として即座に除外
+  if (
+    clean.includes('bsky.app') ||
+    clean.includes('bsky.social') ||
+    clean.startsWith('at://') ||
+    clean.includes('/profile/')
+  ) {
+    addTrace('プラットフォーム除外', 'Blueskyの投稿URLまたはATプロトコルURIを検出したため、Threads所有権判定をスキップ', 'info');
+    return {
+      isThreadsUrl: false,
+      isOwnerMatch: null,
+      reason: 'Blueskyの投稿URLです（Threads判定対象外）',
+      traceSteps,
+      traceLogs,
+    };
+  }
+
+  const authUser = (authenticatedUsername || '').replace(/^@/, '').trim().toLowerCase();
+  addTrace('認証ユーザー名確認', authUser ? `登録ユーザー: @${authUser}` : '未登録/未指定', 'info', { authUser });
+
+  // 1. threads.net/@username/post/POST_ID または threads.net/username/post/POST_ID 形式の検証
+  const threadsUserPostPattern = /(?:https?:\/\/)?(?:www\.)?threads\.(?:net|com)\/@?([a-zA-Z0-9._]+)\/post\/([a-zA-Z0-9_\-]+)/i;
+  const userPostMatch = cleanWithoutQuery.match(threadsUserPostPattern) || 
+    (clean.startsWith('@') && cleanWithoutQuery.match(/^@([a-zA-Z0-9._]+)\/post\/([a-zA-Z0-9_\-]+)/i));
+
+  if (userPostMatch) {
+    const rawUrlUser = userPostMatch[1];
+    const postId = userPostMatch[2];
+    
+    addTrace('正規表現マッチ (Threads @username/post/ID)', `ユーザー名「@${rawUrlUser}」および投稿ID「${postId}」を抽出`, 'success', {
+      pattern: threadsUserPostPattern.source,
+      extractedUsername: rawUrlUser,
+      extractedPostId: postId,
+    });
+
+    // ① 正規URLの生成
+    const formattedUrl = convertToThreadsUrl(rawUrlUser, postId, true);
+    addTrace('正規URL生成 (convertToThreadsUrl)', `正規Threads URL: ${formattedUrl}`, 'info', { formattedUrl });
+
+    // ② 生成された正規URLからユーザー名を抽出
+    const extractedUser = extractUsernameFromThreadsUrl(formattedUrl) || rawUrlUser;
+    addTrace('正規URLからユーザー名抽出 (extractUsernameFromThreadsUrl)', `抽出ユーザー名: @${extractedUser}`, 'info', {
+      extractedUsername: extractedUser,
+      formattedUrl,
+    });
+
+    // ③ 利用者のThreadsアカウント名とマッチング照合
+    const matchResult = checkThreadsPostOwnershipMatch(formattedUrl, authenticatedUsername);
+    addTrace(
+      matchResult.isMatch ? 'アカウント所有権一致 (本人確認)' : matchResult.isMatch === false ? 'アカウント所有権不一致 (他者投稿検出)' : 'アカウント未照合',
+      matchResult.reason,
+      matchResult.isMatch ? 'success' : matchResult.isMatch === false ? 'warn' : 'info',
+      { matchResult }
+    );
+
+    if (matchResult.isMatch === true) {
+      return {
+        isThreadsUrl: true,
+        isOwnerMatch: true,
+        extractedUsername: extractedUser,
+        extractedPostId: postId,
+        formattedUrl,
+        reason: `ご自身のアカウント（@${extractedUser}）の投稿です`,
+        traceSteps,
+        traceLogs,
+      };
+    } else if (matchResult.isMatch === false) {
+      return {
+        isThreadsUrl: true,
+        isOwnerMatch: false,
+        extractedUsername: extractedUser,
+        extractedPostId: postId,
+        formattedUrl,
+        reason: `他者の投稿（@${extractedUser}）です。Threads APIの制限により、連携中のご自身（@${authenticatedUsername?.replace(/^@/, '')}）の投稿URLを入力してください。`,
+        traceSteps,
+        traceLogs,
+      };
+    }
+
+    addTrace('アカウント未照合', '認証アカウント名が指定されていないためAPI照合に委譲', 'info');
+    return {
+      isThreadsUrl: true,
+      isOwnerMatch: null,
+      extractedUsername: extractedUser,
+      extractedPostId: postId,
+      formattedUrl,
+      traceSteps,
+      traceLogs,
+    };
+  }
+
+  // 2. 数値IDのみ
+  if (/^\d{10,25}$/.test(cleanWithoutQuery)) {
+    addTrace('数値ID検出', `数値形式の投稿ID「${cleanWithoutQuery}」を検出`, 'info', { numericId: cleanWithoutQuery });
+    const formattedUrl = authenticatedUsername
+      ? convertToThreadsUrl(authenticatedUsername, cleanWithoutQuery, true)
+      : `https://www.threads.net/post/${cleanWithoutQuery}`;
+    addTrace('正規URL補完 (convertToThreadsUrl)', `補完後URL: ${formattedUrl}`, 'info', { formattedUrl });
+    return {
+      isThreadsUrl: true,
+      isOwnerMatch: null,
+      extractedPostId: cleanWithoutQuery,
+      formattedUrl,
+      reason: '投稿IDのみ指定されました。APIで投稿者を確認します',
+      traceSteps,
+      traceLogs,
+    };
+  }
+
+  // 3. /post/ /t/ /share/ 形式
+  const altMatch = cleanWithoutQuery.match(/threads\.(?:net|com)\/(?:post|t|share)\/([a-zA-Z0-9_\-]+)/i);
+  if (altMatch) {
+    const code = altMatch[1];
+    const isShare = cleanWithoutQuery.includes('/share/');
+    addTrace(
+      isShare ? 'Threads共有URL検出 (/share/)' : '短縮/代替形式URL検出',
+      `コード「${code}」を検出。「照合・事前チェック」時にリダイレクト先（正規投稿URL）を自動解決します`,
+      'info',
+      { shortCode: code }
+    );
+    const formattedUrl = authenticatedUsername
+      ? convertToThreadsUrl(authenticatedUsername, code, true)
+      : `https://www.threads.net/post/${code}`;
+    return {
+      isThreadsUrl: true,
+      isOwnerMatch: null,
+      extractedPostId: code,
+      formattedUrl,
+      reason: isShare
+        ? 'Threads共有URL（/share/）です。「照合・事前チェック」で正規投稿URLを自動解決します'
+        : '短縮URL形式のため、照合時にThreads APIで投稿者を確認します',
+      traceSteps,
+      traceLogs,
+    };
+  }
+
+  addTrace('判定終了', 'Threads形式のURLまたは投稿IDと一致しませんでした', 'error');
+  return {
+    isThreadsUrl: false,
+    isOwnerMatch: null,
+    reason: 'Threadsの投稿URL形式ではありません',
+    traceSteps,
+    traceLogs,
+  };
 }
 
 /**
@@ -186,6 +554,41 @@ export async function fetchMyRecentThreadsPosts(
       return {
         success: true,
         isDemo: data.isDemo,
+        posts: data.posts || [],
+      };
+    }
+
+    return {
+      success: false,
+      error: data.error || `一覧取得に失敗しました (${res.status})`,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || '通信エラーが発生しました',
+    };
+  }
+}
+
+/**
+ * ログイン中ユーザー自身のBluesky最近の投稿一覧を取得 (リプライ先選択UI用)
+ */
+export async function fetchMyRecentBlueskyPosts(
+  credentials?: ApiCredentials
+): Promise<RecentBlueskyPostsResult> {
+  try {
+    const res = await fetch('/api/bluesky/my-recent-posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credentials }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      return {
+        success: true,
+        isDemo: data.isDemo,
+        handle: data.handle,
         posts: data.posts || [],
       };
     }
@@ -1744,7 +2147,7 @@ async function directPostToThreads(
     }
     previousPostId = publishedId;
     postIds.push(publishedId);
-    urls.push(`https://www.threads.net/post/${publishedId}`);
+    urls.push(convertToThreadsUrl(cleanUsername, publishedId, true));
 
     if (i < totalPosts - 1) {
       await abortableWait(1000, signal);

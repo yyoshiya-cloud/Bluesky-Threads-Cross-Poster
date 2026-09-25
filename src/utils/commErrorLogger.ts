@@ -283,6 +283,32 @@ export function clearCommErrorLogs(): void {
 }
 
 /**
+ * 通信ログからDEMOモード関連のログ（シミュレーション、テスト送信等）を一括クリーンアップ
+ */
+export function cleanupDemoCommLogsFromStorage(): { cleaned: CommLogEntry[]; removedCount: number } {
+  if (typeof window === 'undefined') return { cleaned: [], removedCount: 0 };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { cleaned: [], removedCount: 0 };
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return { cleaned: [], removedCount: 0 };
+
+    const filtered = parsed.filter((item) => !isDemoLogEntry(item));
+    const removedCount = parsed.length - filtered.length;
+
+    if (removedCount > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    }
+
+    return { cleaned: filtered, removedCount };
+  } catch (err) {
+    console.warn('Failed to cleanup demo communication logs:', err);
+    return { cleaned: [], removedCount: 0 };
+  }
+}
+
+
+/**
  * 通信ログリストをテキスト形式のログファイル本文にフォーマット
  * （JST表記、成功・情報・エラー経緯、詳細診断付き）
  */

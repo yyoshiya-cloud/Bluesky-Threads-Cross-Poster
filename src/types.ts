@@ -215,6 +215,7 @@ export interface ScheduledPostItem {
     threads?: string[];
   };
   replySettings?: ReplySettings;
+  isDemo?: boolean;
 }
 
 // 投稿区分: 'all' (同時投稿) | 'bluesky' (Blueskyのみ) | 'threads' (Threadsのみ)

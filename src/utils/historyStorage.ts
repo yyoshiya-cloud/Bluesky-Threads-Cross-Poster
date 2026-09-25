@@ -142,3 +142,47 @@ export function clearHistoryFromStorage(): void {
     console.error('Failed to clear history from localStorage:', err);
   }
 }
+
+/**
+ * 投稿履歴からDEMOモードで作成されたアイテムやシミュレーションキャッシュを完全に除去
+ */
+export function cleanupDemoHistoryFromStorage(): { cleaned: PostHistoryItem[]; removedCount: number } {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return { cleaned: [], removedCount: 0 };
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return { cleaned: [], removedCount: 0 };
+
+    const cleaned: PostHistoryItem[] = [];
+    let removedCount = 0;
+
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue;
+      const isDemo = Boolean(
+        item.isDemo ||
+        (Array.isArray(item.blueskyUrls) && item.blueskyUrls.some((u: string) => typeof u === 'string' && (u.includes('demo-creator') || u.includes('/post/demo-')))) ||
+        (Array.isArray(item.threadsUrls) && item.threadsUrls.some((u: string) => typeof u === 'string' && (u.includes('threads_user_demo') || u.includes('demo')))) ||
+        (Array.isArray(item.threadsMediaIds) && item.threadsMediaIds.some((id: string) => typeof id === 'string' && id.includes('demo'))) ||
+        (Array.isArray(item.blueskyPostUris) && item.blueskyPostUris.some((uri: string) => typeof uri === 'string' && uri.includes('demo'))) ||
+        item.replySettings?.threadsResolved?.isDemoSkipped ||
+        (item.replySettings?.threadsResolved?.resolvedId && String(item.replySettings.threadsResolved.resolvedId).toLowerCase().includes('demo'))
+      );
+
+      if (isDemo) {
+        removedCount++;
+      } else {
+        cleaned.push(sanitizeHistoryItem(item));
+      }
+    }
+
+    if (removedCount > 0) {
+      saveHistoryToStorage(cleaned);
+    }
+
+    return { cleaned, removedCount };
+  } catch (err) {
+    console.error('Failed to cleanup demo history from storage:', err);
+    return { cleaned: [], removedCount: 0 };
+  }
+}
+

@@ -23,6 +23,8 @@ import {
   Layers,
   MousePointerClick,
   BarChart3,
+  MessageSquare,
+  Reply,
 } from 'lucide-react';
 
 interface UserGuideModalProps {
@@ -91,6 +93,22 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
         '投稿完了時には各SNSの実際の投稿URLを直接開けるリンクを表示。',
       ],
       tips: 'アカウント設定前の場合は「DEMOモード」で投稿フローとプレビューを安全にお試しいただけます。',
+    },
+    {
+      id: 'feature-reply',
+      title: '💬 スマート・リプライ投稿 & 所有権自動判定（Threads / Bluesky）',
+      category: 'core',
+      icon: MessageSquare,
+      summary: 'BlueskyおよびThreadsの既存投稿URLを指定し、その投稿への返信（リプライ・ツリー追記）として配信できます。両SNSのAPI仕様と制限（Threadsの本人投稿限定・64bit数値Media ID必須、BlueskyのRoot/Parent構造）に対応したプラットフォーム自動判定、短縮共有リンク（/share/）自動解決、英数字コードの数値IDデコード、ハイブリッド2段階所有権判定、およびスレッド自動連鎖（チェーン）配信フローを完全解説します。',
+      details: [
+        '【プラットフォーム自動判定 ＆ Threads短縮共有リンク（/share/・/t/）の自動追跡】URL入力欄に貼り付けられたリンクからBluesky（bsky.app / at://）またはThreads（threads.com / threads.net / 数値ID）を即座に自動判別。特にThreads公式アプリの共有ボタンで生成される短縮リンク（https://www.threads.com/share/... や /t/...）は、サーバー側でHTTPリダイレクトを自動追跡して正規投稿URL（https://www.threads.net/@ユーザー名/post/...）へと自動解決・同期します。',
+        '【Blueskyの自動判定・AT-URI解決 ＆ ツリー構造（Root/Parent）自動引き継ぎ】BlueskyのWeb URLからハンドル名とrkeyを抽出。ハンドル名の場合はAT Protocol（com.atproto.identity.resolveHandle）でDIDを解決し、app.bsky.feed.getPostThread で投稿本文・作成日時・著者情報を取得。対象が既にスレッド内の投稿である場合も、最上位の「root（URI/CID）」と直前の「parent（URI/CID）」を自動特定して引き継ぎ、正確な会話ツリーを形成します（Bluesky公式APIは他者の公開投稿への返信も許可されています）。',
+        '【Threadsの英数字ショートコード ⇔ 64bit数値Media IDの自動デコード】ThreadsのURLに含まれる英数字コード（Base64URL形式、例: GiVw9OGGh）は、Meta Graph APIが要求する内部64bit数値ID（Media ID、例: 3456789...）と形式が異なります。本アプリは独自の高精度デコードエンジンにより、英数字コードから64bit数値Media IDを即座に復元。APIへの返信ID（reply_to_id）の形式不一致エラーを根本から防止します。',
+        '【Threads API制限（本人投稿のみ許可）に対応したハイブリッド2段階所有権判定】Meta公式Threads API（threads_content_publish）の仕様上、外部アプリからの返信は「認証中のご自身のアカウントが投稿したスレッド」に限定され、他者投稿への返信はAPIで拒否されます。これを安全に満たすため、本アプリは2段階の判定を実施：①【第1段階（高速クライアント＆API照合）】URL内のユーザー名（@username）と連携中アカウントを瞬時に照合して他者投稿を即座にブロック。さらに /v1.0/me および /v1.0/me/threads（直近投稿一覧）や個別照会（GET /{media-id}）で所有権を突合。②【第2段階（Dry-Run プローブ検証）】投稿直後で一覧APIに未反映の場合でも、デコードMedia IDを用いてテスト用下書きコンテナ作成API（POST /threads、※公開処理は行わないためタイムラインには一切出ません）を安全に実行し、Meta APIがリプライ先として受け付けるかを事前に完全検証。',
+        '【API制限を考慮したリプライ投稿フロー ＆ スレッド自動連鎖（チェーン）配信】実際の送信時はプラットフォーム間での誤爆を防ぐ「リプライガード」が稼働。Bluesky返信設定時はBlueskyのみにツリー返信し、同時投稿時のThreads側には通常新規投稿として配信（または逆も同様に分離）。さらに本文が文字数制限等で複数ポストに自動スレッド分割された場合、1件目の投稿が指定した返信先（Threadsのreply_to_id、Blueskyのparent/root）に正確に接続され、2件目以降は直前に公開された自身のポストIDへ自動で連鎖接続（チェーン）し、途切れることのない美しい連続ツリーを自動構築します。',
+        '【操作支援機能（照合・事前チェック / 最近の投稿選択 / トレース可視化 / ワンクリック解除）】「照合・事前チェック」ボタンで送信前に返信先情報と本人確認ステータスバッジ（本人確認済 / 他者投稿・返信不可）を確認可能。また「🌀 自分のThreads投稿から選択」「🦋 自分のBluesky投稿から選択」から直近ポストをワンタップでセットできます。「Threads URL生成・パースのトレース詳細」パネルでは正規表現パース・デコード値・照合ログをステップごとに透明性高く確認でき、「✕ 解除」ボタンでいつでも通常新規投稿モードへ即座に戻せます。',
+      ],
+      tips: '過去の告知のツリー追記や連載スレッドの更新に最適です。Threadsのリプライは公式仕様によりご自身の投稿のみが対象となりますが、直近投稿からのワンクリック選択や「照合・事前チェック」を活用することで、APIエラーを起こさず確実にスレッドを延長できます。',
     },
     {
       id: 'feature-preview',
@@ -293,17 +311,17 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
     },
     {
       id: 'feature-security',
-      title: '🔒 暗号化ローカル保管 & 🎯 初期DEMOモード',
+      title: '🔒 暗号化ローカル保管 & 🎯 初期DEMOモード・自動クリーンアップ',
       category: 'account',
       icon: Shield,
-      summary: '認証情報はブラウザ内のみで安全に管理。初期状態はDEMOモードで安全にお試し可能です。',
+      summary: '認証情報はブラウザ内のみで安全に管理。初期状態はDEMOモードで安全にお試し可能。LIVE移行時や起動時の自動クリーンアップで常にクリーンな状態を維持します。',
       details: [
         '初期状態ではデモ認証が設定されており、APIキーやパスワードの入力不要で安全にシミュレーション投稿が可能。',
+        '【LIVEモード切替時・アプリ起動時の自動クリーンアップ】LIVE（本番）モードへの切り替え時やアプリ起動時に、古いDEMOモードで作成されたシミュレーション予約投稿、ダミー履歴データ、通信エラーログ、リプライ残留設定、一時下書きキャッシュを自動的に完全クリーンアップ。常に混入や誤爆のないクリーンな初期状態から安全に投稿作業を開始できます。',
         '外部サーバーにパスワードを送信せず、ブラウザ内のみで暗号化して安全に管理。',
-        '設定画面（⚙️）からご自身のBlueskyハンドル・アプリパスワードやThreadsアクセストークンを登録・保存するだけで自動的に本番投稿モードとして動作。',
         'ブラウザのログアウトやワンクリックでの保管情報消去に対応。',
       ],
-      tips: 'DEMOモード中は実際のSNSへの送信は行われないため、文章の長さや画像のレイアウトを自由にテストできます。',
+      tips: 'DEMOモード中は実際のSNSへの送信は行われないため、文章の長さや画像のレイアウトを自由にテストできます。本番アカウントへの切替時は自動クリーンアップが働くため、テスト投稿データが本番環境に残る心配はありません。',
     },
     {
       id: 'feature-theme',
@@ -320,6 +338,12 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   ];
 
   const overviewCards: OverviewCard[] = [
+    {
+      id: 'ov-reply',
+      icon: MessageSquare,
+      title: '💬 リプライ投稿 & 所有権自動判定',
+      description: 'Bluesky・Threadsの既存ポストへの返信投稿に対応。短縮共有リンク（/share/）自動解決、英数字ショートコードの数値IDデコード、2段階の本人所有権照合・事前ガードを完備。',
+    },
     {
       id: 'ov-ai',
       icon: Sparkles,
@@ -378,8 +402,8 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
     },
     {
       step: 2,
-      title: '本文を入力 & 個別書き分け・メディア添付',
-      description: 'エディタに投稿文を入力します。「共通テキスト」のほか、「Bluesky専用」「Threads専用」タブで文面を個別に書き分けることも可能です。「ハッシュタグ候補」や「定型文（スニペット）」から素早く挿入したり、Threads専用トピックタグを設定。画像や動画（最大20件）はドラッグ＆ドロップで添付でき、直感的なドラッグ操作で順序を並び替えられます。',
+      title: '本文を入力 & リプライ設定・個別書き分け・メディア添付',
+      description: 'エディタに投稿文を入力します。既存ポストへの返信を行いたい場合は「💬 返信先（リプライ）投稿の設定」を開いてURLを入力または「自分の投稿から選択」でセット。「共通テキスト」のほか、「Bluesky専用」「Threads専用」タブでの書き分けやハッシュタグ・Threadsトピックタグ、最大20件の画像・動画添付にも対応しています。',
     },
     {
       step: 3,
@@ -394,6 +418,16 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   ];
 
   const faqItems: FaqItem[] = [
+    {
+      id: 'faq-reply',
+      question: '既存の投稿にリプライ（返信・ツリー追記）して投稿するにはどうすればよいですか？',
+      answer: 'エディタ上部にある「💬 返信先（リプライ）投稿の設定」をクリックして展開し、返信したいBlueskyまたはThreadsの投稿URLを入力するか、「🌀 自分のThreads投稿から選択」「🦋 自分のBluesky投稿から選択」ボタンを押して直近の投稿一覧から対象を選択します。対象がセットされるとプレビューにも返信先ポストが接続表示され、送信時にその投稿へのツリー（リプライ）として配信されます。',
+    },
+    {
+      id: 'faq-threads-reply-limit',
+      question: 'Threadsで他人の投稿URLにリプライしようとすると警告が出るのはなぜですか？',
+      answer: 'Threads公式API（Graph API）の仕様により、サードパーティ製アプリからのリプライ投稿は「認証しているご自身のアカウントが投稿したポスト（64bit数値Media ID）」に対してのみ許可されています。そのため本アプリでは、入力された短縮共有URL（/share/等）の自動展開、URL英数字コードから数値IDへの自動デコード、ログインアカウントとの照合・2段階プローブ判定を行い、他人の投稿へのリプライによるAPIエラーを送信前に未然に防止（事前ガード）しています。',
+    },
     {
       id: 'faq-ai',
       question: 'AIアシスト機能でエラーが出たり動作が遅いときはどうすればよいですか？',
@@ -462,6 +496,12 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   ];
 
   const tipsItems: TipItem[] = [
+    {
+      id: 'tip-reply-selector',
+      icon: '💬',
+      title: '最近の自分の投稿からワンクリックで返信先選択',
+      description: '返信先設定の「自分の投稿から選択」を使うと、過去のポストURLをコピーしに行かなくても直近の投稿一覧から即座に返信先を指定できます。',
+    },
     {
       id: 'tip-context-menu',
       icon: '🖱️',

@@ -1768,44 +1768,26 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
             {isReplyActive && (
               <div className="space-y-1.5 animate-in fade-in duration-150">
                 {isThreadsReplyInvalid ? (
-                  <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-200 text-xs flex items-start justify-between gap-2 shadow-sm">
-                    <div className="flex items-start gap-2 min-w-0">
-                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                      <div className="space-y-0.5 min-w-0">
-                        <span className="font-bold text-rose-300">Threadsのリプライ先要確認:</span>
-                        <p className="text-[11px] text-rose-300/90 leading-tight">
-                          {!replySettings?.threadsResolved
-                            ? 'Threads返信先の照合が完了していません。'
-                            : '他者の投稿には返信できません（本人投稿のみ許可）。'}
-                        </p>
-                      </div>
+                  <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-200 text-xs flex items-start gap-2 shadow-sm">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5 min-w-0">
+                      <span className="font-bold text-rose-300">Threadsのリプライ先要確認:</span>
+                      <p className="text-[11px] text-rose-300/90 leading-tight">
+                        {!replySettings?.threadsResolved
+                          ? 'Threads返信先の照合が完了していません。'
+                          : '他者の投稿には返信できません（本人投稿のみ許可）。'}
+                      </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setBottomDockTab('reply')}
-                      className="px-2 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-100 rounded text-[11px] font-medium shrink-0 transition cursor-pointer"
-                    >
-                      設定を開く
-                    </button>
                   </div>
                 ) : isBlueskyReplyInvalid ? (
-                  <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-200 text-xs flex items-start justify-between gap-2 shadow-sm">
-                    <div className="flex items-start gap-2 min-w-0">
-                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                      <div className="space-y-0.5 min-w-0">
-                        <span className="font-bold text-rose-300">Blueskyのリプライ先要確認:</span>
-                        <p className="text-[11px] text-rose-300/90 leading-tight">
-                          Bluesky返信先の照合が完了していません。
-                        </p>
-                      </div>
+                  <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-200 text-xs flex items-start gap-2 shadow-sm">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5 min-w-0">
+                      <span className="font-bold text-rose-300">Blueskyのリプライ先要確認:</span>
+                      <p className="text-[11px] text-rose-300/90 leading-tight">
+                        Bluesky返信先の照合が完了していません。
+                      </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setBottomDockTab('reply')}
-                      className="px-2 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-100 rounded text-[11px] font-medium shrink-0 transition cursor-pointer"
-                    >
-                      設定を開く
-                    </button>
                   </div>
                 ) : (
                   <div className="p-2 rounded-xl bg-indigo-950/30 border border-indigo-800/50 text-indigo-200 text-xs flex items-center justify-between shadow-sm">

@@ -342,3 +342,44 @@ export function clearAllScheduledPosts(): void {
     console.error('Failed to clear scheduled posts:', e);
   }
 }
+
+/**
+ * 予約投稿リストからDEMOモードで作成されたアイテムやシミュレーション用予約投稿を完全に除去
+ */
+export function cleanupDemoScheduledPostsFromStorage(): { cleaned: ScheduledPostItem[]; removedCount: number } {
+  try {
+    const items = loadScheduledPostsFromStorage();
+    const cleaned: ScheduledPostItem[] = [];
+    let removedCount = 0;
+
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      const isDemo = Boolean(
+        item.isDemo ||
+        (typeof item.id === 'string' && item.id.includes('demo')) ||
+        item.replySettings?.threadsResolved?.isDemoSkipped ||
+        (item.replySettings?.threadsResolved?.resolvedId && String(item.replySettings.threadsResolved.resolvedId).toLowerCase().includes('demo')) ||
+        (item.replySettings?.blueskyResolved?.resolvedId && String(item.replySettings.blueskyResolved.resolvedId).toLowerCase().includes('demo')) ||
+        (item.replySettings?.blueskyResolved?.cid && String(item.replySettings.blueskyResolved.cid).toLowerCase().includes('demo')) ||
+        (Array.isArray(item.resultUrls?.bluesky) && item.resultUrls!.bluesky.some((u) => typeof u === 'string' && u.includes('demo'))) ||
+        (Array.isArray(item.resultUrls?.threads) && item.resultUrls!.threads.some((u) => typeof u === 'string' && u.includes('demo')))
+      );
+
+      if (isDemo) {
+        removedCount++;
+      } else {
+        cleaned.push(item);
+      }
+    }
+
+    if (removedCount > 0) {
+      saveScheduledPostsToStorage(cleaned);
+    }
+
+    return { cleaned, removedCount };
+  } catch (e) {
+    console.error('Failed to cleanup demo scheduled posts from storage:', e);
+    return { cleaned: [], removedCount: 0 };
+  }
+}
+

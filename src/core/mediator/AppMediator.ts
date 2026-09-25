@@ -54,6 +54,11 @@ import {
 } from '../../utils/accountVault';
 import { DEMO_CREDENTIALS, checkIsDemoCredentials } from '../../utils/postApi';
 import { addSavedThreadsTopic } from '../../utils/topicStorage';
+import {
+  performCleanStateInitialization,
+  CLEAN_REPLY_SETTINGS,
+  isDemoReplyState,
+} from '../../utils/demoStateCleaner';
 
 const DEFAULT_TEXT = '';
 
@@ -125,6 +130,12 @@ export class AppMediator implements IMediatorArbitrator {
   private listeners: Set<StateListener> = new Set();
 
   constructor() {
+    // アプリ起動時の自動クリーンアップ: 古いDEMOモードのキャッシュデータ（予約投稿・下書き・通信ログ）を安全に一掃
+    performCleanStateInitialization({
+      isLiveMode: false,
+      reason: 'startup',
+    });
+
     // 起動時は投稿文の内容を完全にクリアにし、前回の古い下書きもリセット
     clearDraftFromStorage();
     this.text = '';
@@ -137,6 +148,7 @@ export class AppMediator implements IMediatorArbitrator {
     this.threadsTopic = '';
     this.autoSplit = true;
     this.includeNumbering = true;
+    this.replySettings = { ...CLEAN_REPLY_SETTINGS };
     this.lastSavedAt = null;
     this.draftStatus = 'idle';
 
@@ -164,7 +176,7 @@ export class AppMediator implements IMediatorArbitrator {
       console.warn('Failed to set demo credentials in localStorage:', e);
     }
 
-    // 履歴・予約投稿・スニペットの読み込み
+    // 履歴・予約投稿・スニペットの読み込み（クリーンアップ済みストレージから復元）
     this.history = loadHistoryFromStorage();
     this.scheduledPosts = loadScheduledPostsFromStorage();
     this.snippets = loadSnippetsFromStorage();
@@ -394,27 +406,65 @@ export class AppMediator implements IMediatorArbitrator {
         this.handleToggleDemoMode();
         break;
 
-      case 'SAVE_CREDENTIALS':
+      case 'SAVE_CREDENTIALS': {
+        const prevWasDemo = this.computeIsDemoMode();
         this.credentials = event.payload;
         localStorage.setItem('cross_poster_creds', JSON.stringify(event.payload));
         const { blueskyIsDemo, threadsIsDemo } = checkIsDemoCredentials(event.payload);
+        const isNowDemo = typeof event.payload.isDemoMode === 'boolean'
+          ? event.payload.isDemoMode
+          : (blueskyIsDemo && threadsIsDemo);
+
         if (!blueskyIsDemo || !threadsIsDemo) {
           saveCredentialsToVault(event.payload);
         }
+
+        // DEMOモードからLIVEモードへの切り替え時は、古いDEMOキャッシュを一括クリーンアップ
+        if (prevWasDemo && !isNowDemo) {
+          performCleanStateInitialization({
+            isLiveMode: true,
+            reason: 'credentials_update',
+            forceHistoryClean: true,
+          });
+          this.scheduledPosts = loadScheduledPostsFromStorage();
+          this.history = loadHistoryFromStorage();
+          this.replySettings = { ...CLEAN_REPLY_SETTINGS };
+          clearDraftFromStorage();
+          this.addToast({
+            type: 'info',
+            title: '🧹 クリーン初期化完了',
+            message: 'LIVEモードへの移行に伴い、DEMOモードの古いキャッシュデータを自動クリーンアップしました。',
+          });
+        }
         this.notifyListeners();
         break;
+      }
 
       case 'RESTORE_SAVED_ACCOUNT': {
         const vault = getSavedAccountVault();
         if (vault.bluesky?.identifier || vault.threads?.accessToken) {
+          const prevWasDemo = this.computeIsDemoMode();
           const restored = restoreFromVault(this.credentials, 'all');
           restored.isDemoMode = false;
           this.credentials = restored;
           localStorage.setItem('cross_poster_creds', JSON.stringify(restored));
+
+          if (prevWasDemo) {
+            performCleanStateInitialization({
+              isLiveMode: true,
+              reason: 'switch_to_live',
+              forceHistoryClean: true,
+            });
+            this.scheduledPosts = loadScheduledPostsFromStorage();
+            this.history = loadHistoryFromStorage();
+            this.replySettings = { ...CLEAN_REPLY_SETTINGS };
+            clearDraftFromStorage();
+          }
+
           this.addToast({
             type: 'success',
             title: '🔐 保存済みアカウントを復元しました',
-            message: '保管庫から安全に認証情報を読み込みました。',
+            message: '保管庫から安全に認証情報を読み込み、クリーンな状態で起動しました。',
           });
           this.notifyListeners();
         }
@@ -508,6 +558,7 @@ export class AppMediator implements IMediatorArbitrator {
           autoSplit: this.autoSplit,
           includeNumbering: this.includeNumbering,
           replySettings: this.replySettings.enabled ? { ...this.replySettings } : undefined,
+          isDemo: this.computeIsDemoMode(),
         });
 
         this.scheduledPosts = loadScheduledPostsFromStorage();
@@ -957,8 +1008,22 @@ export class AppMediator implements IMediatorArbitrator {
   private handleToggleDemoMode(): void {
     const isDemo = this.computeIsDemoMode();
     if (isDemo) {
-      clearAllScheduledPosts();
-      this.scheduledPosts = [];
+      // 1. LIVEモードへの切り替え: 古いDEMOモードのキャッシュデータや残留ステート（予約投稿・履歴・通信ログ・リプライ設定・下書き）を一括自動クリーンアップ
+      performCleanStateInitialization({
+        isLiveMode: true,
+        reason: 'switch_to_live',
+        forceHistoryClean: true,
+      });
+
+      // 2. メディエーター側のステートも完全にクリーンな初期状態へリセット
+      this.scheduledPosts = loadScheduledPostsFromStorage();
+      this.history = loadHistoryFromStorage();
+      this.replySettings = { ...CLEAN_REPLY_SETTINGS };
+      this.text = '';
+      this.blueskyText = '';
+      this.threadsText = '';
+      this.images = [];
+      clearDraftFromStorage();
 
       const vault = getSavedAccountVault();
       let restoredCreds: ApiCredentials = {
@@ -983,7 +1048,7 @@ export class AppMediator implements IMediatorArbitrator {
         this.addToast({
           type: 'success',
           title: '🚀 LIVE（本番）モードに切り替えました',
-          message: '保存済みの本番アカウントを復元しました。',
+          message: '古いDEMOキャッシュを一掃し、保存済みの本番アカウントでクリーンに開始しました。',
         });
       } else {
         this.credentials = restoredCreds;
@@ -991,7 +1056,7 @@ export class AppMediator implements IMediatorArbitrator {
         this.addToast({
           type: 'info',
           title: '🚀 LIVE（本番）モードに切り替えました',
-          message: '右上の「⚙️ 設定」から本番アカウントを連携してください。',
+          message: '古いDEMOキャッシュを一掃しました。右上の「⚙️ 設定」から本番アカウントを連携してください。',
         });
       }
     } else {
@@ -1001,6 +1066,7 @@ export class AppMediator implements IMediatorArbitrator {
       }
       clearAllScheduledPosts();
       this.scheduledPosts = [];
+      this.replySettings = { ...CLEAN_REPLY_SETTINGS };
 
       this.credentials = {
         ...DEMO_CREDENTIALS,

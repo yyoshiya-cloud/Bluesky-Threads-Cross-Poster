@@ -15,13 +15,24 @@ import {
   Info,
   Link as LinkIcon,
   Sparkles,
+  Terminal,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { ApiCredentials, ReplySettings, ReplyTargetInfo } from '../types';
 import {
   resolveReplyTarget,
   fetchMyRecentThreadsPosts,
+  fetchMyRecentBlueskyPosts,
   detectReplyPlatform,
+  verifyThreadsPostOwnership,
+  convertToThreadsUrl,
+  extractUsernameFromThreadsUrl,
+  checkThreadsPostOwnershipMatch,
   RecentThreadsPostItem,
+  RecentBlueskyPostItem,
 } from '../utils/postApi';
 
 interface ReplySettingsSectionProps {
@@ -63,14 +74,27 @@ export const ReplySettingsSection: React.FC<ReplySettingsSectionProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
 
+  // トレース詳細の展開状態
+  const [showTraceInspector, setShowTraceInspector] = useState(false);
+  const [copiedTrace, setCopiedTrace] = useState(false);
+
   // Threads「自分の投稿から選択」モーダル用
   const [showRecentThreadsPicker, setShowRecentThreadsPicker] = useState(false);
   const [recentThreadsLoading, setRecentThreadsLoading] = useState(false);
   const [recentThreadsPosts, setRecentThreadsPosts] = useState<RecentThreadsPostItem[]>([]);
   const [recentThreadsError, setRecentThreadsError] = useState<string | null>(null);
 
+  // Bluesky「自分の投稿から選択」モーダル用
+  const [showRecentBlueskyPicker, setShowRecentBlueskyPicker] = useState(false);
+  const [recentBlueskyLoading, setRecentBlueskyLoading] = useState(false);
+  const [recentBlueskyPosts, setRecentBlueskyPosts] = useState<RecentBlueskyPostItem[]>([]);
+  const [recentBlueskyError, setRecentBlueskyError] = useState<string | null>(null);
+
   // 入力されたURLのリアルタイム判定
   const detectedPlatform = detectReplyPlatform(inputUrl);
+
+  // Threads URL の所有権リアルタイム判定
+  const threadsOwnership = verifyThreadsPostOwnership(inputUrl, credentials.threadsUsername);
 
   // Bluesky 解決ハンドラ
   const handleResolveBluesky = useCallback(
@@ -121,19 +145,33 @@ export const ReplySettingsSection: React.FC<ReplySettingsSectionProps> = ({
         return;
       }
 
+      // 入力されたURLからアカウント一致を事前検証（API通信不要の即時ブロック）
+      const ownership = verifyThreadsPostOwnership(trimmed, credentials.threadsUsername);
+      if (ownership.isThreadsUrl && ownership.isOwnerMatch === false && !isDemoMode) {
+        const authUser = (credentials.threadsUsername || '').replace(/^@/, '');
+        setResolveError(
+          `他者の投稿（@${ownership.extractedUsername}）です。Threads APIの制限により、連携中のご自身のアカウント（@${authUser}）の投稿URLを入力してください。`
+        );
+        return;
+      }
+
       setIsLoading(true);
       setResolveError(null);
 
       try {
         const result = await resolveReplyTarget('Threads', trimmed, credentials);
         if (result.success && result.target) {
+          const canonicalUrl = result.target.permalink || result.target.urlOrId || trimmed;
           onUpdateSettings({
             enabled: true,
-            threadsTargetUrl: trimmed,
+            threadsTargetUrl: canonicalUrl,
             blueskyTargetUrl: '',
             blueskyResolved: null,
           });
           onSetResolvedTarget('Threads', result.target);
+          if (result.target.permalink && result.target.permalink !== trimmed) {
+            setInputUrl(result.target.permalink);
+          }
           setResolveError(null);
         } else {
           const errMsg = result.error || 'Threads投稿の確認に失敗しました';
@@ -148,7 +186,7 @@ export const ReplySettingsSection: React.FC<ReplySettingsSectionProps> = ({
         setIsLoading(false);
       }
     },
-    [credentials, onClearTarget, onSetResolvedTarget, onUpdateSettings]
+    [credentials, isDemoMode, onClearTarget, onSetResolvedTarget, onUpdateSettings]
   );
 
   // 統合解決ハンドラ（URLから自動判定して実行）
@@ -225,10 +263,37 @@ export const ReplySettingsSection: React.FC<ReplySettingsSectionProps> = ({
   }, [credentials]);
 
   const handleSelectRecentThreadsPost = (post: RecentThreadsPostItem) => {
-    const permalink = post.permalink || `https://www.threads.net/post/${post.id}`;
+    const permalink = post.permalink || (credentials.threadsUsername
+      ? convertToThreadsUrl(credentials.threadsUsername, post.id)
+      : `https://www.threads.net/post/${post.id}`);
     setInputUrl(permalink);
     setShowRecentThreadsPicker(false);
     handleResolveThreads(permalink);
+  };
+
+  // Bluesky 自分の最近の投稿一覧を取得
+  const handleLoadRecentBluesky = useCallback(async () => {
+    setRecentBlueskyLoading(true);
+    setRecentBlueskyError(null);
+    try {
+      const result = await fetchMyRecentBlueskyPosts(credentials);
+      if (result.success && result.posts) {
+        setRecentBlueskyPosts(result.posts);
+      } else {
+        setRecentBlueskyError(result.error || 'Blueskyの最近の投稿一覧を取得できませんでした');
+      }
+    } catch (err: any) {
+      setRecentBlueskyError(err.message || '通信エラーが発生しました');
+    } finally {
+      setRecentBlueskyLoading(false);
+    }
+  }, [credentials]);
+
+  const handleSelectRecentBlueskyPost = (post: RecentBlueskyPostItem) => {
+    const permalink = post.permalink || `https://bsky.app/profile/${post.author?.handle || credentials.blueskyHandle || 'me'}/post/${post.rkey}`;
+    setInputUrl(permalink);
+    setShowRecentBlueskyPicker(false);
+    handleResolveBluesky(permalink);
   };
 
   const handleCancelAllReplies = () => {
@@ -249,7 +314,7 @@ export const ReplySettingsSection: React.FC<ReplySettingsSectionProps> = ({
   const hasAnyTarget = Boolean(bskyTarget || thTarget);
 
   return (
-    <div className="bg-[#121826]/80 border border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-200">
+    <div id="reply-settings-panel" className="bg-[#121826]/80 border border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-200 scroll-mt-20">
       {/* ヘッダーバー（トリガースイッチなし） */}
       <div className="p-3 sm:p-3.5 flex items-center justify-between gap-3 bg-[#151c2e]/50 border-b border-slate-800/80">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -315,10 +380,22 @@ export const ReplySettingsSection: React.FC<ReplySettingsSectionProps> = ({
                   Bluesky 投稿を検出
                 </span>
               ) : detectedPlatform === 'Threads' ? (
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1 animate-in fade-in">
-                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400"></span>
-                  Threads 投稿を検出
-                </span>
+                threadsOwnership.isOwnerMatch === true ? (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 animate-in fade-in">
+                    <UserCheck className="w-3 h-3 text-emerald-400" />
+                    Threads 投稿（本人: @{threadsOwnership.extractedUsername}）
+                  </span>
+                ) : threadsOwnership.isOwnerMatch === false ? (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1 animate-in fade-in">
+                    <UserX className="w-3 h-3 text-rose-400" />
+                    Threads 投稿（他者: @{threadsOwnership.extractedUsername}）
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1 animate-in fade-in">
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400"></span>
+                    Threads 投稿を検出
+                  </span>
+                )
               ) : (
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60 flex items-center gap-1">
                   <LinkIcon className="w-3 h-3" />
@@ -327,27 +404,46 @@ export const ReplySettingsSection: React.FC<ReplySettingsSectionProps> = ({
               )}
             </div>
 
-            {/* Threadsの投稿から選ぶボタン */}
-            {postToThreads && (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowRecentThreadsPicker(true);
-                  if (recentThreadsPosts.length === 0) {
-                    handleLoadRecentThreads();
-                  }
-                }}
-                className="text-[11px] font-medium text-violet-400 hover:text-violet-300 flex items-center gap-1 transition px-2 py-1 rounded bg-violet-950/40 hover:bg-violet-900/50 border border-violet-800/40"
-              >
-                <ListPlus className="w-3.5 h-3.5" />
-                自分のThreads投稿から選択
-              </button>
-            )}
+            {/* 最近の投稿から選ぶボタン（Bluesky / Threads） */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {postToBluesky && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRecentBlueskyPicker(true);
+                    if (recentBlueskyPosts.length === 0) {
+                      handleLoadRecentBluesky();
+                    }
+                  }}
+                  className="text-[11px] font-medium text-sky-400 hover:text-sky-300 flex items-center gap-1 transition px-2 py-1 rounded bg-sky-950/40 hover:bg-sky-900/50 border border-sky-800/40 cursor-pointer"
+                >
+                  <ListPlus className="w-3.5 h-3.5" />
+                  🦋 自分のBluesky投稿から選択
+                </button>
+              )}
+
+              {postToThreads && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRecentThreadsPicker(true);
+                    if (recentThreadsPosts.length === 0) {
+                      handleLoadRecentThreads();
+                    }
+                  }}
+                  className="text-[11px] font-medium text-violet-400 hover:text-violet-300 flex items-center gap-1 transition px-2 py-1 rounded bg-violet-950/40 hover:bg-violet-900/50 border border-violet-800/40 cursor-pointer"
+                >
+                  <ListPlus className="w-3.5 h-3.5" />
+                  🌀 自分のThreads投稿から選択
+                </button>
+              )}
+            </div>
           </div>
 
           {/* 統合入力バー */}
           <div className="relative">
             <input
+              id="unified-reply-input"
               type="text"
               value={inputUrl}
               onChange={(e) => {
@@ -396,6 +492,28 @@ export const ReplySettingsSection: React.FC<ReplySettingsSectionProps> = ({
             </div>
           </div>
 
+          {/* リアルタイム所有権アラート（Threads専用：入力即時通知） */}
+          {!resolveError && detectedPlatform === 'Threads' && threadsOwnership.isThreadsUrl && threadsOwnership.isOwnerMatch === false && !isDemoMode && (
+            <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-800/40 text-rose-200 text-xs flex items-start gap-2 animate-in fade-in">
+              <UserX className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div className="leading-relaxed">
+                <span className="font-bold text-rose-300">他者のThreads投稿が検出されました:</span>
+                <div className="text-[11px] text-rose-200/90 mt-0.5">
+                  入力されたURLの投稿者は <span className="font-semibold text-white">@{threadsOwnership.extractedUsername}</span> です。Threads公式APIの制限により、連携中のご自身のアカウント（<span className="font-semibold text-emerald-300">@{credentials.threadsUsername?.replace(/^@/, '') || 'ご自身'}</span>）の投稿にのみリプライ可能です。
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!resolveError && detectedPlatform === 'Threads' && threadsOwnership.isThreadsUrl && threadsOwnership.isOwnerMatch === true && !replySettings.threadsResolved && (
+            <div className="p-2 rounded-lg bg-emerald-950/20 border border-emerald-800/30 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in">
+              <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="text-[11px] text-emerald-300">
+                ご自身（@{threadsOwnership.extractedUsername}）の投稿URLを確認しました。「照合・事前チェック」で確定してください。
+              </span>
+            </div>
+          )}
+
           {/* エラー表示と手動選択フォールバック */}
           {resolveError && (
             <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 text-xs space-y-2">
@@ -425,9 +543,203 @@ export const ReplySettingsSection: React.FC<ReplySettingsSectionProps> = ({
               )}
             </div>
           )}
-        </div>
 
-        {/* 解決済みの返信先情報カード */}
+          {/* トレース詳細トグル & インスペクター（Threads専用） */}
+          {detectedPlatform === 'Threads' && (
+            <div className="pt-1 border-t border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setShowTraceInspector(!showTraceInspector)}
+                className="w-full flex items-center justify-between text-[11px] text-slate-400 hover:text-slate-200 py-1 px-1.5 rounded transition hover:bg-slate-800/50 cursor-pointer"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5 text-violet-400" />
+                  <span className="font-medium text-slate-300">Threads URL生成・パースのトレース詳細</span>
+                  {threadsOwnership.isThreadsUrl && (
+                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
+                      threadsOwnership.isOwnerMatch === true
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : threadsOwnership.isOwnerMatch === false
+                        ? 'bg-rose-500/20 text-rose-300'
+                        : 'bg-violet-500/20 text-violet-300'
+                    }`}>
+                      {threadsOwnership.isOwnerMatch === true ? '本人一致' : threadsOwnership.isOwnerMatch === false ? '他者' : '解析済'}
+                    </span>
+                  )}
+                </span>
+                <span className="flex items-center gap-1 text-slate-500">
+                  {showTraceInspector ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </span>
+              </button>
+
+              {showTraceInspector && (
+              <div className="mt-2.5 p-3 rounded-lg bg-[#080d1a] border border-violet-900/30 text-xs space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-violet-300 font-semibold text-xs">
+                    <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                    <span>パース＆URL生成の実行トレース</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const traceText = JSON.stringify(
+                          {
+                            inputUrl,
+                            authenticatedUsername: credentials.threadsUsername,
+                            ownershipResult: {
+                              isThreadsUrl: threadsOwnership.isThreadsUrl,
+                              isOwnerMatch: threadsOwnership.isOwnerMatch,
+                              extractedUsername: threadsOwnership.extractedUsername,
+                              extractedPostId: threadsOwnership.extractedPostId,
+                              formattedUrl: threadsOwnership.formattedUrl,
+                              reason: threadsOwnership.reason,
+                            },
+                            steps: threadsOwnership.traceSteps,
+                          },
+                          null,
+                          2
+                        );
+                        navigator.clipboard.writeText(traceText);
+                        setCopiedTrace(true);
+                        setTimeout(() => setCopiedTrace(false), 2000);
+                      }}
+                      className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 flex items-center gap-1 transition cursor-pointer border border-slate-700"
+                    >
+                      {copiedTrace ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      {copiedTrace ? 'コピー完了' : 'JSONコピー'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 判定サマリー表 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
+                  <div className="p-2 rounded bg-slate-900/80 border border-slate-800">
+                    <span className="text-slate-500 block text-[10px]">認証中のThreadsユーザー:</span>
+                    <span className="text-slate-200 font-semibold truncate block">
+                      {credentials.threadsUsername ? `@${credentials.threadsUsername.replace(/^@/, '')}` : '(未設定)'}
+                    </span>
+                  </div>
+                  <div className="p-2 rounded bg-slate-900/80 border border-slate-800">
+                    <span className="text-slate-500 block text-[10px]">URLから抽出されたユーザー名:</span>
+                    <span className="text-slate-200 font-semibold truncate block">
+                      {threadsOwnership.extractedUsername ? `@${threadsOwnership.extractedUsername}` : '(なし)'}
+                    </span>
+                  </div>
+                  <div className="p-2 rounded bg-slate-900/80 border border-slate-800 sm:col-span-2">
+                    <span className="text-slate-500 block text-[10px]">生成された正規URL:</span>
+                    <span className="text-violet-300 font-semibold break-all select-all block" title={threadsOwnership.formattedUrl}>
+                      {threadsOwnership.formattedUrl || '(なし)'}
+                    </span>
+                  </div>
+                  <div className="p-2 rounded bg-slate-900/80 border border-slate-800 sm:col-span-2">
+                    <span className="text-slate-500 block text-[10px]">アカウント突合結果 (同一人物チェック):</span>
+                    <span
+                      className={`font-semibold inline-flex items-center gap-1 ${
+                        threadsOwnership.isOwnerMatch === true
+                          ? 'text-emerald-400'
+                          : threadsOwnership.isOwnerMatch === false
+                          ? 'text-rose-400'
+                          : 'text-amber-400'
+                      }`}
+                    >
+                      {threadsOwnership.isOwnerMatch === true
+                        ? '✅ 本人投稿（完全一致）'
+                        : threadsOwnership.isOwnerMatch === false
+                        ? '❌ 他者投稿（不一致・リプライ不可）'
+                        : '⚠️ 投稿ID/短縮URL（API照合待ち）'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ステップ別タイムライン */}
+                <div className="space-y-1.5 border-t border-slate-800/80 pt-2">
+                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+                    ステップ実行ログ ({threadsOwnership.traceSteps.length}件)
+                  </span>
+                  <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                    {threadsOwnership.traceSteps.map((step) => (
+                      <div
+                        key={step.step}
+                        className={`p-1.5 rounded text-[11px] flex items-start gap-2 border font-mono ${
+                          step.status === 'success'
+                            ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-200'
+                            : step.status === 'warn'
+                            ? 'bg-rose-950/20 border-rose-800/40 text-rose-200'
+                            : step.status === 'error'
+                            ? 'bg-red-950/30 border-red-800/40 text-red-200'
+                            : 'bg-slate-900/50 border-slate-800 text-slate-300'
+                        }`}
+                      >
+                        <span className="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-slate-400 shrink-0">
+                          #{step.step}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-[10px]">{step.label}</span>
+                            <span className="text-[9px] text-slate-500 font-sans">{step.timestamp}</span>
+                          </div>
+                          <div className="text-[11px] opacity-90 break-all">{step.detail}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* トレース検証用クイックテストボタン */}
+                <div className="border-t border-slate-800/80 pt-2 space-y-1">
+                  <span className="text-[10px] font-semibold text-slate-400 block">
+                    クイック入力テスト（トレース動作確認用）:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const myUser = credentials.threadsUsername ? credentials.threadsUsername.replace(/^@/, '') : 'my_account';
+                        const testUrl = convertToThreadsUrl(myUser, 'DF987654321', true);
+                        setInputUrl(testUrl);
+                      }}
+                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition cursor-pointer border border-slate-700"
+                    >
+                      👤 本人投稿URL例
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const testUrl = convertToThreadsUrl('someone_else_user', 'AB123456789', true);
+                        setInputUrl(testUrl);
+                      }}
+                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition cursor-pointer border border-slate-700"
+                    >
+                      👥 他人投稿URL例
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInputUrl('3298471928374829102');
+                      }}
+                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition cursor-pointer border border-slate-700"
+                    >
+                      🔢 数値ID例
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInputUrl('https://www.threads.net/t/C123456789');
+                      }}
+                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition cursor-pointer border border-slate-700"
+                    >
+                      🔗 短縮URL例
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 解決済みの返信先情報カード */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-300">設定された返信先</span>
@@ -610,6 +922,119 @@ export const ReplySettingsSection: React.FC<ReplySettingsSectionProps> = ({
           )}
         </div>
       </div>
+
+      {/* Bluesky 自分の投稿から選択 モーダル */}
+      {showRecentBlueskyPicker && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[#0b121e] border border-sky-900/50 rounded-2xl max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-4 border-b border-sky-900/40 flex items-center justify-between bg-sky-950/40">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5">
+                    <span>🦋 あなたの最近のBluesky投稿</span>
+                    {credentials.blueskyHandle && (
+                      <span className="text-[11px] font-normal text-sky-300 bg-sky-900/50 px-1.5 py-0.5 rounded">
+                        @{credentials.blueskyHandle.replace(/^@/, '')}
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">返信先にする投稿を1つ選択してください</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRecentBlueskyPicker(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto space-y-2.5">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-xs text-slate-400">
+                  {recentBlueskyPosts.length > 0 ? `${recentBlueskyPosts.length}件の投稿` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLoadRecentBluesky}
+                  disabled={recentBlueskyLoading}
+                  className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1 font-medium transition cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${recentBlueskyLoading ? 'animate-spin' : ''}`} />
+                  再読み込み
+                </button>
+              </div>
+
+              {recentBlueskyLoading && recentBlueskyPosts.length === 0 ? (
+                <div className="py-12 flex flex-col items-center justify-center text-slate-400 space-y-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-sky-400" />
+                  <p className="text-xs">Blueskyの投稿一覧を取得中...</p>
+                </div>
+              ) : recentBlueskyError ? (
+                <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/50 text-rose-300 text-xs text-center space-y-2">
+                  <AlertTriangle className="w-6 h-6 mx-auto text-rose-400" />
+                  <p>{recentBlueskyError}</p>
+                  <button
+                    type="button"
+                    onClick={handleLoadRecentBluesky}
+                    className="px-3 py-1 bg-rose-800/50 hover:bg-rose-800 text-rose-100 rounded-md text-[11px] transition cursor-pointer"
+                  >
+                    リトライ
+                  </button>
+                </div>
+              ) : recentBlueskyPosts.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs space-y-1">
+                  <p>投稿が見つかりませんでした。</p>
+                  <p className="text-[11px] text-slate-500">Blueskyでまだ投稿していないか、アカウント連携を確認してください。</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {recentBlueskyPosts.map((post) => (
+                    <div
+                      key={post.uri || post.rkey}
+                      onClick={() => handleSelectRecentBlueskyPost(post)}
+                      className="p-3 rounded-xl bg-slate-900/70 hover:bg-sky-950/30 border border-slate-800 hover:border-sky-500/50 cursor-pointer transition text-left group"
+                    >
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1.5">
+                        <span className="text-slate-400">
+                          {post.indexedAt ? new Date(post.indexedAt).toLocaleString('ja-JP') : '日時不明'}
+                        </span>
+                        <span className="text-sky-400 group-hover:underline flex items-center gap-0.5 text-[10px] font-medium">
+                          選択して返信 <CornerDownRight className="w-3 h-3" />
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-200 line-clamp-3 leading-relaxed mb-2">
+                        {post.text || '（メディア投稿）'}
+                      </p>
+                      {(post.replyCount !== undefined || post.repostCount !== undefined || post.likeCount !== undefined) && (
+                        <div className="flex items-center gap-3 text-[10px] text-slate-500 border-t border-slate-800/60 pt-1.5 font-mono">
+                          <span>💬 {post.replyCount || 0}</span>
+                          <span>🔁 {post.repostCount || 0}</span>
+                          <span>❤️ {post.likeCount || 0}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 border-t border-slate-800 bg-slate-900/40 text-right">
+              <button
+                type="button"
+                onClick={() => setShowRecentBlueskyPicker(false)}
+                className="px-4 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition cursor-pointer"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Threads 自分の投稿から選択 モーダル */}
       {showRecentThreadsPicker && (

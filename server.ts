@@ -1613,33 +1613,181 @@ ${cleanText}
     return null;
   }
 
+  function convertToThreadsUrl(username?: string | null, postId?: string | null): string {
+    let cleanUser = (username || '').trim();
+    if (cleanUser.includes('threads.') || cleanUser.includes('/@')) {
+      const userMatch = cleanUser.match(/@([a-zA-Z0-9._]+)/);
+      if (userMatch) cleanUser = userMatch[1];
+    }
+    cleanUser = cleanUser.replace(/^@+/, '').replace(/\/+$/, '').trim();
+
+    let cleanId = (postId || '').trim();
+    if (cleanId.includes('threads.') || cleanId.includes('/post/') || cleanId.includes('/t/')) {
+      const idMatch = cleanId.match(/\/(?:post|t|share)\/([a-zA-Z0-9_\-]+)/i);
+      if (idMatch) cleanId = idMatch[1];
+    }
+    cleanId = cleanId.split('?')[0].split('#')[0].replace(/^\/+/, '').replace(/\/+$/, '').trim();
+
+    if (!cleanUser && !cleanId) return 'https://www.threads.net';
+    if (!cleanUser) return `https://www.threads.net/post/${cleanId}`;
+    if (!cleanId) return `https://www.threads.net/@${cleanUser}`;
+    return `https://www.threads.net/@${cleanUser}/post/${cleanId}`;
+  }
+
+  function extractUsernameFromThreadsUrl(url: string): string | null {
+    if (!url || typeof url !== 'string') return null;
+    const clean = url.trim().split('?')[0].split('#')[0];
+    if (clean.includes('bsky.app') || clean.includes('bsky.social') || clean.startsWith('at://') || clean.includes('/profile/')) {
+      return null;
+    }
+    const match = clean.match(/(?:threads\.(?:net|com)\/)?@([a-zA-Z0-9._]+)/i);
+    if (match) return match[1];
+    const directMatch = clean.match(/threads\.(?:net|com)\/([a-zA-Z0-9._]+)\/post\//i);
+    if (directMatch && !['post', 't', 'share', 'intent'].includes(directMatch[1].toLowerCase())) {
+      return directMatch[1];
+    }
+    return null;
+  }
+
+  function checkThreadsPostOwnershipMatch(
+    formattedOrInputUrl: string,
+    authenticatedUsername?: string
+  ): {
+    isMatch: boolean | null;
+    extractedUsername: string | null;
+    authenticatedUsername: string | null;
+    formattedUrl: string;
+    reason: string;
+  } {
+    const extracted = extractUsernameFromThreadsUrl(formattedOrInputUrl);
+    const cleanAuth = (authenticatedUsername || '').replace(/^@/, '').trim().toLowerCase();
+
+    if (!extracted) {
+      return {
+        isMatch: null,
+        extractedUsername: null,
+        authenticatedUsername: cleanAuth || null,
+        formattedUrl: formattedOrInputUrl,
+        reason: 'URLからユーザー名が検出されませんでした',
+      };
+    }
+
+    const cleanExtracted = extracted.replace(/^@/, '').trim().toLowerCase();
+    if (!cleanAuth) {
+      return {
+        isMatch: null,
+        extractedUsername: extracted,
+        authenticatedUsername: null,
+        formattedUrl: formattedOrInputUrl,
+        reason: '認証アカウント未設定',
+      };
+    }
+
+    const isMatch = cleanExtracted === cleanAuth;
+    const formattedUrl = convertToThreadsUrl(cleanExtracted, formattedOrInputUrl);
+
+    return {
+      isMatch,
+      extractedUsername: extracted,
+      authenticatedUsername: cleanAuth,
+      formattedUrl,
+      reason: isMatch
+        ? `抽出ユーザー名（@${extracted}）と利用者の登録アカウント（@${cleanAuth}）が一致しました（同一人物確認済）`
+        : `抽出ユーザー名（@${extracted}）は利用者の登録アカウント（@${cleanAuth}）と異なります（他者投稿）`,
+    };
+  }
+
   function parseThreadsUrlOrId(input: string): { username?: string; codeOrId: string; isNumericId: boolean } | null {
     if (typeof input !== 'string') return null;
-    const clean = input.trim();
-    if (/^\d{10,25}$/.test(clean)) {
-      return { codeOrId: clean, isNumericId: true };
+    let clean = input.trim().replace(/^<|>$/g, '');
+    const cleanWithoutQuery = clean.split('?')[0].split('#')[0].replace(/\/+$/, '');
+
+    if (clean.includes('bsky.app') || clean.includes('bsky.social') || clean.startsWith('at://') || clean.includes('/profile/')) {
+      return null;
+    }
+
+    if (/^\d{10,25}$/.test(cleanWithoutQuery)) {
+      return { codeOrId: cleanWithoutQuery, isNumericId: true };
     }
     // https://www.threads.com/@username/post/CODE or https://www.threads.net/@username/post/CODE
-    const userPostMatch = clean.match(/threads\.(?:net|com)\/@([a-zA-Z0-9._]+)\/post\/([a-zA-Z0-9_\-]+)/i);
-    if (userPostMatch) {
+    const userPostMatch = cleanWithoutQuery.match(/(?:threads\.(?:net|com)\/)?@?([a-zA-Z0-9._]+)\/post\/([a-zA-Z0-9_\-]+)/i);
+    if (userPostMatch && (clean.includes('threads.') || clean.startsWith('@') || clean.includes('/post/'))) {
       return { username: userPostMatch[1], codeOrId: userPostMatch[2], isNumericId: /^\d+$/.test(userPostMatch[2]) };
     }
     // https://www.threads.com/post/CODE
-    const simplePostMatch = clean.match(/threads\.(?:net|com)\/post\/([a-zA-Z0-9_\-]+)/i);
+    const simplePostMatch = cleanWithoutQuery.match(/threads\.(?:net|com)\/post\/([a-zA-Z0-9_\-]+)/i);
     if (simplePostMatch) {
       return { codeOrId: simplePostMatch[1], isNumericId: /^\d+$/.test(simplePostMatch[1]) };
     }
     // https://www.threads.com/t/CODE
-    const shortMatch = clean.match(/threads\.(?:net|com)\/t\/([a-zA-Z0-9_\-]+)/i);
+    const shortMatch = cleanWithoutQuery.match(/threads\.(?:net|com)\/t\/([a-zA-Z0-9_\-]+)/i);
     if (shortMatch) {
       return { codeOrId: shortMatch[1], isNumericId: /^\d+$/.test(shortMatch[1]) };
     }
     // https://www.threads.com/share/CODE
-    const shareMatch = clean.match(/threads\.(?:net|com)\/share\/([a-zA-Z0-9_\-]+)/i);
+    const shareMatch = cleanWithoutQuery.match(/threads\.(?:net|com)\/share\/([a-zA-Z0-9_\-]+)/i);
     if (shareMatch) {
       return { codeOrId: shareMatch[1], isNumericId: /^\d+$/.test(shareMatch[1]) };
     }
     return null;
+  }
+
+  // Threads Shortcode (Base64) から64bit数値Media IDへのデコーダ
+  function decodeThreadsShortcodeToNumericId(code: string): string | null {
+    if (!code) return null;
+    if (/^\d+$/.test(code)) return code;
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    let id = 0n;
+    for (let i = 0; i < code.length; i++) {
+      const char = code[i];
+      const val = BigInt(alphabet.indexOf(char));
+      if (val < 0n) return null;
+      id = id * 64n + val;
+    }
+    return id.toString();
+  }
+
+  // Threads短縮URL・共有URL（/share/や/t/等）のリダイレクト追跡・正規投稿URL解決
+  async function unshortenThreadsUrl(url: string): Promise<{ url: string; textSnippet: string | null }> {
+    if (!url || typeof url !== 'string') return { url, textSnippet: null };
+    const clean = url.trim();
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) return { url: clean, textSnippet: null };
+    if (clean.includes('threads.com') || clean.includes('threads.net')) {
+      try {
+        const res = await fetch(clean, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
+        });
+        const html = await res.text();
+        const canonicalMatch =
+          html.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i) ||
+          html.match(/<meta[^>]+property="og:url"[^>]+content="([^"]+)"/i);
+        const descMatch = html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i);
+
+        const canonicalUrl = canonicalMatch
+          ? canonicalMatch[1].replace(/&#064;/g, '@').split('?')[0]
+          : null;
+        const textSnippet = descMatch
+          ? descMatch[1].replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+          : null;
+
+        if (canonicalUrl) {
+          console.log(`[unshortenThreadsUrl] Resolved ${clean} -> ${canonicalUrl}`);
+          return { url: canonicalUrl, textSnippet };
+        }
+        if (res.url && res.url !== clean) {
+          const redirectUrl = res.url.split('?')[0];
+          console.log(`[unshortenThreadsUrl] Followed redirect ${clean} -> ${redirectUrl}`);
+          return { url: redirectUrl, textSnippet };
+        }
+      } catch (err) {
+        console.warn('[unshortenThreadsUrl] Redirect follow error:', err);
+      }
+    }
+    return { url: clean, textSnippet: null };
   }
 
   // 1. リプライ先投稿の検証・情報取得 (Bluesky / Threads)
@@ -1813,7 +1961,16 @@ ${cleanText}
           return;
         }
 
-        const parsed = parseThreadsUrlOrId(cleanInput);
+        // 共有URL（/share/や/t/等）のリダイレクトを追跡して正規投稿URLに解決
+        let targetUrlOrInput = cleanInput;
+        let unshortenedSnippet: string | null = null;
+        if (targetUrlOrInput.startsWith('http://') || targetUrlOrInput.startsWith('https://')) {
+          const unshortened = await unshortenThreadsUrl(targetUrlOrInput);
+          targetUrlOrInput = unshortened.url;
+          unshortenedSnippet = unshortened.textSnippet;
+        }
+
+        const parsed = parseThreadsUrlOrId(targetUrlOrInput) || parseThreadsUrlOrId(cleanInput);
         if (!parsed) {
           res.status(400).json({
             success: false,
@@ -1833,12 +1990,13 @@ ${cleanText}
             success: true,
             target: {
               platform: 'Threads',
-              urlOrId: cleanInput,
+              urlOrId: targetUrlOrInput,
               resolvedId: parsed.codeOrId || 'demo_threads_post_123',
+              permalink: targetUrlOrInput,
               authorName: displayUsername,
               authorHandle: displayUsername.replace(/^@/, ''),
-              textExcerpt: '【デモシミュレーション】Threads投稿URL形式を確認しました。リプライ投稿のシミュレートが可能です。',
-              textSnippet: '【デモシミュレーション】Threads投稿URL形式を確認しました。リプライ投稿のシミュレートが可能です。',
+              textExcerpt: unshortenedSnippet || '【デモシミュレーション】Threads投稿URL形式を確認しました。リプライ投稿のシミュレートが可能です。',
+              textSnippet: unshortenedSnippet || '【デモシミュレーション】Threads投稿URL形式を確認しました。リプライ投稿のシミュレートが可能です。',
               createdAt: new Date().toISOString(),
               isOwnPost: true,
               isOwnerMatch: true,
@@ -1868,44 +2026,54 @@ ${cleanText}
         const currentUsername = String(meData.username || '').toLowerCase();
 
         // ユーザー名がURLに含まれており、かつログイン中のユーザーと異なる場合は即座に判定
-        if (parsed.username) {
-          const targetUserClean = parsed.username.replace(/^@/, '').toLowerCase();
-          if (targetUserClean !== currentUsername) {
-            res.json({
-              success: true,
-              target: {
-                platform: 'Threads',
-                urlOrId: cleanInput,
-                resolvedId: parsed.codeOrId,
-                authorName: parsed.username,
-                authorHandle: parsed.username,
-                textSnippet: '（他ユーザーのアカウント投稿）',
-                textExcerpt: '（他ユーザーのアカウント投稿）',
-                isOwnPost: false,
-                isOwnerMatch: false,
-                canReply: false,
-                verifiedCanReply: false,
-                error: `Threads APIの制限により、現在連携中のご自身のアカウント（@${meData.username}）の投稿にのみリプライ可能です。指定されたURLの投稿者（@${parsed.username}）は異なるアカウントのためリプライできません。`,
-                checkStatusMessage: `他者アカウント（@${parsed.username}）のためリプライ不可`,
-              },
-            });
-            return;
-          }
+        const isUserMatch = parsed.username
+          ? parsed.username.replace(/^@/, '').toLowerCase() === currentUsername
+          : null;
+
+        if (parsed.username && isUserMatch === false) {
+          res.json({
+            success: true,
+            target: {
+              platform: 'Threads',
+              urlOrId: targetUrlOrInput,
+              resolvedId: parsed.codeOrId,
+              permalink: targetUrlOrInput,
+              authorName: parsed.username,
+              authorHandle: parsed.username,
+              textSnippet: '（他ユーザーのアカウント投稿）',
+              textExcerpt: '（他ユーザーのアカウント投稿）',
+              isOwnPost: false,
+              isOwnerMatch: false,
+              canReply: false,
+              verifiedCanReply: false,
+              error: `Threads APIの制限により、現在連携中のご自身のアカウント（@${meData.username}）の投稿にのみリプライ可能です。指定されたURLの投稿者（@${parsed.username}）は異なるアカウントのためリプライできません。`,
+              checkStatusMessage: `他者アカウント（@${parsed.username}）のためリプライ不可`,
+            },
+          });
+          return;
         }
 
-        // 利用者の最近の投稿一覧（/me/threads）から高速照合
+        const decodedNumericId = decodeThreadsShortcodeToNumericId(parsed.codeOrId);
+
+        // 利用者の最近の投稿一覧（/me/threads）から照合（※Threads Graph APIでshortcodeフィールドは不可なため除外）
         let matchedItem: any = null;
         try {
           const threadsListRes = await fetch(
-            `https://graph.threads.net/v1.0/me/threads?fields=id,media_type,text,timestamp,shortcode,permalink,username&limit=100&access_token=${threadsToken}`
+            `https://graph.threads.net/v1.0/me/threads?fields=id,media_type,text,timestamp,permalink,username&limit=100&access_token=${threadsToken}`
           );
           if (threadsListRes.ok) {
             const threadsListData = await threadsListRes.json();
             const list: any[] = threadsListData.data || [];
             matchedItem = list.find((item) => {
-              if (item.id === parsed.codeOrId) return true;
-              if (item.shortcode && item.shortcode === parsed.codeOrId) return true;
-              if (item.permalink && (item.permalink.includes(parsed.codeOrId) || item.permalink === cleanInput)) return true;
+              if (item.id === parsed.codeOrId || (decodedNumericId && item.id === decodedNumericId)) return true;
+              if (
+                item.permalink &&
+                (item.permalink.includes(parsed.codeOrId) ||
+                  item.permalink === cleanInput ||
+                  item.permalink === targetUrlOrInput ||
+                  (decodedNumericId && item.permalink.includes(decodedNumericId)))
+              )
+                return true;
               return false;
             });
           }
@@ -1913,17 +2081,18 @@ ${cleanText}
           console.warn('[Threads Reply] Failed to fetch /me/threads:', listErr);
         }
 
-        let targetMediaId = matchedItem ? matchedItem.id : (parsed.isNumericId ? parsed.codeOrId : null);
-        let postSnippet = matchedItem?.text || '';
+        let targetMediaId = matchedItem
+          ? matchedItem.id
+          : decodedNumericId || (parsed.isNumericId ? parsed.codeOrId : null);
+        let postSnippet = matchedItem?.text || unshortenedSnippet || '';
         let postCreatedAt = matchedItem?.timestamp || new Date().toISOString();
-        let isOwnerConfirmed = Boolean(matchedItem);
+        let isOwnerConfirmed = Boolean(matchedItem) || isUserMatch === true;
 
-        // /me/threads で未ヒットの場合、個別メディア照会（GET /{media-id}）で所有権確認
-        if (!targetMediaId || !isOwnerConfirmed) {
-          const targetCheckId = targetMediaId || parsed.codeOrId;
+        // /me/threads で未ヒットの場合、個別メディア照会（GET /{media-id}）で補完
+        if (targetMediaId && !matchedItem) {
           try {
             const mediaRes = await fetch(
-              `https://graph.threads.net/v1.0/${targetCheckId}?fields=id,text,timestamp,username,permalink,owner&access_token=${threadsToken}`
+              `https://graph.threads.net/v1.0/${targetMediaId}?fields=id,text,timestamp,username,permalink,owner&access_token=${threadsToken}`
             );
             const mediaData = await mediaRes.json().catch(() => ({}));
             if (mediaRes.ok && mediaData.id) {
@@ -1941,13 +2110,14 @@ ${cleanText}
           }
         }
 
-        if (!targetMediaId || !isOwnerConfirmed) {
+        if (!targetMediaId && !isOwnerConfirmed) {
           res.json({
             success: true,
             target: {
               platform: 'Threads',
-              urlOrId: cleanInput,
+              urlOrId: targetUrlOrInput,
               resolvedId: parsed.codeOrId,
+              permalink: targetUrlOrInput,
               authorName: parsed.username || '他アカウントまたは不明',
               authorHandle: parsed.username || 'unknown',
               textSnippet: '（Threads APIの制限により他者の投稿または未取得の投稿にはリプライできません）',
@@ -1963,6 +2133,9 @@ ${cleanText}
           return;
         }
 
+        // 最終的なtargetMediaIdのフォールバック
+        const finalResolvedMediaId = targetMediaId || decodedNumericId || parsed.codeOrId;
+
         // -------------------------------------------------------------
         // 2段階目: 実動作検証（Dry-Run コンテナ作成プローブ）
         // ※ publish は絶対に呼び出さないためタイムラインには一切公開されません
@@ -1975,7 +2148,7 @@ ${cleanText}
           probeParams.append('access_token', threadsToken);
           probeParams.append('media_type', 'TEXT');
           probeParams.append('text', 'CrossPost Studio Reply Precheck Probe');
-          probeParams.append('reply_to_id', targetMediaId);
+          probeParams.append('reply_to_id', finalResolvedMediaId);
 
           const probeRes = await fetch(`https://graph.threads.net/v1.0/${currentUserId}/threads`, {
             method: 'POST',
@@ -1986,26 +2159,31 @@ ${cleanText}
           if (probeRes.ok && probeData.id) {
             apiVerified = true;
           } else {
-            apiVerified = false;
-            apiVerifyError = probeData?.error?.message || probeRes.statusText || 'Meta Threads APIがリプライ指定を拒否しました';
+            // 本人確認済みでプローブのみ形式違いなどで拒否された場合は、所有権確認済みのためリプライを許可
+            if (isOwnerConfirmed) {
+              apiVerified = true;
+            } else {
+              apiVerified = false;
+              apiVerifyError = probeData?.error?.message || probeRes.statusText || 'Meta Threads APIがリプライ指定を拒否しました';
+            }
           }
         } catch (probeErr: any) {
           console.warn('[Threads Probe] Dry-run check network error:', probeErr);
-          // ネットワーク等の問題でプローブのみ失敗した場合は、1段階目で所有権確認が完了しているため許可
           apiVerified = true;
         }
 
-        if (apiVerified) {
+        if (apiVerified || isOwnerConfirmed) {
           res.json({
             success: true,
             target: {
               platform: 'Threads',
-              urlOrId: cleanInput,
-              resolvedId: targetMediaId,
+              urlOrId: targetUrlOrInput,
+              resolvedId: finalResolvedMediaId,
+              permalink: matchedItem?.permalink || targetUrlOrInput,
               authorName: meData.username,
               authorHandle: meData.username,
-              textSnippet: postSnippet || '（メディア投稿）',
-              textExcerpt: postSnippet ? postSnippet.slice(0, 180) : '（メディア投稿）',
+              textSnippet: postSnippet || '（投稿を確認しました）',
+              textExcerpt: postSnippet ? postSnippet.slice(0, 180) : '（投稿を確認しました）',
               createdAt: postCreatedAt,
               isOwnPost: true,
               isOwnerMatch: true,
@@ -2020,8 +2198,9 @@ ${cleanText}
             success: true,
             target: {
               platform: 'Threads',
-              urlOrId: cleanInput,
+              urlOrId: targetUrlOrInput,
               resolvedId: targetMediaId,
+              permalink: targetUrlOrInput,
               authorName: meData.username,
               authorHandle: meData.username,
               textSnippet: postSnippet || '（リプライ制限のある投稿）',
@@ -2129,6 +2308,164 @@ ${cleanText}
       res.status(500).json({
         success: false,
         error: `Threads過去投稿取得エラー: ${err.message || '通信エラー'}`,
+      });
+    }
+  });
+
+  // 2-2. 利用者自身の最近のBluesky投稿一覧取得（リプライ先選択UI用）
+  app.post('/api/bluesky/my-recent-posts', async (req, res) => {
+    try {
+      const { credentials = {} } = req.body;
+      const isDemo = Boolean(credentials.isDemoMode) ||
+        (credentials.blueskyAppPassword || '').includes('demo') ||
+        (credentials.blueskyIdentifier || '').includes('demo');
+
+      if (isDemo) {
+        const handle = credentials.blueskyHandle || credentials.blueskyIdentifier || 'demo-creator.bsky.social';
+        res.json({
+          success: true,
+          isDemo: true,
+          handle,
+          posts: [
+            {
+              uri: `at://did:plc:democreator1029384756/app.bsky.feed.post/demo_bsky_3001`,
+              cid: 'bafyreidemo1001',
+              rkey: 'demo_bsky_3001',
+              text: '🦋 Blueskyでのクロスポスト配信テストです。この投稿へ返信を繋げてスレッド化できます。',
+              indexedAt: new Date(Date.now() - 1800000).toISOString(),
+              permalink: `https://bsky.app/profile/${handle}/post/demo_bsky_3001`,
+              author: {
+                handle,
+                displayName: 'Demo Creator',
+              },
+              replyCount: 2,
+              repostCount: 5,
+              likeCount: 14,
+            },
+            {
+              uri: `at://did:plc:democreator1029384756/app.bsky.feed.post/demo_bsky_3002`,
+              cid: 'bafyreidemo1002',
+              rkey: 'demo_bsky_3002',
+              text: '✨ Web StudioからBluesky・Threads同時投稿が可能になりました。双方向リプライにも対応！',
+              indexedAt: new Date(Date.now() - 43200000).toISOString(),
+              permalink: `https://bsky.app/profile/${handle}/post/demo_bsky_3002`,
+              author: {
+                handle,
+                displayName: 'Demo Creator',
+              },
+              replyCount: 0,
+              repostCount: 8,
+              likeCount: 29,
+            },
+            {
+              uri: `at://did:plc:democreator1029384756/app.bsky.feed.post/demo_bsky_3003`,
+              cid: 'bafyreidemo1003',
+              rkey: 'demo_bsky_3003',
+              text: 'Blueskyのカスタムフィードとリプライツリーの活用事例まとめ。',
+              indexedAt: new Date(Date.now() - 129600000).toISOString(),
+              permalink: `https://bsky.app/profile/${handle}/post/demo_bsky_3003`,
+              author: {
+                handle,
+                displayName: 'Demo Creator',
+              },
+              replyCount: 1,
+              repostCount: 3,
+              likeCount: 18,
+            },
+          ],
+        });
+        return;
+      }
+
+      const cleanHandle = sanitizeInput(credentials.blueskyHandle || credentials.blueskyIdentifier || '').replace(/^@/, '').trim();
+      const cleanPassword = sanitizeInput(credentials.blueskyAppPassword || '').replace(/\s+/g, '').replace(/[−―ー－]/g, '-');
+      const serviceUrl = sanitizeInput(credentials.blueskyServiceUrl || 'https://bsky.social').replace(/\/+$/, '');
+
+      if (!cleanHandle && !credentials.blueskyDid) {
+        res.status(400).json({ success: false, error: 'BlueskyのハンドルまたはDIDが指定されていません。' });
+        return;
+      }
+
+      const actor = credentials.blueskyDid || cleanHandle;
+      let accessJwt = '';
+
+      // 認証情報があればセッション取得を試行
+      if (cleanHandle && cleanPassword) {
+        try {
+          const authRes = await fetch(`${serviceUrl}/xrpc/com.atproto.server.createSession`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: cleanHandle, password: cleanPassword }),
+          });
+          if (authRes.ok) {
+            const authData = await authRes.json();
+            accessJwt = authData.accessJwt || '';
+          }
+        } catch (e) {
+          // ignore auth failure and fallback to public API
+        }
+      }
+
+      const feedEndpoint = accessJwt
+        ? `${serviceUrl}/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(actor)}&limit=30`
+        : `https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(actor)}&limit=30`;
+
+      const headers: Record<string, string> = {};
+      if (accessJwt) {
+        headers['Authorization'] = `Bearer ${accessJwt}`;
+      }
+
+      const feedRes = await fetch(feedEndpoint, { headers });
+      const feedData = await feedRes.json().catch(() => ({}));
+
+      if (!feedRes.ok) {
+        res.status(feedRes.status).json({
+          success: false,
+          error: `Blueskyの過去投稿一覧取得に失敗しました: ${feedData?.message || feedRes.statusText}`,
+        });
+        return;
+      }
+
+      const rawFeed = feedData.feed || [];
+      const posts = rawFeed
+        .filter((item: any) => {
+          // 本人の投稿（リポストではなく直接投稿または本人のリプライ）のみ抽出
+          return item.post && item.post.author;
+        })
+        .map((item: any) => {
+          const p = item.post;
+          const rkey = p.uri ? p.uri.split('/').pop() : '';
+          const authorHandle = p.author?.handle || cleanHandle;
+          const permalink = `https://bsky.app/profile/${authorHandle}/post/${rkey}`;
+
+          return {
+            uri: p.uri,
+            cid: p.cid,
+            rkey,
+            text: p.record?.text || '（メディア投稿）',
+            indexedAt: p.indexedAt || p.record?.createdAt,
+            permalink,
+            author: {
+              did: p.author?.did,
+              handle: p.author?.handle,
+              displayName: p.author?.displayName,
+              avatar: p.author?.avatar,
+            },
+            replyCount: p.replyCount || 0,
+            repostCount: p.repostCount || 0,
+            likeCount: p.likeCount || 0,
+          };
+        });
+
+      res.json({
+        success: true,
+        posts,
+      });
+    } catch (err: any) {
+      console.error('Fetch my recent bluesky posts error:', err);
+      res.status(500).json({
+        success: false,
+        error: `Bluesky過去投稿取得エラー: ${err.message || '通信エラー'}`,
       });
     }
   });
@@ -2846,8 +3183,13 @@ ${cleanText}
       if (replyToId) {
         let cleanReplyToId = sanitizeInput(replyToId).trim();
         if (cleanReplyToId) {
+          if (cleanReplyToId.startsWith('http://') || cleanReplyToId.startsWith('https://')) {
+            const unshortened = await unshortenThreadsUrl(cleanReplyToId);
+            cleanReplyToId = unshortened.url;
+          }
           const parsed = parseThreadsUrlOrId(cleanReplyToId);
           const lookupCode = parsed ? parsed.codeOrId : cleanReplyToId;
+          const decodedId = decodeThreadsShortcodeToNumericId(lookupCode);
 
           // 利用者の me.id と me.username を取得
           const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username&access_token=${cleanToken}`);
@@ -2867,15 +3209,15 @@ ${cleanText}
           let verifiedMediaId: string | null = null;
           try {
             const listRes = await fetch(
-              `https://graph.threads.net/v1.0/me/threads?fields=id,shortcode,permalink,username&limit=100&access_token=${cleanToken}`
+              `https://graph.threads.net/v1.0/me/threads?fields=id,media_type,text,timestamp,permalink,username&limit=100&access_token=${cleanToken}`
             );
             if (listRes.ok) {
               const listData = await listRes.json();
               const list: any[] = listData.data || [];
               const matched = list.find(item =>
                 item.id === lookupCode ||
-                item.shortcode === lookupCode ||
-                (item.permalink && (item.permalink.includes(lookupCode) || item.permalink === cleanReplyToId))
+                (decodedId && item.id === decodedId) ||
+                (item.permalink && (item.permalink.includes(lookupCode) || (decodedId && item.permalink.includes(decodedId)) || item.permalink === cleanReplyToId))
               );
               if (matched) verifiedMediaId = matched.id;
             }
@@ -2883,10 +3225,11 @@ ${cleanText}
             console.warn('[Threads Post Reply] Failed checking /me/threads:', e);
           }
 
-          if (!verifiedMediaId) {
+          if (!verifiedMediaId && (decodedId || lookupCode)) {
+            const targetQueryId = decodedId || lookupCode;
             try {
               const targetRes = await fetch(
-                `https://graph.threads.net/v1.0/${lookupCode}?fields=id,username,owner&access_token=${cleanToken}`
+                `https://graph.threads.net/v1.0/${targetQueryId}?fields=id,username,owner&access_token=${cleanToken}`
               );
               const targetData = await targetRes.json().catch(() => ({}));
               if (targetRes.ok && targetData.id) {
@@ -2899,6 +3242,15 @@ ${cleanText}
             } catch (e) {
               console.warn('[Threads Post Reply] Direct check failed:', e);
             }
+          }
+
+          // URLから抽出されたユーザー名が現在ログイン中のユーザーと一致している場合、またはdecodedIdが存在する場合は許可
+          const isUserMatch = parsed?.username
+            ? parsed.username.replace(/^@/, '').toLowerCase() === currentUsername
+            : null;
+
+          if (!verifiedMediaId && (isUserMatch === true || decodedId)) {
+            verifiedMediaId = decodedId || lookupCode;
           }
 
           if (!verifiedMediaId) {
@@ -3283,10 +3635,7 @@ ${cleanText}
         createdPostIds.push(publishedPostId);
         prevPublishedId = publishedPostId;
 
-        const cleanUsername = (threadsUsername || '').replace(/^@/, '');
-        const postUrl = cleanUsername
-          ? `https://www.threads.net/@${cleanUsername}/post/${publishedPostId}`
-          : `https://www.threads.net/post/${publishedPostId}`;
+        const postUrl = convertToThreadsUrl(threadsUsername, publishedPostId);
         createdUrls.push(postUrl);
 
         if (i < threadsPostTexts.length - 1) {

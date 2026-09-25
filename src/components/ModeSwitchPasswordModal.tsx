@@ -115,6 +115,10 @@ export const ModeSwitchPasswordModal: React.FC<ModeSwitchPasswordModalProps> = (
             <Key className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
             <div className="text-[11.5px] text-slate-300 leading-relaxed">
               実アカウントへの意図しない投稿や誤操作を防ぐため、LIVE（本番）モードへの切替はパスワードで保護されています。
+              <div className="mt-1.5 text-[10.5px] text-emerald-400/90 font-medium flex items-center gap-1">
+                <span>✨</span>
+                <span>切替時にDEMOモードの古いキャッシュ・残留ステート（予約・履歴・通信ログ・リプライ設定）は自動クリーンアップされます。</span>
+              </div>
               <div className="mt-1 text-[10.5px] text-slate-400 font-normal">
                 ※ LIVE（本番）モードからDEMOモードへの切替時はパスワード認証は不要です。
               </div>
