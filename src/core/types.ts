@@ -33,7 +33,8 @@ export type ModalType =
   | 'userGuide'
   | 'quitConfirm'
   | 'posting'
-  | 'modePassword';
+  | 'modePassword'
+  | 'aboutApp';
 
 /**
  * Chain of Responsibility でバブリングされるイベント群
@@ -221,6 +222,7 @@ export interface RootViewModel {
     quitConfirm: boolean;
     posting: boolean;
     modePassword: boolean;
+    aboutApp: boolean;
   };
 
   // トースト通知

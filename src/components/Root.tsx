@@ -11,6 +11,7 @@ import { ScheduledPostsModal } from './ScheduledPostsModal';
 import { QuitConfirmModal } from './QuitConfirmModal';
 import { ModeSwitchPasswordModal } from './ModeSwitchPasswordModal';
 import { CommErrorModal } from './CommErrorModal';
+import { AboutAppModal } from './AboutAppModal';
 import { ToastContainer } from './ToastContainer';
 import { DEMO_CREDENTIALS } from '../utils/postApi';
 
@@ -87,6 +88,7 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         scheduledPostsCount={viewModel.scheduledPosts.filter((p) => p.status === 'pending').length}
         onOpenUserGuide={() => dispatch({ type: 'OPEN_MODAL', payload: 'userGuide' })}
         onOpenQuitConfirm={() => dispatch({ type: 'OPEN_MODAL', payload: 'quitConfirm' })}
+        onOpenAboutApp={() => dispatch({ type: 'OPEN_MODAL', payload: 'aboutApp' })}
         currentTheme={viewModel.theme}
         onSelectTheme={(theme) => dispatch({ type: 'SELECT_THEME', payload: theme })}
         onLogout={(platform) => dispatch({ type: 'LOGOUT', payload: platform })}
@@ -263,6 +265,11 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         onClose={() => dispatch({ type: 'CLOSE_MODAL', payload: 'modePassword' })}
         onConfirmSwitch={() => dispatch({ type: 'TOGGLE_DEMO_MODE' })}
         targetModeIsLive={viewModel.isDemoMode}
+      />
+
+      <AboutAppModal
+        isOpen={Boolean(viewModel.modals.aboutApp)}
+        onClose={() => dispatch({ type: 'CLOSE_MODAL', payload: 'aboutApp' })}
       />
 
       {/* 5. グローバルトースト通知コンテナ */}

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ApiCredentials, ThemeAccentId } from '../types';
-import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3 } from 'lucide-react';
+import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3, Info } from 'lucide-react';
 import { hasSavedAccountInVault } from '../utils/accountVault';
 import { calculateTokenExpiryInfo } from '../utils/tokenExpiry';
 import { ThemeSelector } from './ThemeSelector';
@@ -21,6 +21,7 @@ interface HeaderProps {
   scheduledPostsCount?: number;
   onOpenUserGuide?: () => void;
   onOpenQuitConfirm?: () => void;
+  onOpenAboutApp?: () => void;
   currentTheme: ThemeAccentId;
   onSelectTheme: (themeId: ThemeAccentId) => void;
   onLogout?: (platform?: 'all' | 'bluesky' | 'threads') => void;
@@ -42,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   scheduledPostsCount = 0,
   onOpenUserGuide,
   onOpenQuitConfirm,
+  onOpenAboutApp,
   currentTheme,
   onSelectTheme,
   onLogout,
@@ -345,6 +347,23 @@ export const Header: React.FC<HeaderProps> = ({
                   </button>
                 </div>
               )}
+
+              {/* アプリ情報 */}
+              {onOpenAboutApp && (
+                <div className="pt-1 border-t border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuickLogout(false);
+                      onOpenAboutApp();
+                    }}
+                    className="w-full text-center text-[10px] text-slate-300 hover:text-sky-300 py-1 hover:bg-sky-950/20 rounded transition cursor-pointer flex items-center justify-center gap-1"
+                  >
+                    <Info className="w-2.5 h-2.5 text-sky-400" />
+                    アプリ情報 (Version 1.0)
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -445,6 +464,20 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Power className="w-4 h-4 text-rose-400/80" />
             <span className="hidden lg:inline">終了</span>
+          </button>
+        )}
+
+        {/* 終了ボタンの右: アプリ説明ウインド表示ボタン */}
+        {onOpenAboutApp && (
+          <button
+            id="header-about-app-button"
+            type="button"
+            onClick={onOpenAboutApp}
+            className="bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-sky-300 border border-slate-800 hover:border-sky-500/50 p-2 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center gap-1.5 text-xs font-medium cursor-pointer shadow-sm"
+            title="CrossPost Web Studio アプリ情報・制作者プロフィールを表示"
+          >
+            <Info className="w-4 h-4 text-sky-400" />
+            <span className="hidden lg:inline">アプリ情報</span>
           </button>
         )}
       </div>

@@ -121,6 +121,7 @@ export class AppMediator implements IMediatorArbitrator {
     quitConfirm: false,
     posting: false,
     modePassword: false,
+    aboutApp: false,
   };
 
   // トースト
