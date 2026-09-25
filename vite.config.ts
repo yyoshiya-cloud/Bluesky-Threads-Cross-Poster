@@ -2,7 +2,18 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
-import {defineConfig, Plugin} from 'vite';
+import { execSync } from 'child_process';
+import { defineConfig, Plugin } from 'vite';
+import pkg from './package.json';
+
+// Git最新コミット日時 または ビルド実行日時 (Publish時)
+const getBuildDateTime = () => {
+  try {
+    const gitDate = execSync('git log -1 --format=%cI', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    if (gitDate) return gitDate;
+  } catch {}
+  return new Date().toISOString();
+};
 
 // LINT.IfChange(aistudio_media_plugin)
 function aistudioMediaPlugin(): Plugin {
@@ -71,6 +82,10 @@ export default defineConfig(() => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+    },
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version || '1.0.0'),
+      __APP_BUILD_DATE__: JSON.stringify(getBuildDateTime()),
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

@@ -792,24 +792,6 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 </button>
               </div>
             </div>
-
-            {/* 下書きクリアボタン */}
-            {hasContent && (
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={onClearDraft}
-                  disabled={isNeitherSelected}
-                  className={`text-slate-300 hover:text-rose-300 hover:bg-slate-800 text-xs px-2 py-1 rounded-lg transition flex items-center gap-1 border border-transparent hover:border-slate-700 ${
-                    isNeitherSelected ? 'opacity-35 pointer-events-none cursor-not-allowed' : 'cursor-pointer'
-                  }`}
-                  title="投稿内容をクリア"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">クリア</span>
-                </button>
-              </div>
-            )}
           </div>
 
           {/* 投稿先が両方未選択（投稿不可状態）時の案内バナー */}
@@ -1054,6 +1036,23 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               >
                 <Scissors className="w-3 h-3 text-sky-400" />
                 <span>区切る (---)</span>
+              </button>
+
+              {/* 投稿内容クリアボタン（区切るボタンの右） */}
+              <button
+                id="editor-clear-draft-button"
+                type="button"
+                onClick={onClearDraft}
+                disabled={!hasContent || isNeitherSelected}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#0F1424] text-xs font-medium border border-slate-700/80 transition shadow-xs ${
+                  !hasContent || isNeitherSelected
+                    ? 'opacity-35 pointer-events-none cursor-not-allowed text-slate-500'
+                    : 'text-slate-200 hover:text-rose-300 hover:bg-rose-950/30 hover:border-rose-800/60 cursor-pointer'
+                }`}
+                title="投稿内容をクリア"
+              >
+                <Trash2 className={`w-3 h-3 ${hasContent && !isNeitherSelected ? 'text-rose-400' : 'text-slate-500'}`} />
+                <span>クリア</span>
               </button>
             </div>
 

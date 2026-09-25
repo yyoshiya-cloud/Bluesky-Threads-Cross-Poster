@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { X, ExternalLink, Sparkles, Send, MessageSquareQuote, Image as ImageIcon, CalendarClock, Eye, BarChart2 } from 'lucide-react';
+import { APP_VERSION, APP_NAME, formatAppBuildDate } from '../config/appInfo';
 
 interface AboutAppModalProps {
   isOpen: boolean;
@@ -59,14 +60,17 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 id="about-modal-title" className="text-base font-bold text-white tracking-tight">
-                  CrossPost Web Studio
+                  {APP_NAME}
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-500/15 text-sky-400 border border-sky-500/30">
-                  Version 1.0
+                  Version {APP_VERSION}
                 </span>
-                <span className="text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-700/60">
+                <span
+                  className="text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-700/60"
+                  title="Publish/デプロイまたはGitコミットにより自動更新されます"
+                >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  最終更新日: 2026年9月25日
+                  最終更新日: {formatAppBuildDate()}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 truncate mt-0.5">

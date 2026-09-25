@@ -160,8 +160,97 @@ async function persistEncryptedVault(vault: SavedAccountVault) {
 
     payloadToStore.encryptedAt = Date.now();
     localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(payloadToStore));
+
+    // サーバーファイルストレージへ非同期バックアップ（デプロイ後・別端末でも確実に復元可能にする）
+    syncVaultToServer(payloadToStore).catch((err) => {
+      console.warn('[accountVault] Background server sync error:', err);
+    });
   } catch (e) {
     console.error('Failed to persist encrypted vault:', e);
+  }
+}
+
+/**
+ * サーバーのディスクストレージへVaultを保存
+ */
+export async function syncVaultToServer(vault: SavedAccountVault): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch('/api/credentials/vault', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(vault),
+    });
+    const data = await res.json();
+    return Boolean(data?.success);
+  } catch (err) {
+    console.warn('[accountVault] Failed to sync vault to server storage:', err);
+    return false;
+  }
+}
+
+/**
+ * サーバー側とローカル側のVaultを相互同期・統合（デプロイ後や初回ロード・別端末での即時復元）
+ */
+export async function syncVaultWithServer(): Promise<SavedAccountVault> {
+  const localVault = getSavedAccountVault();
+  if (typeof window === 'undefined') return localVault;
+
+  try {
+    const res = await fetch('/api/credentials/vault');
+    if (!res.ok) return localVault;
+    const data = await res.json();
+    if (!data?.success || !data?.vault) return localVault;
+
+    const serverVault = data.vault as SavedAccountVault;
+    const hasServerCreds = Boolean(
+      (serverVault.bluesky?.identifier && serverVault.bluesky?.appPassword) ||
+      serverVault.threads?.accessToken
+    );
+    const hasLocalCreds = Boolean(
+      (localVault.bluesky?.identifier && localVault.bluesky?.appPassword) ||
+      localVault.threads?.accessToken
+    );
+
+    // サーバー側に保存があり、ローカルが空の場合（デプロイ直後や別ブラウザ、初回ロード時）
+    if (hasServerCreds && !hasLocalCreds) {
+      inMemoryVault = serverVault;
+      localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(serverVault));
+      await hydrateVaultDecryption(serverVault);
+      return serverVault;
+    }
+
+    // ローカル側に保存があり、サーバー側が空の場合（サーバーへ初期バックアップ同期）
+    if (hasLocalCreds && !hasServerCreds) {
+      await syncVaultToServer(localVault);
+      return localVault;
+    }
+
+    // 両方に存在する場合は最新の保存情報を取り込んでマージ
+    if (hasServerCreds && hasLocalCreds) {
+      const merged: SavedAccountVault = {
+        ...serverVault,
+        ...localVault,
+        bluesky:
+          (localVault.bluesky?.savedAt || 0) >= (serverVault.bluesky?.savedAt || 0)
+            ? localVault.bluesky
+            : serverVault.bluesky,
+        threads:
+          (localVault.threads?.savedAt || 0) >= (serverVault.threads?.savedAt || 0)
+            ? localVault.threads
+            : serverVault.threads,
+      };
+      inMemoryVault = merged;
+      localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(merged));
+      await syncVaultToServer(merged);
+      await hydrateVaultDecryption(merged);
+      return merged;
+    }
+
+    return localVault;
+  } catch (err) {
+    console.warn('[accountVault] Server sync check failed:', err);
+    return localVault;
   }
 }
 
@@ -288,6 +377,11 @@ export function deleteFromVault(platform: 'all' | 'bluesky' | 'threads'): void {
     }
     inMemoryVault = { ...vault };
     persistEncryptedVault(vault);
+
+    // サーバーファイルストレージからも削除
+    fetch(`/api/credentials/vault?platform=${platform}`, { method: 'DELETE' }).catch((err) => {
+      console.warn('[accountVault] Failed to delete from server storage:', err);
+    });
   } catch (e) {
     console.error('Failed to delete from account vault:', e);
   }

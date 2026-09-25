@@ -51,6 +51,7 @@ import {
   getSavedAccountVault,
   restoreFromVault,
   deleteFromVault,
+  syncVaultWithServer,
 } from '../../utils/accountVault';
 import { DEMO_CREDENTIALS, checkIsDemoCredentials } from '../../utils/postApi';
 import { addSavedThreadsTopic } from '../../utils/topicStorage';
@@ -153,28 +154,49 @@ export class AppMediator implements IMediatorArbitrator {
     this.lastSavedAt = null;
     this.draftStatus = 'idle';
 
-    // 認証情報初期化（起動時は必ずデモモードにする。本番情報はVaultに安全保管）
+    // 認証情報初期化（保存済みの本番アカウントが存在する場合はリロード・デプロイ後も確実に復元）
+    let restoredCreds: ApiCredentials | null = null;
+    let isLiveAccount = false;
+
     try {
-      const saved = localStorage.getItem('cross_poster_creds');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const { blueskyIsDemo, threadsIsDemo } = checkIsDemoCredentials(parsed);
-        if (!blueskyIsDemo || !threadsIsDemo) {
-          saveCredentialsToVault(parsed);
+      const vault = getSavedAccountVault();
+      if ((vault.bluesky?.identifier && vault.bluesky?.appPassword) || vault.threads?.accessToken) {
+        restoredCreds = restoreFromVault({ ...DEMO_CREDENTIALS, isDemoMode: false }, 'all');
+        restoredCreds.isDemoMode = false;
+        isLiveAccount = true;
+      } else {
+        const saved = localStorage.getItem('cross_poster_creds');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const { blueskyIsDemo, threadsIsDemo } = checkIsDemoCredentials(parsed);
+          if (!blueskyIsDemo || !threadsIsDemo) {
+            saveCredentialsToVault(parsed);
+            restoredCreds = { ...parsed, isDemoMode: false };
+            isLiveAccount = true;
+          }
         }
       }
     } catch (e) {
       console.error('Failed to backup existing credentials:', e);
     }
 
-    this.credentials = {
-      ...DEMO_CREDENTIALS,
-      isDemoMode: true,
-    };
-    try {
-      localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
-    } catch (e) {
-      console.warn('Failed to set demo credentials in localStorage:', e);
+    if (isLiveAccount && restoredCreds) {
+      this.credentials = restoredCreds;
+      try {
+        localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
+      } catch (e) {
+        console.warn('Failed to store credentials in localStorage:', e);
+      }
+    } else {
+      this.credentials = {
+        ...DEMO_CREDENTIALS,
+        isDemoMode: true,
+      };
+      try {
+        localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
+      } catch (e) {
+        console.warn('Failed to set demo credentials in localStorage:', e);
+      }
     }
 
     // 履歴・予約投稿・スニペットの読み込み（クリーンアップ済みストレージから復元）
@@ -184,6 +206,38 @@ export class AppMediator implements IMediatorArbitrator {
 
     // テーマ適用
     applyThemeAccent(this.theme);
+
+    // サーバー永続ストレージとの非同期同期（デプロイ後や初回ロード・別端末での即時復元）
+    this.hydrateCredentialsFromServer();
+  }
+
+  /**
+   * サーバー側ファイルストレージから認証情報を非同期ロード・同期
+   */
+  private async hydrateCredentialsFromServer(): Promise<void> {
+    try {
+      const serverVault = await syncVaultWithServer();
+      const hasBluesky = Boolean(serverVault.bluesky?.identifier && serverVault.bluesky?.appPassword);
+      const hasThreads = Boolean(serverVault.threads?.accessToken);
+
+      if (hasBluesky || hasThreads) {
+        const { blueskyIsDemo, threadsIsDemo } = checkIsDemoCredentials(this.credentials);
+        if (this.credentials.isDemoMode || blueskyIsDemo || threadsIsDemo) {
+          const restored = restoreFromVault(this.credentials, 'all');
+          restored.isDemoMode = false;
+          this.credentials = restored;
+          try {
+            localStorage.setItem('cross_poster_creds', JSON.stringify(restored));
+          } catch (e) {
+            console.warn('Failed to update credentials in localStorage:', e);
+          }
+          this.notifyListeners();
+          console.log('[AppMediator] Successfully synced and restored account credentials from server vault.');
+        }
+      }
+    } catch (e) {
+      console.warn('[AppMediator] Server credentials hydration completed or skipped:', e);
+    }
   }
 
   /**

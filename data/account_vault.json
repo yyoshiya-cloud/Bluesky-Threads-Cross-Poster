@@ -1,0 +1,23 @@
+{
+  "vaultVersion": 2,
+  "bluesky": {
+    "identifier": "yoshiya.bsky.social",
+    "appPassword": "enc:aes-gcm:v1:Oak2GvZt2NXUqYEE:81tVS3V2ru9qawYJzrdHvdb02yX70NuVnD8ncGmX9tCYXAo=",
+    "serviceUrl": "https://bsky.social",
+    "handle": "yoshiya.bsky.social",
+    "did": "did:plc:iz265kfpu5yowjrzl6dylrpl",
+    "savedAt": 1790304869242,
+    "isEncrypted": true
+  },
+  "threads": {
+    "userId": "28663723876555820",
+    "accessToken": "enc:aes-gcm:v1:r6U3vpHZPD+u6ZM+:LtHZwdu2CqKBYdY/U5F3Qe1JGbI6GL4oYi04UwB+OCVWls/8nxhBydc4TP0geVgTiQN99/L4iBr+iPeUkOPUDfKqf8aOKDeNS+7nEaEVB9/aiS8RfBdaTp8BUzhDk1sCetauHBg5hqkFI98bSZS169d7wEWwSXe/ZyuXQbCBop/8LbkMrejHKFf8tzuPn9ghiQuu69jY8u3flNzd1qORh2ZX9enKRKzLSHwQ4Qsn+HhHA1ALVnP7ApuKgGYD/YljAE8NaNATV7LV",
+    "username": "@yutakayoshiya",
+    "savedAt": 1790167680405,
+    "tokenExpiresAt": 1795483762245,
+    "tokenRefreshedAt": 1790299762245,
+    "expiresIn": 5184000,
+    "isEncrypted": true
+  },
+  "encryptedAt": 1790304869326
+}

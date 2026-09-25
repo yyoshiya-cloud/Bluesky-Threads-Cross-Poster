@@ -752,6 +752,82 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
+  // アカウント認証情報のサーバー永続保管エンドポイント
+  // （リロード・デプロイ・別ブラウザ・別デバイス間での確実なアカウント復元）
+  // -------------------------------------------------------------
+  const DATA_DIR = path.resolve(process.cwd(), 'data');
+  const VAULT_FILE_PATH = path.join(DATA_DIR, 'account_vault.json');
+
+  if (!fs.existsSync(DATA_DIR)) {
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    } catch (e) {
+      console.warn('[Server Storage] Failed to create data directory:', e);
+    }
+  }
+
+  // サーバー保管庫からの取得
+  app.get('/api/credentials/vault', (_req, res) => {
+    try {
+      if (fs.existsSync(VAULT_FILE_PATH)) {
+        const raw = fs.readFileSync(VAULT_FILE_PATH, 'utf-8');
+        const data = JSON.parse(raw);
+        res.json({ success: true, vault: data });
+        return;
+      }
+      res.json({ success: true, vault: {} });
+    } catch (err: any) {
+      console.error('[Server Storage] Error reading vault file:', err);
+      res.status(500).json({ success: false, error: err.message, vault: {} });
+    }
+  });
+
+  // サーバー保管庫への永続保存
+  app.post('/api/credentials/vault', express.json({ limit: '2mb' }), (req, res) => {
+    try {
+      const payload = req.body;
+      if (!payload || typeof payload !== 'object') {
+        res.status(400).json({ success: false, error: 'Invalid payload' });
+        return;
+      }
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      fs.writeFileSync(VAULT_FILE_PATH, JSON.stringify(payload, null, 2), 'utf-8');
+      console.log('[Server Storage] Successfully persisted account vault to server disk.');
+      res.json({ success: true, savedAt: Date.now() });
+    } catch (err: any) {
+      console.error('[Server Storage] Error writing vault file:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // サーバー保管庫からの削除
+  app.delete('/api/credentials/vault', (req, res) => {
+    try {
+      const platform = req.query.platform as string | undefined;
+      if (fs.existsSync(VAULT_FILE_PATH)) {
+        if (!platform || platform === 'all') {
+          fs.unlinkSync(VAULT_FILE_PATH);
+        } else {
+          const raw = fs.readFileSync(VAULT_FILE_PATH, 'utf-8');
+          const data = JSON.parse(raw);
+          if (platform === 'bluesky') {
+            delete data.bluesky;
+          } else if (platform === 'threads') {
+            delete data.threads;
+          }
+          fs.writeFileSync(VAULT_FILE_PATH, JSON.stringify(data, null, 2), 'utf-8');
+        }
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[Server Storage] Error deleting vault file:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // -------------------------------------------------------------
   // OGP メタデータ取得エンドポイント (URLカードプレビュー用)
   // -------------------------------------------------------------
   const ogpCache = new Map<string, { data: any; expiresAt: number }>();

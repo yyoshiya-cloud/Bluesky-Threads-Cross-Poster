@@ -5,6 +5,7 @@ import { hasSavedAccountInVault } from '../utils/accountVault';
 import { calculateTokenExpiryInfo } from '../utils/tokenExpiry';
 import { ThemeSelector } from './ThemeSelector';
 import { getModeSecurityConfig } from '../utils/modeSecurity';
+import { APP_VERSION } from '../config/appInfo';
 
 interface HeaderProps {
   credentials: ApiCredentials;
@@ -360,7 +361,7 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-full text-center text-[10px] text-slate-300 hover:text-sky-300 py-1 hover:bg-sky-950/20 rounded transition cursor-pointer flex items-center justify-center gap-1"
                   >
                     <Info className="w-2.5 h-2.5 text-sky-400" />
-                    アプリ情報 (Version 1.0)
+                    アプリ情報 (Version {APP_VERSION})
                   </button>
                 </div>
               )}

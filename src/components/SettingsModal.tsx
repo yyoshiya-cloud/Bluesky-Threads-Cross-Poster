@@ -19,6 +19,7 @@ import {
   Calendar,
   Clock,
   Shield,
+  ShieldCheck,
   Palette,
   Settings,
   Hash,
@@ -127,13 +128,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isDemoMode) {
-      setTestResult('⚠️ DEMOモード中はアカウント情報の変更はできません。LIVEモードへ切り替えてください。');
-      return;
-    }
     const isActualDemo =
-      Boolean(form.blueskyIdentifier?.includes('demo') ||
-      form.blueskyAppPassword?.includes('demo') ||
+      Boolean(!form.blueskyIdentifier && !form.threadsAccessToken) ||
+      Boolean(form.blueskyIdentifier?.includes('demo') &&
+      form.blueskyAppPassword?.includes('demo') &&
       form.threadsAccessToken?.includes('DEMO'));
     const updatedForm: ApiCredentials = {
       ...form,
@@ -611,18 +609,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* ======================================================== */}
           {platformTab === 'bluesky' && (
             <div className="space-y-5">
-              {/* DEMOモード時の変更不可バナー */}
-              {isDemoMode && (
-                <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-700/50 flex items-start gap-2.5 text-amber-200 text-xs">
-                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              {/* アカウント確実永続化ステータスバナー */}
+              <div className="p-3.5 rounded-xl bg-sky-950/30 border border-sky-800/50 flex flex-wrap items-center justify-between gap-3 text-sky-200 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-sky-400 shrink-0" />
                   <div>
-                    <span className="font-bold text-amber-300">DEMOモード稼働中（アカウント情報の変更不可）</span>
-                    <p className="mt-0.5 text-[11px] text-amber-300/80 leading-relaxed">
-                      DEMOモード中は安全のためBlueskyのアカウント情報の変更はできません。
+                    <span className="font-bold text-sky-300">アカウント情報の確実な永続化対応</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      ブラウザ内暗号化（AES-256）とサーバー保管に対応。リロードや再デプロイ後もログイン情報が維持されます。
                     </p>
                   </div>
                 </div>
-              )}
+                {vault.bluesky && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreBluesky}
+                    className="px-2.5 py-1 rounded-lg bg-sky-600/30 hover:bg-sky-600/50 border border-sky-500/50 text-[11px] text-sky-200 font-medium transition shrink-0 cursor-pointer flex items-center gap-1 shadow-sm"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    保存済みアカウントを読込
+                  </button>
+                )}
+              </div>
 
               {/* Bluesky 連携状態ステータスバー */}
               <div className="flex flex-wrap items-center justify-between p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 gap-3">
@@ -756,17 +764,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         id="settings-bluesky-identifier-input"
                         type="text"
-                        disabled={isDemoMode}
-                        readOnly={isDemoMode}
                         value={form.blueskyIdentifier || ''}
                         onChange={(e) => setForm({ ...form, blueskyIdentifier: e.target.value })}
                         placeholder="例: yourname.bsky.social または customdomain.com"
-                        title={isDemoMode ? 'DEMOモード中はBlueskyアカウント情報を変更できません（LIVEモードで変更可能）' : undefined}
-                        className={`w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner ${
-                          isDemoMode
-                            ? 'opacity-60 cursor-not-allowed bg-slate-900/60'
-                            : 'focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff]'
-                        }`}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff]"
                       />
                     </div>
                     <p className="text-[10px] text-slate-400">
@@ -783,17 +784,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         id="settings-bluesky-password-input"
                         type={showBlueskyPassword ? 'text' : 'password'}
-                        disabled={isDemoMode}
-                        readOnly={isDemoMode}
                         value={form.blueskyAppPassword || ''}
                         onChange={(e) => setForm({ ...form, blueskyAppPassword: e.target.value })}
                         placeholder="例: abcd-efgh-ijkl-mnop"
-                        title={isDemoMode ? 'DEMOモード中はアプリパスワードを変更できません（LIVEモードで変更可能）' : undefined}
-                        className={`w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner ${
-                          isDemoMode
-                            ? 'opacity-60 cursor-not-allowed bg-slate-900/60'
-                            : 'focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff]'
-                        }`}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff]"
                       />
                       <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                         <button
@@ -826,15 +820,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <label className="block text-[11px] text-slate-400">PDS Service URL</label>
                         <input
                           type="text"
-                          disabled={isDemoMode}
-                          readOnly={isDemoMode}
                           value={form.blueskyServiceUrl || 'https://bsky.social'}
                           onChange={(e) => setForm({ ...form, blueskyServiceUrl: e.target.value })}
                           placeholder="https://bsky.social"
-                          title={isDemoMode ? 'DEMOモード中はサービスURLを変更できません' : undefined}
-                          className={`w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 font-mono ${
-                            isDemoMode ? 'opacity-60 cursor-not-allowed bg-slate-900/60' : ''
-                          }`}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 font-mono"
                         />
                         <p className="text-[10px] text-slate-500">
                           公式PDS以外（自前ホストサーバーなど）を利用する場合のみ変更してください。
@@ -843,9 +832,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     )}
                   </div>
 
-                  {/* 接続・ログインボタン (実用モード時のみ表示) */}
-                  {!isDemoMode && (
-                    <div className="pt-2 flex flex-wrap items-center gap-3">
+                  {/* 接続・ログインボタン */}
+                  <div className="pt-2 flex flex-wrap items-center gap-3">
                       <button
                         type="button"
                         onClick={handleBlueskyLogin}
@@ -885,7 +873,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         デモ情報でテスト
                       </button>
                     </div>
-                  )}
                 </div>
               </div>
 
@@ -920,18 +907,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* ======================================================== */}
           {platformTab === 'threads' && (
             <div className="space-y-5">
-              {/* DEMOモード時の変更不可バナー */}
-              {isDemoMode && (
-                <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-700/50 flex items-start gap-2.5 text-amber-200 text-xs">
-                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              {/* アカウント確実永続化ステータスバナー */}
+              <div className="p-3.5 rounded-xl bg-purple-950/30 border border-purple-800/50 flex flex-wrap items-center justify-between gap-3 text-purple-200 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
                   <div>
-                    <span className="font-bold text-amber-300">DEMOモード稼働中（アカウント情報の変更不可）</span>
-                    <p className="mt-0.5 text-[11px] text-amber-300/80 leading-relaxed">
-                      DEMOモード中は安全のためThreadsのアカウント認証キーの変更はできません。
+                    <span className="font-bold text-purple-300">Threadsアカウント情報の確実な永続化対応</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      アクセストークンはAES-256暗号化とサーバー保管に対応。リロードや再デプロイ後も維持されます。
                     </p>
                   </div>
                 </div>
-              )}
+                {vault.threads && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreThreads}
+                    className="px-2.5 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 text-[11px] text-purple-200 font-medium transition shrink-0 cursor-pointer flex items-center gap-1 shadow-sm"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    保存済み認証キーを読込
+                  </button>
+                )}
+              </div>
 
               {/* Threads 連携状態ステータスバー */}
               <div className="flex flex-wrap items-center justify-between p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 gap-3">
@@ -1128,17 +1125,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         id="settings-threads-userid-input"
                         type="text"
-                        disabled={isDemoMode}
-                        readOnly={isDemoMode}
                         value={form.threadsUserId || ''}
                         onChange={(e) => setForm({ ...form, threadsUserId: e.target.value })}
                         placeholder="me または 17841400000000000"
-                        title={isDemoMode ? 'DEMOモード中はThreadsアカウント情報を変更できません（LIVEモードで変更可能）' : undefined}
-                        className={`w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner ${
-                          isDemoMode
-                            ? 'opacity-60 cursor-not-allowed bg-slate-900/60'
-                            : 'focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500'
-                        }`}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                       />
                     </div>
                   </div>
@@ -1151,8 +1141,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         id="settings-threads-token-input"
                         type={showThreadsToken ? 'text' : 'password'}
-                        disabled={isDemoMode}
-                        readOnly={isDemoMode}
                         value={form.threadsAccessToken || ''}
                         onChange={(e) =>
                           setForm({
@@ -1162,12 +1150,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           })
                         }
                         placeholder="TH..."
-                        title={isDemoMode ? 'DEMOモード中はThreadsアクセストークンを変更できません（LIVEモードで変更可能）' : undefined}
-                        className={`w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner ${
-                          isDemoMode
-                            ? 'opacity-60 cursor-not-allowed bg-slate-900/60'
-                            : 'focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500'
-                        }`}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                       />
                       <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                         <button
@@ -1194,23 +1177,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         id="settings-threads-username-input"
                         type="text"
-                        disabled={isDemoMode}
-                        readOnly={isDemoMode}
                         value={form.threadsUsername || ''}
                         onChange={(e) => setForm({ ...form, threadsUsername: e.target.value })}
                         placeholder="@your_threads_id"
-                        title={isDemoMode ? 'DEMOモード中はThreadsアカウント情報を変更できません（LIVEモードで変更可能）' : undefined}
-                        className={`w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner ${
-                          isDemoMode
-                            ? 'opacity-60 cursor-not-allowed bg-slate-900/60'
-                            : 'focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500'
-                        }`}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                       />
                     </div>
                   </div>
 
-                  {/* Long-Lived Token 有効期限 & 更新コントロールパネル (実用モード時のみ表示) */}
-                  {!isDemoMode && (form.threadsAccessToken || vault.threads?.accessToken) && (() => {
+                  {/* Long-Lived Token 有効期限 & 更新コントロールパネル */}
+                  {(form.threadsAccessToken || vault.threads?.accessToken) && (() => {
                     const currentExpiry = calculateTokenExpiryInfo(
                       form.threadsTokenExpiresAt || vault.threads?.tokenExpiresAt
                     );
@@ -1277,8 +1253,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     );
                   })()}
 
-                  {!isDemoMode && (
-                    <div className="pt-2 space-y-2">
+                  <div className="pt-2 space-y-2">
                       <div className="flex flex-col sm:flex-row items-center gap-2">
                         <button
                           id="connect-threads-button"
@@ -1339,7 +1314,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </a>
                       </div>
                     </div>
-                  )}
                 </div>
               </div>
 
@@ -1614,32 +1588,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <Hash className="w-3.5 h-3.5 text-sky-400" />
                 <span>ハッシュタグやトピックの変更はエディタに自動同期されます</span>
               </div>
-            ) : isDemoMode ? (
-              <div className="text-xs text-amber-400/90 flex items-center gap-2 font-medium">
-                <Shield className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>DEMOモード中はアカウント情報の変更不可（LIVEモードで変更可能）</span>
-              </div>
             ) : (
-              <div className="text-xs text-slate-500">
-                アカウント設定
+              <div className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="hidden sm:inline">端末・サーバー同期保存対応（リロード・再デプロイ後も保持）</span>
+                <span className="sm:hidden">同期保存対応</span>
               </div>
             )}
 
-            {!isDemoMode && (
-              <div className="flex items-center gap-2.5 ml-auto">
-                {/* 保存ボタン */}
-                <button
-                  id="save-settings-button"
-                  type="button"
-                  onClick={handleSave}
-                  className="btn-accent px-5 py-2 rounded-xl text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
-                  title="設定を保存"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>設定を保存</span>
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-2.5 ml-auto">
+              {/* アカウント設定保存ボタン */}
+              <button
+                id="save-settings-button"
+                type="button"
+                onClick={handleSave}
+                className="btn-accent px-5 py-2 rounded-xl text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-accent/25"
+                title="アカウント設定を端末およびサーバーに確実に保存"
+              >
+                <Check className="w-4 h-4" />
+                <span>アカウント設定を確実に保存</span>
+              </button>
+            </div>
           </div>
         )}
 
