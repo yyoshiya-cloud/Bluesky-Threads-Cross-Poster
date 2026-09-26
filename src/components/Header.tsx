@@ -24,6 +24,8 @@ interface HeaderProps {
   onOpenQuitConfirm?: () => void;
   onOpenAboutApp?: () => void;
   onOpenServerVault?: () => void;
+  isServerVaultOpen?: boolean;
+  onToggleServerVault?: () => void;
   currentTheme: ThemeAccentId;
   onSelectTheme: (themeId: ThemeAccentId) => void;
   onLogout?: (platform?: 'all' | 'bluesky' | 'threads') => void;
@@ -47,6 +49,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenQuitConfirm,
   onOpenAboutApp,
   onOpenServerVault,
+  isServerVaultOpen = false,
+  onToggleServerVault,
   currentTheme,
   onSelectTheme,
   onLogout,
@@ -372,12 +376,16 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* LIVEモード限定: サーバー登録情報一覧ボタン */}
-        {!isDemoMode && onOpenServerVault && (
+        {!isDemoMode && (onOpenServerVault || onToggleServerVault) && (
           <button
             id="header-server-vault-button"
             type="button"
-            onClick={onOpenServerVault}
-            className="relative bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 p-2 sm:px-3 sm:py-1.5 rounded-lg border border-emerald-500/40 hover:border-emerald-500/60 transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-xs"
+            onClick={onToggleServerVault || onOpenServerVault}
+            className={`relative p-2 sm:px-3 sm:py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-xs ${
+              isServerVaultOpen
+                ? 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-900/30'
+                : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 border-emerald-500/40 hover:border-emerald-500/60'
+            }`}
             title="LIVEモードでサーバー（/data/account_vault.json）に登録されているBluesky・Threadsのアカウント情報を一覧で確認"
           >
             <Database className="w-4 h-4 text-emerald-400" />

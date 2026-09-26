@@ -228,8 +228,6 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   const hasBluesky = Boolean(serverVault?.bluesky?.identifier);
   const hasThreads = Boolean(serverVault?.threads?.accessToken);
   // Threads有効期限計算
@@ -242,76 +240,78 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
   const progressPercent = Math.min(100, Math.max(0, Math.round((remainingDays / 60) * 100)));
 
   return (
-    <div
-      id="server-vault-drawer-overlay"
-      className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
-      onClick={onClose}
+    <aside
+      id="server-vault-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="server-vault-drawer-title"
+      style={{
+        transform: isOpen ? 'translateX(0%)' : 'translateX(100%)',
+        transition: 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
+        willChange: 'transform',
+      }}
+      className={`absolute inset-x-0 top-0 z-30 bg-[#0B0F19] border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden text-slate-200 ${
+        isOpen ? 'pointer-events-auto' : 'pointer-events-none'
+      }`}
     >
-      <div
-        id="server-vault-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="server-vault-drawer-title"
-        className="relative w-full max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl h-full flex flex-col bg-[#0B0F19] border-l border-slate-700/80 shadow-2xl shadow-black/95 overflow-hidden animate-in slide-in-from-right duration-300 text-slate-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* 上部グラデーションデコレーション */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-sky-500 to-purple-500 z-10" />
+      {/* 上部グラデーションデコレーション */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-sky-500 to-purple-500 z-10" />
 
-        {/* 隠しファイル入力 */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          accept=".json,application/json"
-          className="hidden"
-        />
+      {/* 隠しファイル入力 */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept=".json,application/json"
+        className="hidden"
+      />
 
-        {/* ヘッダーエリア */}
-        <div className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/80 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shrink-0 shadow-xs">
-              <Database className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 id="server-vault-drawer-title" className="text-sm sm:text-base font-bold text-white tracking-tight">
-                  サーバー登録情報
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  LIVE MODE
-                </span>
-                <span className="text-[11px] text-slate-400 hidden sm:inline-block font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                  /data/account_vault.json
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                クラウドディスクストレージに安全（AES-256暗号化）に永続化されている認証情報
-              </p>
-            </div>
+      {/* ヘッダーエリア */}
+      <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/90 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shrink-0 shadow-xs">
+            <Database className="w-5 h-5" />
           </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={fetchServerVault}
-              disabled={isLoading}
-              className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer disabled:opacity-40"
-              title="サーバー保管情報を再取得"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-400' : ''}`} />
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
-              title="ドロワーを閉じる (Esc)"
-            >
-              <X className="w-4 h-4" />
-            </button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 id="server-vault-drawer-title" className="text-base font-bold text-white tracking-tight">
+                サーバー登録情報
+              </h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                LIVE MODE
+              </span>
+              <span className="text-[11px] text-slate-400 hidden sm:inline-block font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                /data/account_vault.json
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 truncate mt-0.5">
+              クラウドディスクに安全に永続化されている認証情報（リアルタイムプレビュー領域で表示）
+            </p>
           </div>
         </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={fetchServerVault}
+            disabled={isLoading}
+            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition cursor-pointer disabled:opacity-40"
+            title="サーバー保管情報を再取得"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-400' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition cursor-pointer"
+            aria-label="閉じる"
+            title="閉じる (Esc)"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
 
         {/* ドロワー本文 (スクロール可能) */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs">
@@ -912,7 +912,6 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </aside>
   );
 };

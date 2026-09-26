@@ -8,6 +8,7 @@ import { ImageAttachment } from './ImageAttachment';
 import { HashtagSuggester } from './HashtagSuggester';
 import { ThreadPreview } from './ThreadPreview';
 import { SettingsModal } from './SettingsModal';
+import { ServerVaultViewerModal } from './ServerVaultViewerModal';
 import { QuickPresetSettingsModal } from './QuickPresetSettingsModal';
 import { SnippetModal } from './SnippetModal';
 import { OgpPreviewSection } from './OgpPreviewSection';
@@ -116,6 +117,9 @@ interface EditorSectionProps {
   onSetResolvedReplyTarget?: (platform: 'Bluesky' | 'Threads', target: ReplyTargetInfo) => void;
   onClearReplyTarget?: (platform?: 'Bluesky' | 'Threads') => void;
   onOpenServerVault?: () => void;
+  isServerVaultOpen?: boolean;
+  onCloseServerVault?: () => void;
+  onToggleServerVault?: () => void;
 }
 
 const SAMPLE_TEXTS = [
@@ -210,6 +214,10 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   onUpdateReplySettings,
   onSetResolvedReplyTarget,
   onClearReplyTarget,
+  onOpenServerVault,
+  isServerVaultOpen = false,
+  onCloseServerVault,
+  onToggleServerVault,
 }) => {
   const [showSamples, setShowSamples] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -2080,8 +2088,26 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               onDeleteSavedAccount={onDeleteSavedAccount}
               onOpenUserGuide={onOpenUserGuide}
               onOpenCommErrors={onOpenCommErrors}
+              onOpenServerVault={onOpenServerVault}
             />
           )}
+
+          {/* サーバー登録情報画面（設定メニューと同じ挙動でリアルタイムプレビュー領域にスライドイン） */}
+          <ServerVaultViewerModal
+            isOpen={Boolean(isServerVaultOpen)}
+            onClose={onCloseServerVault || onToggleServerVault || (() => {})}
+            onOpenSettings={() => {
+              if (onCloseServerVault) onCloseServerVault();
+              if (onOpenSettings) onOpenSettings();
+            }}
+            isBlueskyLoggedIn={Boolean(
+              credentials.blueskyConnected ||
+              (credentials.blueskyIdentifier && credentials.blueskyAppPassword)
+            )}
+            isThreadsLoggedIn={Boolean(
+              credentials.threadsConnected || credentials.threadsAccessToken
+            )}
+          />
         </div>
       </div>
 

@@ -12,7 +12,6 @@ import { QuitConfirmModal } from './QuitConfirmModal';
 import { ModeSwitchPasswordModal } from './ModeSwitchPasswordModal';
 import { CommErrorModal } from './CommErrorModal';
 import { AboutAppModal } from './AboutAppModal';
-import { ServerVaultViewerModal } from './ServerVaultViewerModal';
 import { DesktopContextMenu } from './DesktopContextMenu';
 import { ToastContainer } from './ToastContainer';
 import { DEMO_CREDENTIALS } from '../utils/postApi';
@@ -78,8 +77,17 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         onToggleDemoMode={() => dispatch({ type: 'TOGGLE_DEMO_MODE' })}
         onOpenModePasswordModal={() => dispatch({ type: 'OPEN_MODAL', payload: 'modePassword' })}
         isSettingsOpen={viewModel.modals.settings}
-        onToggleSettings={() => dispatch({ type: 'TOGGLE_MODAL', payload: 'settings' })}
+        onToggleSettings={() => {
+          if (viewModel.modals.settings) {
+            dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
+          } else {
+            dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
+            dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
+            document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }}
         onOpenSettings={() => {
+          dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
           dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
           document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }}
@@ -91,7 +99,21 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         onOpenUserGuide={() => dispatch({ type: 'OPEN_MODAL', payload: 'userGuide' })}
         onOpenQuitConfirm={() => dispatch({ type: 'OPEN_MODAL', payload: 'quitConfirm' })}
         onOpenAboutApp={() => dispatch({ type: 'OPEN_MODAL', payload: 'aboutApp' })}
-        onOpenServerVault={() => dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' })}
+        isServerVaultOpen={viewModel.modals.serverVault}
+        onToggleServerVault={() => {
+          if (viewModel.modals.serverVault) {
+            dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
+          } else {
+            dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
+            dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' });
+            document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }}
+        onOpenServerVault={() => {
+          dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
+          dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' });
+          document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }}
         currentTheme={viewModel.theme}
         onSelectTheme={(theme) => dispatch({ type: 'SELECT_THEME', payload: theme })}
         onLogout={(platform) => dispatch({ type: 'LOGOUT', payload: platform })}
@@ -136,11 +158,20 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
           onOpenScheduledPosts={() => dispatch({ type: 'OPEN_MODAL', payload: 'scheduled' })}
           scheduledPostsCount={viewModel.scheduledPosts.filter((p) => p.status === 'pending').length}
           onOpenSettings={() => {
+            dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
             dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
             document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }}
           isSettingsOpen={viewModel.modals.settings}
-          onToggleSettings={() => dispatch({ type: 'TOGGLE_MODAL', payload: 'settings' })}
+          onToggleSettings={() => {
+            if (viewModel.modals.settings) {
+              dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
+            } else {
+              dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
+              dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
+              document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }}
           onCloseSettings={() => dispatch({ type: 'CLOSE_MODAL', payload: 'settings' })}
           onSaveCredentials={(creds) => dispatch({ type: 'SAVE_CREDENTIALS', payload: creds })}
           currentTheme={viewModel.theme}
@@ -149,7 +180,22 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
           onDeleteSavedAccount={(platform) => dispatch({ type: 'DELETE_SAVED_ACCOUNT', payload: platform })}
           onOpenUserGuide={() => dispatch({ type: 'OPEN_MODAL', payload: 'userGuide' })}
           onOpenCommErrors={() => setIsCommErrorModalOpen(true)}
-          onOpenServerVault={() => dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' })}
+          onOpenServerVault={() => {
+            dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
+            dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' });
+            document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }}
+          isServerVaultOpen={viewModel.modals.serverVault}
+          onToggleServerVault={() => {
+            if (viewModel.modals.serverVault) {
+              dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
+            } else {
+              dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
+              dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' });
+              document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }}
+          onCloseServerVault={() => dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' })}
           onNotify={(toast) => dispatch({ type: 'NOTIFY', payload: toast })}
           lastSavedAt={viewModel.lastSavedAt}
           draftStatus={viewModel.draftStatus}
@@ -274,22 +320,6 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
       <AboutAppModal
         isOpen={Boolean(viewModel.modals.aboutApp)}
         onClose={() => dispatch({ type: 'CLOSE_MODAL', payload: 'aboutApp' })}
-      />
-
-      <ServerVaultViewerModal
-        isOpen={Boolean(viewModel.modals.serverVault)}
-        onClose={() => dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' })}
-        onOpenSettings={() => {
-          dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
-          dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
-        }}
-        isBlueskyLoggedIn={Boolean(
-          viewModel.credentials.blueskyConnected ||
-          (viewModel.credentials.blueskyIdentifier && viewModel.credentials.blueskyAppPassword)
-        )}
-        isThreadsLoggedIn={Boolean(
-          viewModel.credentials.threadsConnected || viewModel.credentials.threadsAccessToken
-        )}
       />
 
       {/* 5. グローバルトースト通知コンテナ */}
