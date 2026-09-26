@@ -157,49 +157,15 @@ export class AppMediator implements IMediatorArbitrator {
     this.lastSavedAt = null;
     this.draftStatus = 'idle';
 
-    // 認証情報初期化（保存済みの本番アカウントが存在する場合はリロード・デプロイ後も確実に復元）
-    let restoredCreds: ApiCredentials | null = null;
-    let isLiveAccount = false;
-
+    // 起動・リロード時は常にDEMOモードで初期化
+    this.credentials = {
+      ...DEMO_CREDENTIALS,
+      isDemoMode: true,
+    };
     try {
-      const vault = getSavedAccountVault();
-      if ((vault.bluesky?.identifier && vault.bluesky?.appPassword) || vault.threads?.accessToken) {
-        restoredCreds = restoreFromVault({ ...DEMO_CREDENTIALS, isDemoMode: false }, 'all');
-        restoredCreds.isDemoMode = false;
-        isLiveAccount = true;
-      } else {
-        const saved = localStorage.getItem('cross_poster_creds');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          const { blueskyIsDemo, threadsIsDemo } = checkIsDemoCredentials(parsed);
-          if (!blueskyIsDemo || !threadsIsDemo) {
-            saveCredentialsToVault(parsed);
-            restoredCreds = { ...parsed, isDemoMode: false };
-            isLiveAccount = true;
-          }
-        }
-      }
+      localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
     } catch (e) {
-      console.error('Failed to backup existing credentials:', e);
-    }
-
-    if (isLiveAccount && restoredCreds) {
-      this.credentials = restoredCreds;
-      try {
-        localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
-      } catch (e) {
-        console.warn('Failed to store credentials in localStorage:', e);
-      }
-    } else {
-      this.credentials = {
-        ...DEMO_CREDENTIALS,
-        isDemoMode: true,
-      };
-      try {
-        localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
-      } catch (e) {
-        console.warn('Failed to set demo credentials in localStorage:', e);
-      }
+      console.warn('Failed to set demo credentials in localStorage:', e);
     }
 
     // 履歴・予約投稿・スニペットの読み込み（クリーンアップ済みストレージから復元）
@@ -210,7 +176,7 @@ export class AppMediator implements IMediatorArbitrator {
     // テーマ適用
     applyThemeAccent(this.theme);
 
-    // サーバー永続ストレージとの非同期同期（デプロイ後や初回ロード・別端末での即時復元）
+    // サーバー永続ストレージとの非同期同期（保管庫のバックグラウンド最新化）
     this.hydrateCredentialsFromServer();
 
     // 他のPC・ブラウザからアカウント情報がアップロード・復元された際の自動セッション同期
@@ -246,32 +212,16 @@ export class AppMediator implements IMediatorArbitrator {
   }
 
   /**
-   * サーバー側ファイルストレージから認証情報および登録タグ・トピックを非同期ロード・同期
+   * サーバー側ファイルストレージから認証情報および登録タグ・トピックを非同期同期
+   * （リロード時はDEMOモードを維持しつつ、保管庫データのみ最新状態に同期）
    */
   private async hydrateCredentialsFromServer(): Promise<void> {
     try {
       // 登録済みハッシュタグ・トピックをサーバー永続保管庫から自動同期・復元
       syncTagsTopicsWithServerAsync().catch(() => {});
 
-      const serverVault = await syncVaultWithServer();
-      const hasBluesky = Boolean(serverVault.bluesky?.identifier && serverVault.bluesky?.appPassword);
-      const hasThreads = Boolean(serverVault.threads?.accessToken);
-
-      if (hasBluesky || hasThreads) {
-        const { blueskyIsDemo, threadsIsDemo } = checkIsDemoCredentials(this.credentials);
-        if (this.credentials.isDemoMode || blueskyIsDemo || threadsIsDemo) {
-          const restored = await restoreFromVaultAsync(this.credentials, 'all');
-          restored.isDemoMode = false;
-          this.credentials = restored;
-          try {
-            localStorage.setItem('cross_poster_creds', JSON.stringify(restored));
-          } catch (e) {
-            console.warn('Failed to update credentials in localStorage:', e);
-          }
-          this.notifyListeners();
-          console.log('[AppMediator] Successfully synced and restored account credentials from server vault.');
-        }
-      }
+      // サーバー側ファイルストレージ（/data/account_vault.json）とローカルVaultを同期
+      await syncVaultWithServer();
     } catch (e) {
       console.warn('[AppMediator] Server credentials hydration completed or skipped:', e);
     }
@@ -597,13 +547,15 @@ export class AppMediator implements IMediatorArbitrator {
           nextCreds.threadsConnected = false;
           nextCreds.threadsUsername = '';
           nextCreds.threadsTokenExpiresAt = undefined;
+          nextCreds.threadsTokenRefreshedAt = undefined;
+          nextCreds.threadsTokenExpiresIn = undefined;
         }
         this.credentials = nextCreds;
         localStorage.setItem('cross_poster_creds', JSON.stringify(nextCreds));
         this.addToast({
           type: 'info',
           title: '🚪 ログアウトしました',
-          message: 'アカウント認証の接続を解除しました。',
+          message: 'アカウント認証の接続を解除し、入力内容をクリアしました。',
         });
         this.notifyListeners();
         break;
@@ -1086,6 +1038,30 @@ export class AppMediator implements IMediatorArbitrator {
         this.modals.quitConfirm = false;
         this.isAppTerminated = true;
         this.machineState = 'TERMINATED';
+        // 終了ボタンから終了した時、次回起動時・再開時はDEMOモードから起動するようフラグを保存
+        try {
+          localStorage.setItem('crosspost_start_in_demo_mode', 'true');
+        } catch {}
+        this.notifyListeners();
+        break;
+
+      case 'RESTART_APP':
+        // アプリ再開時はDEMOモードから起動
+        this.isAppTerminated = false;
+        this.machineState = 'READY';
+        this.credentials = {
+          ...DEMO_CREDENTIALS,
+          isDemoMode: true,
+        };
+        try {
+          localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
+          localStorage.removeItem('crosspost_start_in_demo_mode');
+        } catch {}
+        this.addToast({
+          type: 'info',
+          title: '🚀 アプリを再開しました',
+          message: 'DEMOモードで起動しました。',
+        });
         this.notifyListeners();
         break;
 

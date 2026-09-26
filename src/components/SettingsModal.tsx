@@ -137,15 +137,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         if (decrypted && !isCancelled) {
           initialForm.threadsAccessToken = decrypted;
         }
-      } else if (!initialForm.threadsAccessToken && currentVault.threads?.accessToken) {
-        const raw = currentVault.threads.accessToken;
-        const decrypted = isEncryptedString(raw) ? await decryptSecret(raw) : raw;
-        if (decrypted && !isCancelled) {
-          initialForm.threadsAccessToken = decrypted;
-          initialForm.threadsConnected = true;
-          if (currentVault.threads.userId) initialForm.threadsUserId = currentVault.threads.userId;
-          if (currentVault.threads.username) initialForm.threadsUsername = currentVault.threads.username;
-        }
       }
 
       // Blueskyパスワードの自動復号化（暗号化文字列が入力欄に露出するのを防止）
@@ -153,15 +144,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         const decrypted = await decryptSecret(initialForm.blueskyAppPassword);
         if (decrypted && !isCancelled) {
           initialForm.blueskyAppPassword = decrypted;
-        }
-      } else if (!initialForm.blueskyAppPassword && currentVault.bluesky?.appPassword) {
-        const raw = currentVault.bluesky.appPassword;
-        const decrypted = isEncryptedString(raw) ? await decryptSecret(raw) : raw;
-        if (decrypted && !isCancelled) {
-          initialForm.blueskyAppPassword = decrypted;
-          initialForm.blueskyConnected = true;
-          if (currentVault.bluesky.identifier) initialForm.blueskyIdentifier = currentVault.bluesky.identifier;
-          if (currentVault.bluesky.handle) initialForm.blueskyHandle = currentVault.bluesky.handle;
         }
       }
 

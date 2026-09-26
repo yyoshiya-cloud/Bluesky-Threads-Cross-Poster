@@ -11,7 +11,6 @@ import {
   Clock,
   Sparkles,
   Settings,
-  FileCode,
   AlertCircle,
   Key,
   Download,
@@ -54,7 +53,6 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
-  const [showRawJson, setShowRawJson] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // ダウンロード・アップロード関連のステート
@@ -104,7 +102,6 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       fetchServerVault();
-      setShowRawJson(false);
       setCopiedKey(null);
       setExportSuccessMsg(null);
       setImportError(null);
@@ -235,8 +232,6 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
 
   const hasBluesky = Boolean(serverVault?.bluesky?.identifier);
   const hasThreads = Boolean(serverVault?.threads?.accessToken);
-  const rawJsonString = JSON.stringify(serverVault || {}, null, 2);
-
   // Threads有効期限計算
   const threadsExpiry = serverVault?.threads?.tokenExpiresAt
     ? calculateTokenExpiryInfo(serverVault.threads.tokenExpiresAt)
@@ -248,20 +243,20 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
 
   return (
     <div
-      id="server-vault-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+      id="server-vault-drawer-overlay"
+      className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        id="server-vault-modal"
+        id="server-vault-drawer"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="server-vault-modal-title"
-        className="relative w-full max-w-3xl max-h-[92vh] flex flex-col bg-[#0B0F19] border border-slate-700/80 rounded-2xl shadow-2xl shadow-black/90 overflow-hidden animate-in zoom-in-95 duration-150 text-slate-200"
+        aria-labelledby="server-vault-drawer-title"
+        className="relative w-full max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl h-full flex flex-col bg-[#0B0F19] border-l border-slate-700/80 shadow-2xl shadow-black/95 overflow-hidden animate-in slide-in-from-right duration-300 text-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 上部グラデーションデコレーション */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-sky-500 to-purple-500" />
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-sky-500 to-purple-500 z-10" />
 
         {/* 隠しファイル入力 */}
         <input
@@ -273,14 +268,14 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
         />
 
         {/* ヘッダーエリア */}
-        <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/70 shrink-0">
+        <div className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/80 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shrink-0 shadow-xs">
               <Database className="w-5 h-5" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 id="server-vault-modal-title" className="text-sm sm:text-base font-bold text-white tracking-tight">
+                <h2 id="server-vault-drawer-title" className="text-sm sm:text-base font-bold text-white tracking-tight">
                   サーバー登録情報
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
@@ -302,7 +297,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
               type="button"
               onClick={fetchServerVault}
               disabled={isLoading}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer disabled:opacity-40"
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer disabled:opacity-40"
               title="サーバー保管情報を再取得"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-400' : ''}`} />
@@ -310,36 +305,35 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
-              title="閉じる (Esc)"
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+              title="ドロワーを閉じる (Esc)"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* モーダル本文 (スクロール可能) */}
+        {/* ドロワー本文 (スクロール可能) */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs">
           {/* サーバー同期ステータスバー */}
-          <div className="p-3 sm:p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/30 via-slate-900 to-sky-950/20 border border-emerald-800/40 flex flex-wrap items-center justify-between gap-3 shadow-inner">
+          <div className="p-3 sm:p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/30 via-slate-900 to-sky-950/20 border border-emerald-800/40 flex items-center justify-between gap-3 shadow-inner">
             <div className="flex items-center gap-2.5">
               <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-emerald-300">サーバーディスク同期ステータス: 良好</span>
                   <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                  {lastFetchedAt && (
+                    <span className="text-[10px] text-slate-400 bg-slate-950/60 px-2 py-0.5 rounded-md border border-slate-800/80">
+                      最終同期取得: {lastFetchedAt.toLocaleTimeString('ja-JP')}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   リロードや再デプロイ後も、サーバー側のファイル保管庫（/data/account_vault.json）より自動復元されます。
                 </p>
               </div>
             </div>
-
-            {lastFetchedAt && (
-              <span className="text-[10px] text-slate-400 bg-slate-950/60 px-2 py-1 rounded-md border border-slate-800/80">
-                最終同期取得: {lastFetchedAt.toLocaleTimeString('ja-JP')}
-              </span>
-            )}
           </div>
 
           {/* 🌟 他PC・別ブラウザへの移行（ダウンロード・アップロード）コントロールボックス */}
@@ -748,7 +742,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="text-xl">🌀</span>
                     <div>
-                      <h3 className="font-bold text-white text-xs sm:text-sm">Threads (Meta Graph API)</h3>
+                      <h3 style={{ fontSize: '13px' }} className="font-bold text-white leading-tight">Threads (Meta Graph API)</h3>
                       <span className="text-[10px] text-purple-400">Meta Platform Official API</span>
                     </div>
                   </div>
@@ -883,47 +877,6 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
                 )}
               </div>
             </div>
-          </div>
-
-          {/* サーバー生データ (JSON) プレビュー アコーディオン */}
-          <div className="pt-2 border-t border-slate-800/80">
-            <button
-              type="button"
-              onClick={() => setShowRawJson(!showRawJson)}
-              className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer py-1"
-            >
-              <FileCode className="w-3.5 h-3.5 text-sky-400" />
-              <span>{showRawJson ? 'サーバー保管生データ（JSON）を非表示' : 'サーバー保管生データ（JSON）を確認・コピー'}</span>
-              <span className="text-[10px] text-slate-500 ml-1">({rawJsonString.length} bytes)</span>
-            </button>
-
-            {showRawJson && (
-              <div className="mt-2 p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2 animate-in fade-in duration-150">
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span className="font-mono">/data/account_vault.json</span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(rawJsonString, 'raw-json')}
-                    className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
-                  >
-                    {copiedKey === 'raw-json' ? (
-                      <>
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        <span>コピー完了</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" />
-                        <span>JSONをコピー</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <pre className="text-[10px] text-slate-300 font-mono overflow-x-auto max-h-48 p-2 rounded bg-black/60 border border-slate-800/80 leading-relaxed">
-                  {rawJsonString}
-                </pre>
-              </div>
-            )}
           </div>
         </div>
 
