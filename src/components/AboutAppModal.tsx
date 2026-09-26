@@ -180,7 +180,7 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
         <div className="px-4 sm:px-5 py-3 border-t border-slate-800/80 bg-slate-950/70 flex flex-wrap items-center justify-between gap-2.5">
           {/* 制作者・公式アカウントリンク */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-slate-400 font-medium">制作者:</span>
+            <span className="text-[11px] text-slate-400 font-medium">Author:</span>
             <a
               href="https://bsky.app/profile/yoshiya.bsky.social"
               target="_blank"

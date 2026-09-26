@@ -34,7 +34,8 @@ export type ModalType =
   | 'quitConfirm'
   | 'posting'
   | 'modePassword'
-  | 'aboutApp';
+  | 'aboutApp'
+  | 'serverVault';
 
 /**
  * Chain of Responsibility でバブリングされるイベント群

@@ -124,6 +124,7 @@ export class AppMediator implements IMediatorArbitrator {
     posting: false,
     modePassword: false,
     aboutApp: false,
+    serverVault: false,
   };
 
   // トースト
@@ -312,11 +313,11 @@ export class AppMediator implements IMediatorArbitrator {
   }
 
   private computeIsDemoMode(): boolean {
-    if (typeof this.credentials.isDemoMode === 'boolean') {
-      return this.credentials.isDemoMode;
+    if (this.credentials.isDemoMode === true) {
+      return true;
     }
     const { blueskyIsDemo, threadsIsDemo } = checkIsDemoCredentials(this.credentials);
-    return blueskyIsDemo && threadsIsDemo;
+    return Boolean(this.credentials.isDemoMode || blueskyIsDemo || threadsIsDemo);
   }
 
   /**

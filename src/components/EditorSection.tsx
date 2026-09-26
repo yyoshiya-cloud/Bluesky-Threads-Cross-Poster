@@ -115,6 +115,7 @@ interface EditorSectionProps {
   onUpdateReplySettings?: (settings: Partial<ReplySettings>) => void;
   onSetResolvedReplyTarget?: (platform: 'Bluesky' | 'Threads', target: ReplyTargetInfo) => void;
   onClearReplyTarget?: (platform?: 'Bluesky' | 'Threads') => void;
+  onOpenServerVault?: () => void;
 }
 
 const SAMPLE_TEXTS = [

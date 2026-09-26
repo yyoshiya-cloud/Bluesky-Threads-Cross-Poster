@@ -145,7 +145,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                クラウドディスクストレージに安全（AES-256暗号化）に永続化されている本番認証情報
+                クラウドディスクストレージに安全（AES-256暗号化）に永続化されている認証情報
               </p>
             </div>
           </div>

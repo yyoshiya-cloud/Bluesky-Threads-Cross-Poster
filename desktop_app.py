@@ -2071,7 +2071,7 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
         window.events.closed += on_window_closed
 
         try:
-            webview.start(debug=False)
+            webview.start(debug=True)
         finally:
             os._exit(0)
         return True
@@ -2128,7 +2128,7 @@ def launch_standalone_app_window(url: str, title: str, width: int = 1280, height
                 window.events.closed += on_window_closed_retry
 
                 try:
-                    webview.start(debug=False)
+                    webview.start(debug=True)
                 finally:
                     os._exit(0)
                 return True

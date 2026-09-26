@@ -298,6 +298,11 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         onDismiss={(id) => dispatch({ type: 'DISMISS_TOAST', payload: id })}
         onOpenSettings={() => dispatch({ type: 'OPEN_MODAL', payload: 'settings' })}
       />
+
+      {/* 6. Pythonデスクトップアプリ専用の右クリックコンテキストメニュー (Webブラウザでは無効化) */}
+      <DesktopContextMenu
+        onOpenSettings={() => dispatch({ type: 'OPEN_MODAL', payload: 'settings' })}
+      />
     </div>
   );
 };

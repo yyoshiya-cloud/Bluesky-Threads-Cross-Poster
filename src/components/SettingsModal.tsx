@@ -95,8 +95,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [platformTab, setPlatformTab] = useState<'bluesky' | 'threads' | 'appearance' | 'maintenance' | 'security'>('bluesky');
   const [showAdvancedPds, setShowAdvancedPds] = useState(false);
 
-  // デモモード判定（設定画面でのデモモード時はログボタンを非表示）
-  const isEffectiveDemoMode = Boolean(isDemoMode || credentials.isDemoMode || form.isDemoMode);
+  // デモモード判定（プロップス・認証情報ステート・フォーム入力値から総合判定）
+  const isDemoValuesInForm = Boolean(
+    (form.blueskyIdentifier && form.blueskyIdentifier.toLowerCase().includes('demo')) ||
+    (form.blueskyAppPassword && form.blueskyAppPassword.toLowerCase().includes('demo')) ||
+    (form.threadsAccessToken && form.threadsAccessToken.toUpperCase().includes('DEMO')) ||
+    (form.threadsUserId && form.threadsUserId.toLowerCase().includes('demo')) ||
+    (credentials.blueskyIdentifier && credentials.blueskyIdentifier.toLowerCase().includes('demo')) ||
+    (credentials.threadsAccessToken && credentials.threadsAccessToken.toUpperCase().includes('DEMO'))
+  );
+
+  const isEffectiveDemoMode = Boolean(
+    isDemoMode ||
+    credentials.isDemoMode ||
+    form.isDemoMode ||
+    isDemoValuesInForm
+  );
 
   // モード切替パスワード設定用ステート
   const [secConfig, setSecConfig] = useState(() => getModeSecurityConfig());
@@ -185,6 +199,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isEffectiveDemoMode) {
+      setIsSaveSuccess(true);
+      setTimeout(() => setIsSaveSuccess(false), 2500);
+      setTestResult('🔒 DEMOモード適用中のため、BlueskyおよびThreadsのアカウント情報は変更されず保持されました。');
+      return;
+    }
     const isActualDemo =
       Boolean(!form.blueskyIdentifier && !form.threadsAccessToken) ||
       Boolean(form.blueskyIdentifier?.includes('demo') &&
@@ -205,8 +225,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // 保存済みBlueskyアカウントでログイン
   const handleRestoreBluesky = async () => {
-    if (isDemoMode) {
-      setTestResult('DEMOモード中は再ログインできません。');
+    if (isEffectiveDemoMode) {
+      setTestResult('🔒 DEMOモード中はアカウント情報の変更・再ログインはできません。');
       return;
     }
     if (!vault.bluesky) return;
@@ -224,8 +244,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // 保存済みThreads認証キーで再ログイン
   const handleRestoreThreads = async () => {
-    if (isDemoMode) {
-      setTestResult('DEMOモード中は再ログインできません。');
+    if (isEffectiveDemoMode) {
+      setTestResult('🔒 DEMOモード中はアカウント情報の変更・再ログインはできません。');
       return;
     }
     if (!vault.threads) return;
@@ -243,8 +263,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // 保存済みの本番アカウントを一括再ログイン
   const handleRestoreAll = async () => {
-    if (isDemoMode) {
-      setTestResult('DEMOモード中は再ログインできません。');
+    if (isEffectiveDemoMode) {
+      setTestResult('🔒 DEMOモード中はアカウント情報の変更・一括再ログインはできません。');
       return;
     }
     if (!vault.bluesky && !vault.threads) {
@@ -264,6 +284,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // 保存済みアカウントの記憶を削除
   const handleDeleteVaultAccount = (platform: 'all' | 'bluesky' | 'threads') => {
+    if (isEffectiveDemoMode) {
+      setTestResult('🔒 DEMOモード中はアカウント情報の削除はできません。');
+      return;
+    }
     deleteFromVault(platform);
     refreshVault();
     if (onDeleteSavedAccount) onDeleteSavedAccount(platform);
@@ -283,8 +307,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Bluesky アプリパスワード認証テスト & ログイン実行
   const handleBlueskyLogin = async () => {
-    if (isDemoMode) {
-      setTestResult('DEMOモード中はログイン・認証変更はロックされています。');
+    if (isEffectiveDemoMode) {
+      setTestResult('🔒 DEMOモード中はBlueskyアカウント情報の変更・接続はできません。');
       return;
     }
     if (!form.blueskyIdentifier || !form.blueskyAppPassword) {
@@ -333,8 +357,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Threads アクセストークン検証 & 接続実行
   const handleThreadsVerify = async () => {
-    if (isDemoMode) {
-      setTestResult('DEMOモード中はログイン・認証変更はロックされています。');
+    if (isEffectiveDemoMode) {
+      setTestResult('🔒 DEMOモード中はThreadsアカウント情報の変更・接続はできません。');
       return;
     }
     if (!form.threadsAccessToken || !form.threadsAccessToken.trim()) {
@@ -389,6 +413,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Threads Long-Lived Token 有効期限更新
   const handleThreadsTokenRefresh = async () => {
+    if (isEffectiveDemoMode) {
+      setTestResult('🔒 DEMOモード中はアクセストークン有効期限の更新はできません。');
+      return;
+    }
     const tokenToRefresh = form.threadsAccessToken || vault.threads?.accessToken;
     if (!tokenToRefresh) {
       setTestResult('⚠️ 有効期限を更新するThreadsアクセストークンが入力されていません。');
@@ -638,6 +666,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* ======================================================== */}
           {platformTab === 'bluesky' && (
             <div className="space-y-5">
+              {/* DEMOモード保護ロックバナー */}
+              {isEffectiveDemoMode && (
+                <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs flex items-center gap-2.5 shadow-xs">
+                  <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div>
+                    <span className="font-bold text-amber-300">DEMOモード制限適用中</span>
+                    <p className="text-[11px] text-amber-200/80 mt-0.5">
+                      DEMOモードではBlueskyのアカウント情報・認証キーの変更・接続・削除は保護のため不可となっています。
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Bluesky 連携状態ステータスバー */}
               <div className="flex flex-wrap items-center justify-between p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 gap-3">
                 <div className="flex items-center gap-3">
@@ -666,7 +707,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {isBlueskyLoggedIn && !isDemoMode && (
+                {isBlueskyLoggedIn && !isEffectiveDemoMode && (
                   <button
                     type="button"
                     onClick={() => {
@@ -696,7 +737,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* 保存済みBlueskyアカウント表示カード (実用モード時のみ表示) */}
-              {!isDemoMode && vault.bluesky && (
+              {!isEffectiveDemoMode && vault.bluesky && (
                 <div className="p-3.5 rounded-xl bg-blue-950/20 border border-blue-800/40 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5">
                     <BookmarkCheck className="w-4 h-4 text-[#0085ff] shrink-0" />
@@ -723,10 +764,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     ) : (
                       <button
                         type="button"
-                        disabled={isDemoMode}
+                        disabled={isEffectiveDemoMode}
                         onClick={handleRestoreBluesky}
                         className="px-2.5 py-1.5 rounded-lg bg-[#0085ff]/20 hover:bg-[#0085ff]/30 disabled:opacity-40 disabled:cursor-not-allowed text-[#0085ff] border border-[#0085ff]/40 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                        title={isDemoMode ? 'DEMOモード中は再ログインできません' : '記憶されたアカウント情報で再ログインします（AES-256復号）'}
+                        title={isEffectiveDemoMode ? 'DEMOモード中は再ログインできません' : '記憶されたアカウント情報で再ログインします（AES-256復号）'}
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                         このアカウントで再ログイン
@@ -734,10 +775,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     )}
                     <button
                       type="button"
-                      disabled={isDemoMode}
+                      disabled={isEffectiveDemoMode}
                       onClick={() => handleDeleteVaultAccount('bluesky')}
                       className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-                      title={isDemoMode ? 'DEMOモード中は削除できません' : '保存されたBlueskyアカウント記憶を削除'}
+                      title={isEffectiveDemoMode ? 'DEMOモード中は削除できません' : '保存されたBlueskyアカウント記憶を削除'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -756,15 +797,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       AES-256 暗号化保管
                     </span>
                   </div>
-                  <a
-                    href="https://bsky.app/settings/app-passwords"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-[#0085ff] hover:underline flex items-center gap-1"
-                  >
-                    <span>アプリパスワード管理画面を開く</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+                  {!isEffectiveDemoMode && (
+                    <a
+                      href="https://bsky.app/settings/app-passwords"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-[#0085ff] hover:underline flex items-center gap-1"
+                    >
+                      <span>アプリパスワード管理画面を開く</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -777,10 +820,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         id="settings-bluesky-identifier-input"
                         type="text"
+                        disabled={isEffectiveDemoMode}
+                        readOnly={isEffectiveDemoMode}
                         value={form.blueskyIdentifier || ''}
                         onChange={(e) => setForm({ ...form, blueskyIdentifier: e.target.value })}
                         placeholder="例: yourname.bsky.social または customdomain.com"
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff]"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-900/60"
+                        title={isEffectiveDemoMode ? 'DEMOモード中はアカウント情報の変更はできません' : undefined}
                       />
                     </div>
                     <p className="text-[10px] text-slate-400">
@@ -797,10 +843,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         id="settings-bluesky-password-input"
                         type={showBlueskyPassword ? 'text' : 'password'}
+                        disabled={isEffectiveDemoMode}
+                        readOnly={isEffectiveDemoMode}
                         value={form.blueskyAppPassword || ''}
                         onChange={(e) => setForm({ ...form, blueskyAppPassword: e.target.value })}
                         placeholder="例: abcd-efgh-ijkl-mnop"
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff]"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-900/60"
+                        title={isEffectiveDemoMode ? 'DEMOモード中はアプリパスワードの変更はできません' : undefined}
                       />
                       <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                         <button
@@ -833,10 +882,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <label className="block text-[11px] text-slate-400">PDS Service URL</label>
                         <input
                           type="text"
+                          disabled={isEffectiveDemoMode}
+                          readOnly={isEffectiveDemoMode}
                           value={form.blueskyServiceUrl || 'https://bsky.social'}
                           onChange={(e) => setForm({ ...form, blueskyServiceUrl: e.target.value })}
                           placeholder="https://bsky.social"
-                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 font-mono"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 font-mono disabled:opacity-60 disabled:cursor-not-allowed"
                         />
                         <p className="text-[10px] text-slate-500">
                           公式PDS以外（自前ホストサーバーなど）を利用する場合のみ変更してください。
@@ -850,8 +901,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={handleBlueskyLogin}
-                      disabled={isBlueskyLoggingIn || !form.blueskyIdentifier || !form.blueskyAppPassword}
+                      disabled={isEffectiveDemoMode || isBlueskyLoggingIn || !form.blueskyIdentifier || !form.blueskyAppPassword}
                       className="px-4 py-2 rounded-xl bg-[#0085ff] hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-md shadow-blue-600/20"
+                      title={isEffectiveDemoMode ? 'DEMOモード中はBluesky接続変更はできません' : undefined}
                     >
                       {isBlueskyLoggingIn ? (
                         <>
@@ -877,14 +929,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <ol className="list-decimal list-inside space-y-1 text-slate-400 text-[11px] leading-relaxed">
                   <li>
-                    <a
-                      href="https://bsky.app"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#0085ff] hover:underline inline-flex items-center gap-0.5"
-                    >
-                      Bluesky (bsky.app) <ExternalLink className="w-2.5 h-2.5" />
-                    </a> にログインします。
+                    {isEffectiveDemoMode ? (
+                      <span
+                        className="text-slate-500 inline-flex items-center gap-0.5 opacity-60 cursor-not-allowed select-none font-medium"
+                        title="DEMOモード中はBlueskyへの外部リンクは無効化されています"
+                      >
+                        <span>Bluesky (bsky.app)</span>
+                        <ExternalLink className="w-2.5 h-2.5 text-slate-500" />
+                      </span>
+                    ) : (
+                      <a
+                        href="https://bsky.app"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#0085ff] hover:underline inline-flex items-center gap-0.5 font-medium"
+                      >
+                        <span>Bluesky (bsky.app)</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )} にログインします。
                   </li>
                   <li>左側メニューの「<strong>設定 (Settings)</strong>」をクリックします。</li>
                   <li>「<strong>プライバシーとセキュリティ</strong>」内の「<strong>アプリパスワード (App Passwords)</strong>」を選択します。</li>
@@ -900,6 +963,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* ======================================================== */}
           {platformTab === 'threads' && (
             <div className="space-y-5">
+              {/* DEMOモード保護ロックバナー */}
+              {isEffectiveDemoMode && (
+                <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs flex items-center gap-2.5 shadow-xs">
+                  <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div>
+                    <span className="font-bold text-amber-300">DEMOモード制限適用中</span>
+                    <p className="text-[11px] text-amber-200/80 mt-0.5">
+                      DEMOモードではThreadsのアカウント情報・認証キーの変更・接続・削除は保護のため不可となっています。
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Threads 連携状態ステータスバー */}
               <div className="flex flex-wrap items-center justify-between p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 gap-3">
                 <div className="flex items-center gap-3">
@@ -929,7 +1005,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {isThreadsLoggedIn && !isDemoMode && (
+                  {isThreadsLoggedIn && !isEffectiveDemoMode && (
                     <button
                       type="button"
                       onClick={() => {
@@ -968,7 +1044,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </p>
                   </div>
                 </div>
-                {vault.threads && (
+                {!isEffectiveDemoMode && vault.threads && (
                   <button
                     type="button"
                     onClick={handleRestoreThreads}
@@ -981,7 +1057,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* 保存済みThreadsキー表示カード (実用モード時のみ表示) */}
-              {!isDemoMode && vault.threads && (() => {
+              {!isEffectiveDemoMode && vault.threads && (() => {
                 const vaultExpiryInfo = calculateTokenExpiryInfo(vault.threads.tokenExpiresAt);
                 return (
                   <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-800/40 space-y-3">
@@ -1013,10 +1089,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         ) : (
                           <button
                             type="button"
-                            disabled={isDemoMode}
+                            disabled={isEffectiveDemoMode}
                             onClick={handleRestoreThreads}
                             className="px-2.5 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-40 disabled:cursor-not-allowed text-purple-300 border border-purple-500/40 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                            title={isDemoMode ? 'DEMOモード中は再ログインできません' : '記憶された認証キーで再ログインします'}
+                            title={isEffectiveDemoMode ? 'DEMOモード中は再ログインできません' : '記憶された認証キーで再ログインします'}
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                             このキーで再ログイン
@@ -1024,10 +1100,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         )}
                         <button
                           type="button"
-                          disabled={isDemoMode}
+                          disabled={isEffectiveDemoMode}
                           onClick={() => handleDeleteVaultAccount('threads')}
                           className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-                          title={isDemoMode ? 'DEMOモード中は削除できません' : '保存されたThreads認証キー記憶を削除'}
+                          title={isEffectiveDemoMode ? 'DEMOモード中は削除できません' : '保存されたThreads認証キー記憶を削除'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1051,9 +1127,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <button
                         type="button"
                         onClick={handleThreadsTokenRefresh}
-                        disabled={isDemoMode || isRefreshingThreadsToken}
+                        disabled={isEffectiveDemoMode || isRefreshingThreadsToken}
                         className="text-[11px] font-semibold text-purple-300 hover:text-purple-200 hover:bg-purple-900/40 px-2.5 py-1 rounded-lg border border-purple-700/50 transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={isDemoMode ? 'DEMOモード中は更新できません' : 'Meta Graph APIを呼び出してLong-Lived Tokenの有効期限を60日間延長します'}
+                        title={isEffectiveDemoMode ? 'DEMOモード中は更新できません' : 'Meta Graph APIを呼び出してLong-Lived Tokenの有効期限を60日間延長します'}
                       >
                         {isRefreshingThreadsToken ? (
                           <Loader2 className="w-3 h-3 animate-spin text-purple-400" />
@@ -1078,7 +1154,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       AES-256 暗号化保管
                     </span>
                   </div>
-                  {!isDemoMode && (
+                  {!isEffectiveDemoMode && (
                     <a
                       href="https://developers.facebook.com/docs/threads"
                       target="_blank"
@@ -1100,10 +1176,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         id="settings-threads-userid-input"
                         type="text"
+                        disabled={isEffectiveDemoMode}
+                        readOnly={isEffectiveDemoMode}
                         value={form.threadsUserId || ''}
                         onChange={(e) => setForm({ ...form, threadsUserId: e.target.value })}
                         placeholder="me または 17841400000000000"
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-900/60"
+                        title={isEffectiveDemoMode ? 'DEMOモード中はアカウント情報の変更はできません' : undefined}
                       />
                     </div>
                   </div>
@@ -1116,6 +1195,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         id="settings-threads-token-input"
                         type={showThreadsToken ? 'text' : 'password'}
+                        disabled={isEffectiveDemoMode}
+                        readOnly={isEffectiveDemoMode}
                         value={form.threadsAccessToken || ''}
                         onChange={(e) =>
                           setForm({
@@ -1125,7 +1206,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           })
                         }
                         placeholder="TH..."
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-900/60"
+                        title={isEffectiveDemoMode ? 'DEMOモード中はアクセストークンの変更はできません' : undefined}
                       />
                       <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                         <button
@@ -1152,10 +1234,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <input
                         id="settings-threads-username-input"
                         type="text"
+                        disabled={isEffectiveDemoMode}
+                        readOnly={isEffectiveDemoMode}
                         value={form.threadsUsername || ''}
                         onChange={(e) => setForm({ ...form, threadsUsername: e.target.value })}
                         placeholder="@your_threads_id"
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-900/60"
+                        title={isEffectiveDemoMode ? 'DEMOモード中はアカウント名の変更はできません' : undefined}
                       />
                     </div>
                   </div>
@@ -1166,9 +1251,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         id="connect-threads-button"
                         type="button"
                         onClick={handleThreadsVerify}
-                        disabled={isThreadsVerifying || !form.threadsAccessToken}
+                        disabled={isEffectiveDemoMode || isThreadsVerifying || !form.threadsAccessToken}
                         className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs transition flex items-center gap-2 cursor-pointer shadow-md shadow-purple-950/50"
-                        title="Threads (Meta Graph API) に接続し、アカウント連携と暗号化保管を行います"
+                        title={isEffectiveDemoMode ? 'DEMOモード中はThreads接続変更はできません' : 'Threads (Meta Graph API) に接続し、アカウント連携と暗号化保管を行います'}
                       >
                         {isThreadsVerifying ? (
                           <>
@@ -1186,15 +1271,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
                       <span>※ 「Threadsに接続する」を押すとアクセストークンが検証され、AES-256で安全に保管されます。</span>
-                      <a
-                        href="https://developers.facebook.com/apps"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-purple-400 hover:text-purple-300 underline flex items-center gap-1 shrink-0 ml-2"
-                      >
-                        <span>Meta開発者ポータル</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+                      {isEffectiveDemoMode ? (
+                        <span
+                          className="text-slate-500 flex items-center gap-1 shrink-0 ml-2 opacity-50 cursor-not-allowed select-none"
+                          title="DEMOモード中はMeta開発者ポータルへのリンクは無効化されています"
+                        >
+                          <span>Meta開発者ポータル</span>
+                          <ExternalLink className="w-3 h-3 text-slate-500" />
+                        </span>
+                      ) : (
+                        <a
+                          href="https://developers.facebook.com/apps"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-purple-400 hover:text-purple-300 underline flex items-center gap-1 shrink-0 ml-2"
+                        >
+                          <span>Meta開発者ポータル</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1485,12 +1580,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 id="save-settings-button"
                 type="button"
                 onClick={handleSave}
-                className={`px-5 py-2 rounded-xl text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-accent/25 ${
-                  isSaveSuccess
-                    ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/30'
-                    : 'btn-accent'
+                disabled={isEffectiveDemoMode}
+                className={`px-5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md ${
+                  isEffectiveDemoMode
+                    ? 'bg-slate-800 text-slate-500 border border-slate-700/60 cursor-not-allowed shadow-none opacity-60'
+                    : isSaveSuccess
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30 cursor-pointer'
+                    : 'btn-accent text-white cursor-pointer shadow-accent/25'
                 }`}
-                title="アカウント設定を端末およびサーバーに確実に保存"
+                title={isEffectiveDemoMode ? 'DEMOモード中はアカウント設定の保存は保護のため無効化されています' : 'アカウント設定を端末およびサーバーに確実に保存'}
               >
                 {isSaveSuccess ? (
                   <>
