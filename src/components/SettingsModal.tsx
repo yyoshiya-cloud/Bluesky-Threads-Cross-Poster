@@ -498,6 +498,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* サーバー登録情報・移行（ダウンロード/アップロード）ボタン */}
+            {onOpenServerVault && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenServerVault();
+                }}
+                className="px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 text-emerald-300 hover:text-white border border-emerald-800/80 transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-xs"
+                title="サーバー登録情報（他PC移行用ダウンロード・アップロード）を開く"
+              >
+                <Database className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">サーバー登録情報</span>
+                <span className="sm:hidden">サーバー情報</span>
+              </button>
+            )}
+
             {/* タイトル行の「ログ」ボタン（デモモード時は非表示、実用モード時は画面にログファイルを表示） */}
             {!isEffectiveDemoMode && (
               <button

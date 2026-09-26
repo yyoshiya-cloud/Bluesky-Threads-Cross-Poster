@@ -828,6 +828,46 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
+  // ハッシュタグ・Threads専用トピックのサーバー永続保管エンドポイント
+  // （デプロイ・リロード時もユーザーが登録したハッシュタグ・トピックを完全維持）
+  // -------------------------------------------------------------
+  const TAGS_TOPICS_FILE_PATH = path.join(DATA_DIR, 'user_tags_topics.json');
+
+  app.get('/api/tags-topics/vault', (_req, res) => {
+    try {
+      if (fs.existsSync(TAGS_TOPICS_FILE_PATH)) {
+        const raw = fs.readFileSync(TAGS_TOPICS_FILE_PATH, 'utf-8');
+        const data = JSON.parse(raw);
+        res.json({ success: true, vault: data });
+        return;
+      }
+      res.json({ success: true, vault: {} });
+    } catch (err: any) {
+      console.error('[TagsTopics Storage] Error reading tags/topics file:', err);
+      res.status(500).json({ success: false, error: err.message, vault: {} });
+    }
+  });
+
+  app.post('/api/tags-topics/vault', express.json({ limit: '2mb' }), (req, res) => {
+    try {
+      const payload = req.body;
+      if (!payload || typeof payload !== 'object') {
+        res.status(400).json({ success: false, error: 'Invalid payload' });
+        return;
+      }
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      fs.writeFileSync(TAGS_TOPICS_FILE_PATH, JSON.stringify(payload, null, 2), 'utf-8');
+      console.log('[TagsTopics Storage] Successfully persisted tags and topics to server disk.');
+      res.json({ success: true, savedAt: Date.now() });
+    } catch (err: any) {
+      console.error('[TagsTopics Storage] Error writing tags/topics file:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // -------------------------------------------------------------
   // OGP メタデータ取得エンドポイント (URLカードプレビュー用)
   // -------------------------------------------------------------
   const ogpCache = new Map<string, { data: any; expiresAt: number }>();

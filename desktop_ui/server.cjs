@@ -617,6 +617,39 @@ async function startServer() {
       res.status(500).json({ success: false, error: err.message });
     }
   });
+  const TAGS_TOPICS_FILE_PATH = import_path.default.join(DATA_DIR, "user_tags_topics.json");
+  app.get("/api/tags-topics/vault", (_req, res) => {
+    try {
+      if (import_fs.default.existsSync(TAGS_TOPICS_FILE_PATH)) {
+        const raw = import_fs.default.readFileSync(TAGS_TOPICS_FILE_PATH, "utf-8");
+        const data = JSON.parse(raw);
+        res.json({ success: true, vault: data });
+        return;
+      }
+      res.json({ success: true, vault: {} });
+    } catch (err) {
+      console.error("[TagsTopics Storage] Error reading tags/topics file:", err);
+      res.status(500).json({ success: false, error: err.message, vault: {} });
+    }
+  });
+  app.post("/api/tags-topics/vault", import_express.default.json({ limit: "2mb" }), (req, res) => {
+    try {
+      const payload = req.body;
+      if (!payload || typeof payload !== "object") {
+        res.status(400).json({ success: false, error: "Invalid payload" });
+        return;
+      }
+      if (!import_fs.default.existsSync(DATA_DIR)) {
+        import_fs.default.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      import_fs.default.writeFileSync(TAGS_TOPICS_FILE_PATH, JSON.stringify(payload, null, 2), "utf-8");
+      console.log("[TagsTopics Storage] Successfully persisted tags and topics to server disk.");
+      res.json({ success: true, savedAt: Date.now() });
+    } catch (err) {
+      console.error("[TagsTopics Storage] Error writing tags/topics file:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
   const ogpCache = /* @__PURE__ */ new Map();
   app.get("/api/ogp", async (req, res) => {
     try {

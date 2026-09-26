@@ -54,6 +54,7 @@ import {
   deleteFromVault,
   syncVaultWithServer,
 } from '../../utils/accountVault';
+import { syncTagsTopicsWithServerAsync } from '../../utils/tagTopicStorage';
 import { DEMO_CREDENTIALS, checkIsDemoCredentials } from '../../utils/postApi';
 import { addSavedThreadsTopic } from '../../utils/topicStorage';
 import {
@@ -211,13 +212,47 @@ export class AppMediator implements IMediatorArbitrator {
 
     // サーバー永続ストレージとの非同期同期（デプロイ後や初回ロード・別端末での即時復元）
     this.hydrateCredentialsFromServer();
+
+    // 他のPC・ブラウザからアカウント情報がアップロード・復元された際の自動セッション同期
+    if (typeof window !== 'undefined') {
+      window.addEventListener('crosspost_credentials_imported', (e: any) => {
+        const importedCreds = e?.detail as ApiCredentials | undefined;
+        if (importedCreds) {
+          const prevWasDemo = this.computeIsDemoMode();
+          this.credentials = { ...importedCreds, isDemoMode: false };
+          localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
+
+          if (prevWasDemo) {
+            performCleanStateInitialization({
+              isLiveMode: true,
+              reason: 'switch_to_live',
+              forceHistoryClean: true,
+            });
+            this.scheduledPosts = loadScheduledPostsFromStorage();
+            this.history = loadHistoryFromStorage();
+            this.replySettings = { ...CLEAN_REPLY_SETTINGS };
+            clearDraftFromStorage();
+          }
+
+          this.addToast({
+            type: 'success',
+            title: '🎉 アカウント情報をインポートしました',
+            message: 'アカウント情報が正常に読み込まれ、自動ログインとサーバー登録が完了しました。',
+          });
+          this.notifyListeners();
+        }
+      });
+    }
   }
 
   /**
-   * サーバー側ファイルストレージから認証情報を非同期ロード・同期
+   * サーバー側ファイルストレージから認証情報および登録タグ・トピックを非同期ロード・同期
    */
   private async hydrateCredentialsFromServer(): Promise<void> {
     try {
+      // 登録済みハッシュタグ・トピックをサーバー永続保管庫から自動同期・復元
+      syncTagsTopicsWithServerAsync().catch(() => {});
+
       const serverVault = await syncVaultWithServer();
       const hasBluesky = Boolean(serverVault.bluesky?.identifier && serverVault.bluesky?.appPassword);
       const hasThreads = Boolean(serverVault.threads?.accessToken);

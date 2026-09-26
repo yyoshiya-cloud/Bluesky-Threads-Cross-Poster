@@ -2,6 +2,8 @@
  * Threads トピックタグ (Topic Tags) のローカルストレージ永続化管理
  */
 
+import { saveTagsTopicsToServerVaultAsync } from './tagTopicStorage';
+
 export const DEFAULT_THREADS_TOPICS = [
   'テクノロジー',
   '写真',
@@ -53,6 +55,7 @@ export function addSavedThreadsTopic(topic: string): string[] {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_topics_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to save threads topic to localStorage:', e);
@@ -83,6 +86,7 @@ export function addMultipleThreadsTopics(topics: string[]): string[] {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_topics_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to save threads topics to localStorage:', e);
@@ -102,6 +106,7 @@ export function removeSavedThreadsTopic(topicToRemove: string): string[] {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_topics_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to remove threads topic from localStorage:', e);
@@ -127,6 +132,7 @@ export function saveThreadsTopicsList(topics: string[]): string[] {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_topics_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to save threads topics list:', e);
@@ -142,6 +148,7 @@ export function resetSavedThreadsTopics(): string[] {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_THREADS_TOPICS));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_topics_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to reset threads topics in localStorage:', e);
@@ -157,6 +164,7 @@ export function clearAllThreadsTopics(): string[] {
     localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_topics_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to clear threads topics in localStorage:', e);

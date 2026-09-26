@@ -1,3 +1,5 @@
+import { saveTagsTopicsToServerVaultAsync } from './tagTopicStorage';
+
 /**
  * 投稿テキストを解析し、関連するトピック・トレンドハッシュタグを提案するユーティリティ
  */
@@ -370,6 +372,7 @@ export function saveCustomTag(tag: string): string[] {
     localStorage.setItem(CUSTOM_TAGS_STORAGE_KEY, JSON.stringify(updated));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_tags_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to save custom tag:', e);
@@ -397,6 +400,7 @@ export function addMultipleCustomTags(tags: string[]): string[] {
     localStorage.setItem(CUSTOM_TAGS_STORAGE_KEY, JSON.stringify(updated));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_tags_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to save multiple custom tags:', e);
@@ -415,6 +419,7 @@ export function removeCustomTag(tag: string): string[] {
     localStorage.setItem(CUSTOM_TAGS_STORAGE_KEY, JSON.stringify(updated));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_tags_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to remove custom tag:', e);
@@ -439,6 +444,7 @@ export function saveCustomTagsList(tags: string[]): string[] {
     localStorage.setItem(CUSTOM_TAGS_STORAGE_KEY, JSON.stringify(cleaned));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_tags_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to save custom tags list:', e);
@@ -454,6 +460,7 @@ export function resetCustomTags(): string[] {
     localStorage.setItem(CUSTOM_TAGS_STORAGE_KEY, JSON.stringify(DEFAULT_CUSTOM_TAGS));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_tags_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to reset custom tags:', e);
@@ -469,6 +476,7 @@ export function clearAllCustomTags(): string[] {
     localStorage.setItem(CUSTOM_TAGS_STORAGE_KEY, JSON.stringify([]));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_tags_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to clear custom tags:', e);
@@ -476,7 +484,7 @@ export function clearAllCustomTags(): string[] {
   return [];
 }
 
-const CATEGORIES_STORAGE_KEY = 'cross_poster_custom_categories_v1';
+export const CATEGORIES_STORAGE_KEY = 'cross_poster_custom_categories_v1';
 
 /**
  * 保存済みのトレンド・カテゴリ一覧を取得（未保存時はデフォルト定義を返却）
@@ -512,6 +520,7 @@ export function saveCategoriesList(categories: TopicCategory[]): TopicCategory[]
     localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_categories_updated'));
+      saveTagsTopicsToServerVaultAsync();
     }
   } catch (e) {
     console.error('Failed to save categories list:', e);

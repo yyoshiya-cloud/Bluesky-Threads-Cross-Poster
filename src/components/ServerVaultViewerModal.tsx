@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Database,
@@ -14,10 +14,26 @@ import {
   FileCode,
   AlertCircle,
   Key,
+  Download,
+  Upload,
+  FileJson,
+  Lock,
+  Unlock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  Shield,
+  HelpCircle,
 } from 'lucide-react';
-import { SavedAccountVault } from '../types';
+import { SavedAccountVault, ApiCredentials } from '../types';
 import { calculateTokenExpiryInfo, formatRefreshedDate } from '../utils/tokenExpiry';
 import { formatSavedDate } from '../utils/accountVault';
+import {
+  downloadAccountCredentialsBackup,
+  parseAndDecryptAccountBackup,
+  applyImportedAccountToSession,
+  DecryptedAccountResult,
+} from '../utils/accountTransfer';
 
 interface ServerVaultViewerModalProps {
   isOpen: boolean;
@@ -40,6 +56,25 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
   const [showRawJson, setShowRawJson] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // ダウンロード・アップロード関連のステート
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
+  const [customExportPassphrase, setCustomExportPassphrase] = useState('');
+  const [showExportPassInput, setShowExportPassInput] = useState(false);
+
+  const [isImporting, setIsImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPassphrase, setImportPassphrase] = useState('');
+  const [needsImportPassphrase, setNeedsImportPassphrase] = useState(false);
+  const [importDecrypted, setImportDecrypted] = useState<DecryptedAccountResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
+  const [isApplyingImport, setIsApplyingImport] = useState(false);
+  const [showImportedBlueskyPass, setShowImportedBlueskyPass] = useState(false);
+  const [showImportedThreadsToken, setShowImportedThreadsToken] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // サーバー上の保管データを取得
   const fetchServerVault = async () => {
@@ -71,6 +106,13 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
       fetchServerVault();
       setShowRawJson(false);
       setCopiedKey(null);
+      setExportSuccessMsg(null);
+      setImportError(null);
+      setImportSuccessMsg(null);
+      setImportDecrypted(null);
+      setImportFile(null);
+      setNeedsImportPassphrase(false);
+      setImportPassphrase('');
     }
   }, [isOpen]);
 
@@ -91,6 +133,102 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  // アカウント情報のダウンロード実行 (AES-256暗号化)
+  const handleDownloadBackup = async () => {
+    setIsExporting(true);
+    setExportSuccessMsg(null);
+    setFetchError(null);
+    try {
+      const { filename } = await downloadAccountCredentialsBackup(
+        customExportPassphrase.trim() ? customExportPassphrase.trim() : undefined
+      );
+      setExportSuccessMsg(`✅ アカウント設定バックアップ「${filename}」をダウンロードしました。（AES-256暗号化保護）`);
+      setTimeout(() => setExportSuccessMsg(null), 6000);
+    } catch (err: any) {
+      console.error('[ServerVault] Export error:', err);
+      setFetchError(`ダウンロードに失敗しました: ${err.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // ファイル選択トリガー
+  const handleTriggerFileInput = () => {
+    setImportError(null);
+    setImportSuccessMsg(null);
+    setImportDecrypted(null);
+    setNeedsImportPassphrase(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  // ファイル解析 & AES-256復号
+  const handleProcessImportFile = async (file: File, passToUse?: string) => {
+    setIsImporting(true);
+    setImportError(null);
+    setImportSuccessMsg(null);
+    setImportFile(file);
+
+    try {
+      const result = await parseAndDecryptAccountBackup(file, passToUse || importPassphrase);
+      setImportDecrypted(result);
+      setNeedsImportPassphrase(false);
+    } catch (err: any) {
+      console.error('[ServerVault] Import error:', err);
+      const msg = err.message || 'アカウントファイルの解析に失敗しました。';
+      if (msg.includes('復号化に失敗') || msg.includes('パスワード')) {
+        setNeedsImportPassphrase(true);
+        setImportError('🔑 このファイルはパスワードで保護されているか、復号に失敗しました。パスワードを入力して再試行してください。');
+      } else {
+        setImportError(msg);
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  // ファイル選択ハンドラ
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleProcessImportFile(file);
+    }
+  };
+
+  // ドラッグ＆ドロップ
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.name.endsWith('.json')) {
+      handleProcessImportFile(file);
+    } else if (file) {
+      setImportError('JSON形式のファイル (.json) をドロップしてください。');
+    }
+  };
+
+  // 復号されたアカウント情報を取り込んでログイン & サーバー登録実行
+  const handleApplyImport = async () => {
+    if (!importDecrypted) return;
+    setIsApplyingImport(true);
+    setImportError(null);
+    try {
+      const res = await applyImportedAccountToSession(importDecrypted);
+      setImportSuccessMsg(res.message);
+      await fetchServerVault(); // 最新のサーバー保管庫を再取得して表示
+      setImportDecrypted(null);
+      setImportFile(null);
+      setTimeout(() => setImportSuccessMsg(null), 8000);
+    } catch (err: any) {
+      console.error('[ServerVault] Apply import error:', err);
+      setImportError(`アカウント情報の適用に失敗しました: ${err.message}`);
+    } finally {
+      setIsApplyingImport(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -124,6 +262,15 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
       >
         {/* 上部グラデーションデコレーション */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-sky-500 to-purple-500" />
+
+        {/* 隠しファイル入力 */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          accept=".json,application/json"
+          className="hidden"
+        />
 
         {/* ヘッダーエリア */}
         <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/70 shrink-0">
@@ -195,12 +342,274 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
             )}
           </div>
 
-          {fetchError && (
-            <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-200 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-              <span>{fetchError}</span>
+          {/* 🌟 他PC・別ブラウザへの移行（ダウンロード・アップロード）コントロールボックス */}
+          <div className="p-3.5 sm:p-4 rounded-xl bg-slate-900/90 border border-sky-500/30 shadow-lg space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                    他のPC・ブラウザへのアカウント情報移行
+                    <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/30">
+                      AES-256 暗号化対応
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    アカウント情報をダウンロードして他の端末に読み込ませることで、即座にログイン・サーバー登録が可能です。
+                  </p>
+                </div>
+              </div>
+
+              {/* ダウンロード & アップロード 操作ボタン群 */}
+              <div className="flex items-center gap-2 shrink-0 pt-1 sm:pt-0">
+                <button
+                  type="button"
+                  onClick={handleDownloadBackup}
+                  disabled={isExporting || (!hasBluesky && !hasThreads)}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-emerald-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="アカウント情報をAES-256暗号化してダウンロード"
+                >
+                  <Download className={`w-3.5 h-3.5 ${isExporting ? 'animate-bounce' : ''}`} />
+                  <span>{isExporting ? '暗号化出力中...' : 'ダウンロード'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleTriggerFileInput}
+                  disabled={isImporting}
+                  className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-sky-600/20 disabled:opacity-40"
+                  title="他のPCやバックアップからアカウントファイルをアップロード"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>アップロード</span>
+                </button>
+              </div>
             </div>
-          )}
+
+            {/* 仕様・平文と暗号化の説明 */}
+            <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] space-y-1 text-slate-300">
+              <div className="flex items-center gap-1.5 font-semibold text-slate-200">
+                <HelpCircle className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span>移行データの暗号化仕様について:</span>
+              </div>
+              <ul className="list-disc list-inside space-y-0.5 text-slate-400 pl-1">
+                <li>
+                  <span className="text-emerald-300 font-medium">平文で出力・保持される情報:</span>{' '}
+                  Blueskyハンドル、Threadsアカウント名、Threads USER ID、AccessToken有効期限
+                </li>
+                <li>
+                  <span className="text-purple-300 font-medium">AES-256で強固に暗号化される情報:</span>{' '}
+                  Blueskyアプリパスワード、Threads AccessToken
+                </li>
+              </ul>
+            </div>
+
+            {/* ダウンロード成功メッセージ */}
+            {exportSuccessMsg && (
+              <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-200 flex items-center gap-2 animate-in fade-in duration-150">
+                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="flex-1">{exportSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* アップロード成功メッセージ */}
+            {importSuccessMsg && (
+              <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-200 flex items-center gap-2 animate-in fade-in duration-150">
+                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="flex-1">{importSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* エラーメッセージ */}
+            {(importError || fetchError) && (
+              <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-800/60 text-rose-200 flex items-center gap-2 animate-in fade-in duration-150">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="flex-1">{importError || fetchError}</span>
+              </div>
+            )}
+
+            {/* パスワード保護されているファイルの再試行フォーム */}
+            {needsImportPassphrase && (
+              <div className="p-3 rounded-lg bg-slate-950 border border-amber-500/40 space-y-2 animate-in fade-in duration-150">
+                <span className="text-amber-300 font-bold flex items-center gap-1.5 text-xs">
+                  <Lock className="w-3.5 h-3.5" />
+                  復号パスワードを入力してください
+                </span>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={importPassphrase}
+                    onChange={(e) => setImportPassphrase(e.target.value)}
+                    placeholder="バックアップ作成時に指定したパスワード"
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (importFile) handleProcessImportFile(importFile, importPassphrase);
+                    }}
+                    className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition cursor-pointer"
+                  >
+                    復号して再試行
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 🌟 アップロード成功時のアカウント情報確認 & ログイン適用カード */}
+            {importDecrypted && (
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950/40 border border-emerald-500/50 space-y-3 animate-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                    <span className="font-bold text-emerald-300 text-xs sm:text-sm">
+                      アカウント情報の読み込み・AES-256復号が完了しました
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {importFile ? importFile.name : 'バックアップファイル'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                  {/* 抽出されたBluesky情報 */}
+                  <div className="p-3 rounded-lg bg-slate-950/80 border border-sky-800/40 space-y-1.5">
+                    <div className="flex items-center justify-between font-bold text-sky-300 pb-1 border-b border-slate-800">
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-base">🦋</span> Bluesky 抽出情報
+                      </span>
+                      {importDecrypted.hasBluesky ? (
+                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          平文 & 復号OK
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 text-[10px]">情報なし</span>
+                      )}
+                    </div>
+                    {importDecrypted.hasBluesky && importDecrypted.bluesky ? (
+                      <div className="space-y-1 text-slate-300">
+                        <div>
+                          <span className="text-slate-500 text-[10px] block">ハンドル (平文):</span>
+                          <span className="font-mono text-sky-200 font-semibold">
+                            @{importDecrypted.bluesky.handle}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 text-[10px] block">パスワード (AES-256復号):</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-slate-300">
+                              {showImportedBlueskyPass
+                                ? importDecrypted.bluesky.appPassword
+                                : '••••••••••••••••••••'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowImportedBlueskyPass(!showImportedBlueskyPass)}
+                              className="text-slate-400 hover:text-white p-0.5"
+                            >
+                              {showImportedBlueskyPass ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 italic block py-2">Bluesky情報は含まれていません</span>
+                    )}
+                  </div>
+
+                  {/* 抽出されたThreads情報 */}
+                  <div className="p-3 rounded-lg bg-slate-950/80 border border-purple-800/40 space-y-1.5">
+                    <div className="flex items-center justify-between font-bold text-purple-300 pb-1 border-b border-slate-800">
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-base">🌀</span> Threads 抽出情報
+                      </span>
+                      {importDecrypted.hasThreads ? (
+                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          平文 & 復号OK
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 text-[10px]">情報なし</span>
+                      )}
+                    </div>
+                    {importDecrypted.hasThreads && importDecrypted.threads ? (
+                      <div className="space-y-1 text-slate-300">
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <span className="text-slate-500 text-[10px] block">アカウント名 (平文):</span>
+                            <span className="font-mono text-purple-200 font-semibold">
+                              {importDecrypted.threads.username}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[10px] block">Threads USER ID (平文):</span>
+                            <span className="font-mono text-slate-300">
+                              {importDecrypted.threads.userId}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 text-[10px] block">AccessToken (AES-256復号):</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-slate-300 truncate max-w-[180px]">
+                              {showImportedThreadsToken
+                                ? importDecrypted.threads.accessToken
+                                : '••••••••••••••••••••••••••••••••'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowImportedThreadsToken(!showImportedThreadsToken)}
+                              className="text-slate-400 hover:text-white p-0.5"
+                            >
+                              {showImportedThreadsToken ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+                        {importDecrypted.threads.tokenExpiresAt && (
+                          <div>
+                            <span className="text-slate-500 text-[10px] block">有効期限 (平文):</span>
+                            <span className="text-slate-300 text-[10px]">
+                              {new Date(importDecrypted.threads.tokenExpiresAt).toLocaleString('ja-JP')}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 italic block py-2">Threads情報は含まれていません</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 適用・ログイン確定ボタン */}
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportDecrypted(null);
+                      setImportFile(null);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApplyImport}
+                    disabled={isApplyingImport}
+                    className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-lg shadow-emerald-900/40 disabled:opacity-40"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    <span>
+                      {isApplyingImport
+                        ? 'サーバー登録・ログイン処理中...'
+                        : 'このアカウントでログインし、サーバー登録する'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* 2カラム構成: Bluesky & Threads */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -229,9 +638,9 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
 
                 {hasBluesky ? (
                   <div className="space-y-2.5 pt-3">
-                    {/* アカウント名 / ハンドル */}
+                    {/* アカウント名 / ハンドル (平文) */}
                     <div>
-                      <span className="text-[10px] text-slate-500 block">アカウント (Handle)</span>
+                      <span className="text-[10px] text-slate-500 block">アカウント (Handle) - 平文</span>
                       <div className="flex items-center justify-between gap-1.5 mt-0.5 bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-800">
                         <span className="font-semibold text-sky-300 font-mono truncate">
                           @{serverVault?.bluesky?.handle || serverVault?.bluesky?.identifier}
@@ -325,7 +734,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
                   <div className="py-6 text-center text-slate-500 space-y-2">
                     <p className="text-xs">サーバーに登録されたBlueskyアカウントはありません</p>
                     <p className="text-[10px] text-slate-400">
-                      右上の「設定」からBlueskyアカウントを連携すると自動的にサーバーへ同期保存されます。
+                      右上の「設定」からBlueskyアカウントを連携するか、上部の「アップロード」から設定ファイルを読み込んでください。
                     </p>
                   </div>
                 )}
@@ -357,9 +766,9 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
 
                 {hasThreads ? (
                   <div className="space-y-2.5 pt-3">
-                    {/* アカウントユーザー名 */}
+                    {/* アカウントユーザー名 (平文) */}
                     <div>
-                      <span className="text-[10px] text-slate-500 block">アカウント名</span>
+                      <span className="text-[10px] text-slate-500 block">アカウント名 (平文)</span>
                       <div className="flex items-center justify-between gap-1.5 mt-0.5 bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-800">
                         <span className="font-semibold text-purple-300 font-mono truncate">
                           {serverVault?.threads?.username || 'Threads連携アカウント'}
@@ -381,9 +790,9 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Threads User ID */}
+                    {/* Threads User ID (平文) */}
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Threads User ID</span>
+                      <span className="text-[10px] text-slate-500 block">Threads User ID (平文)</span>
                       <div className="flex items-center justify-between gap-1.5 mt-0.5 bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-800">
                         <span className="text-[11px] text-slate-300 font-mono truncate">
                           {serverVault?.threads?.userId || 'me'}
@@ -403,13 +812,13 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Long-Lived Token 有効期限 */}
+                    {/* Long-Lived Token 有効期限 (平文) */}
                     {threadsExpiry && (
                       <div className="p-2.5 rounded-lg bg-purple-950/20 border border-purple-800/40 space-y-1.5">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-slate-400 flex items-center gap-1">
                             <Clock className="w-3 h-3 text-purple-400" />
-                            Token 有効期限
+                            Token 有効期限 (平文)
                           </span>
                           <span
                             className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${threadsExpiry.badgeColor.bg} ${threadsExpiry.badgeColor.text} ${threadsExpiry.badgeColor.border}`}
@@ -468,7 +877,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
                   <div className="py-6 text-center text-slate-500 space-y-2">
                     <p className="text-xs">サーバーに登録されたThreadsキーはありません</p>
                     <p className="text-[10px] text-slate-400">
-                      右上の「設定」からThreadsアクセストークンを接続すると自動的にサーバーへ同期保存されます。
+                      右上の「設定」からThreadsアクセストークンを接続するか、上部の「アップロード」から設定ファイルを読み込んでください。
                     </p>
                   </div>
                 )}
