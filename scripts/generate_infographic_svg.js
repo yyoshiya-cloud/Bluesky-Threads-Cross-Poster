@@ -1,0 +1,294 @@
+import fs from 'fs';
+import path from 'path';
+
+// 1920x1080 フルHDの超高精細インフォグラフィックSVG
+// 添付画像の正確なボタン位置から矢印を引き出し、管理者モード等の不要項目を完全削除した最新版
+const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <!-- 背景グラデーション -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070b14"/>
+      <stop offset="50%" stop-color="#0b1120"/>
+      <stop offset="100%" stop-color="#030712"/>
+    </linearGradient>
+
+    <!-- カード用グラデーション -->
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <!-- メインエディタ外枠グロー -->
+    <filter id="mainGlow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#0284c7" flood-opacity="0.3"/>
+    </filter>
+
+    <!-- モーダルカードグロー -->
+    <filter id="cardGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000000" flood-opacity="0.7"/>
+    </filter>
+
+    <!-- 矢印マーカー -->
+    <marker id="arrowSky" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <polygon points="0 0, 7 3, 0 6" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <polygon points="0 0, 7 3, 0 6" fill="#c084fc"/>
+    </marker>
+    <marker id="arrowEmerald" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <polygon points="0 0, 7 3, 0 6" fill="#34d399"/>
+    </marker>
+    <marker id="arrowIndigo" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <polygon points="0 0, 7 3, 0 6" fill="#818cf8"/>
+    </marker>
+  </defs>
+
+  <style>
+    .font-sans { font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', 'Noto Sans JP', 'Segoe UI', sans-serif; }
+    .title { font-weight: 800; letter-spacing: -0.5px; fill: #ffffff; }
+    .card-title { font-weight: 700; font-size: 13px; fill: #ffffff; }
+    .card-badge { font-weight: 700; font-size: 9.5px; }
+    .desc { font-weight: 400; font-size: 10.5px; fill: #cbd5e1; }
+  </style>
+
+  <!-- 背景 -->
+  <rect width="1920" height="1080" fill="url(#bgGrad)"/>
+
+  <!-- サイバー背景グリッド装飾 -->
+  <g opacity="0.08" stroke="#38bdf8" stroke-width="1">
+    <line x1="0" y1="120" x2="1920" y2="120"/>
+    <line x1="0" y1="240" x2="1920" y2="240"/>
+    <line x1="0" y1="360" x2="1920" y2="360"/>
+    <line x1="0" y1="480" x2="1920" y2="480"/>
+    <line x1="0" y1="600" x2="1920" y2="600"/>
+    <line x1="0" y1="720" x2="1920" y2="720"/>
+    <line x1="0" y1="840" x2="1920" y2="840"/>
+    <line x1="0" y1="960" x2="1920" y2="960"/>
+    <line x1="240" y1="0" x2="240" y2="1080"/>
+    <line x1="480" y1="0" x2="480" y2="1080"/>
+    <line x1="720" y1="0" x2="720" y2="1080"/>
+    <line x1="960" y1="0" x2="960" y2="1080"/>
+    <line x1="1200" y1="0" x2="1200" y2="1080"/>
+    <line x1="1440" y1="0" x2="1440" y2="1080"/>
+    <line x1="1680" y1="0" x2="1680" y2="1080"/>
+  </g>
+
+  <!-- ヘッダータイトル帯 -->
+  <g transform="translate(40, 24)">
+    <rect x="0" y="0" width="1840" height="52" rx="10" fill="#0f172a" stroke="#1e293b" stroke-width="1.5"/>
+    <rect x="14" y="10" width="32" height="32" rx="8" fill="#0284c7"/>
+    <text x="58" y="32" class="font-sans title" font-size="19">CrossPost Web Studio</text>
+    <rect x="310" y="15" width="140" height="22" rx="11" fill="#0284c7"/>
+    <text x="322" y="30" class="font-sans" font-size="10.5" font-weight="700" fill="#ffffff">BLUESKY &amp; THREADS</text>
+    <rect x="465" y="15" width="190" height="22" rx="11" fill="#1e293b" stroke="#38bdf8" stroke-width="1"/>
+    <text x="475" y="30" class="font-sans" font-size="10.5" font-weight="700" fill="#38bdf8">システム機能 ＆ 画面遷移図</text>
+    <text x="1480" y="32" class="font-sans" font-size="12" font-weight="600" fill="#94a3b8">高解像度PNG保存対応 / 完全日本語仕様</text>
+  </g>
+
+  <!-- ==================== 中央: メイン投稿エディタ画面（原画配置） ==================== -->
+  <!-- 配置位置: X = 320, Y = 280, 幅 = 1280, 高さ = 720 (16:9) -->
+  <g id="main-editor-container" transform="translate(320, 280)" filter="url(#mainGlow)">
+    <!-- 外枠ウィンドウ -->
+    <rect x="0" y="0" width="1280" height="720" rx="12" fill="#030712" stroke="#0284c7" stroke-width="2"/>
+
+    <!-- 添付画像の直接埋め込み（画像ファイルまたはフォールバック） -->
+    <image href="/screenshot_editor.png" x="0" y="0" width="1280" height="720" preserveAspectRatio="none"/>
+
+    <!-- メイン画面タイトルバッジ -->
+    <rect x="16" y="-14" width="270" height="26" rx="6" fill="#0f172a" stroke="#0284c7" stroke-width="1"/>
+    <text x="26" y="3" class="font-sans" font-size="11" font-weight="700" fill="#38bdf8">📱 メイン投稿エディタ画面（原画そのまま）</text>
+  </g>
+
+  <!-- ==================== 正確なボタン位置からの引き出し線 ＆ 説明カード ==================== -->
+  <!-- 
+    元画像(1920x1080)に対する1280x720配置(X:320, Y:280)のボタン中心座標:
+    比率: 1280/1920 = 2/3
+    ヘッダーY: 280 + 24*(2/3) = 296
+    - LIVE MODE: X = 320 + 165*(2/3) = 430
+    - 分析・データ: X = 320 + 590*(2/3) = 713
+    - 使い方: X = 320 + 665*(2/3) = 763
+    - 予約カレンダー: X = 320 + 745*(2/3) = 816
+    - 履歴: X = 320 + 835*(2/3) = 876
+    - 設定: X = 320 + 970*(2/3) = 966
+    - サーバー登録情報: X = 320 + 1060*(2/3) = 1026
+    - アプリ情報: X = 320 + 1150*(2/3) = 1086
+  -->
+
+  <!-- 【カード 1】🔑 モード切替・認証 -->
+  <g transform="translate(40, 96)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="280" height="106" rx="8" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title">🔑 モード切替・認証</text>
+    <rect x="190" y="10" width="78" height="18" rx="9" fill="#0284c7"/>
+    <text x="200" y="22" class="font-sans card-badge" fill="#ffffff">DEMO ↔ LIVE</text>
+    <text x="12" y="46" class="font-sans desc">• DEMOモード: 擬似投稿で全機能を安全テスト</text>
+    <text x="12" y="66" class="font-sans desc">• LIVEモード: 実際のBluesky＆Threadsへ配信</text>
+    <text x="12" y="86" class="font-sans desc">• ヘッダーのMODEバッジから即時切り替え</text>
+  </g>
+  <!-- LIVE MODE バッジ (X: 430, Y: 296) への正確な接続線 -->
+  <path d="M 180 202 L 180 250 L 430 250 L 430 294" fill="none" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrowSky)"/>
+  <circle cx="430" cy="296" r="4.5" fill="#38bdf8"/>
+
+  <!-- 【カード 2】📊 分析・データ管理 -->
+  <g transform="translate(340, 96)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="240" height="106" rx="8" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title">📊 分析・データ管理</text>
+    <rect x="160" y="10" width="68" height="18" rx="9" fill="#0284c7"/>
+    <text x="170" y="22" class="font-sans card-badge" fill="#ffffff">統計＆JSON</text>
+    <text x="12" y="46" class="font-sans desc">• プラットフォーム別投稿比率グラフ</text>
+    <text x="12" y="66" class="font-sans desc">• 文字数・分割頻度の傾向集計</text>
+    <text x="12" y="86" class="font-sans desc">• 完全JSONバックアップ＆マージ復元</text>
+  </g>
+  <!-- 分析ボタン (X: 713, Y: 296) への正確な接続線 -->
+  <path d="M 460 202 L 460 240 L 713 240 L 713 294" fill="none" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrowSky)"/>
+  <circle cx="713" cy="296" r="4" fill="#38bdf8"/>
+
+  <!-- 【カード 3】📘 使い方 ＆ 機能ガイド -->
+  <g transform="translate(600, 96)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="240" height="106" rx="8" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title">📘 使い方ガイド</text>
+    <rect x="156" y="10" width="72" height="18" rx="9" fill="#0284c7"/>
+    <text x="166" y="22" class="font-sans card-badge" fill="#ffffff">全20機能解説</text>
+    <text x="12" y="46" class="font-sans desc">• クイックスタート・投稿の流れ</text>
+    <text x="12" y="66" class="font-sans desc">• 長文分割＆画像最適化仕様</text>
+    <text x="12" y="86" class="font-sans desc">• FAQ ＆ 運用実用TIPS 7選</text>
+  </g>
+  <!-- 使い方ボタン (X: 763, Y: 296) への正確な接続線 -->
+  <path d="M 720 202 L 720 250 L 763 250 L 763 294" fill="none" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrowSky)"/>
+  <circle cx="763" cy="296" r="4" fill="#38bdf8"/>
+
+  <!-- 【カード 4】📅 予約投稿カレンダー -->
+  <g transform="translate(860, 96)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="240" height="106" rx="8" fill="url(#cardGrad)" stroke="#818cf8" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title">📅 予約投稿カレンダー</text>
+    <rect x="150" y="10" width="78" height="18" rx="9" fill="#4f46e5"/>
+    <text x="158" y="22" class="font-sans card-badge" fill="#ffffff">日時指定キュー</text>
+    <text x="12" y="46" class="font-sans desc">• 月間カレンダー＆週間タイムライン</text>
+    <text x="12" y="66" class="font-sans desc">• ドラッグ＆ドロップでの日時変更</text>
+    <text x="12" y="86" class="font-sans desc">• 今すぐ投稿への切り替え・削除</text>
+  </g>
+  <!-- 予約カレンダーボタン (X: 816, Y: 296) への正確な接続線 -->
+  <path d="M 980 202 L 980 240 L 816 240 L 816 294" fill="none" stroke="#818cf8" stroke-width="1.8" marker-end="url(#arrowIndigo)"/>
+  <circle cx="816" cy="296" r="4" fill="#818cf8"/>
+
+  <!-- 【カード 5】📜 投稿履歴 ＆ リポスト -->
+  <g transform="translate(1120, 96)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="240" height="106" rx="8" fill="url(#cardGrad)" stroke="#c084fc" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title">📜 投稿履歴＆リポスト</text>
+    <rect x="156" y="10" width="72" height="18" rx="9" fill="#7e22ce"/>
+    <text x="166" y="22" class="font-sans card-badge" fill="#ffffff">ログ＆再投稿</text>
+    <text x="12" y="46" class="font-sans desc">• 過去投稿の高速キーワード検索</text>
+    <text x="12" y="66" class="font-sans desc">• ワンクリックで本文復元（リポスト）</text>
+    <text x="12" y="86" class="font-sans desc">• スレッド返信先ポストの指定</text>
+  </g>
+  <!-- 履歴ボタン (X: 876, Y: 296) への正確な接続線 -->
+  <path d="M 1240 202 L 1240 250 L 876 250 L 876 294" fill="none" stroke="#c084fc" stroke-width="1.8" marker-end="url(#arrowPurple)"/>
+  <circle cx="876" cy="296" r="4" fill="#c084fc"/>
+
+  <!-- 【カード 6】⚙️ アカウント・API設定 -->
+  <g transform="translate(1380, 96)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="250" height="106" rx="8" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title">⚙️ アカウント・API設定</text>
+    <rect x="174" y="10" width="64" height="18" rx="9" fill="#0284c7"/>
+    <text x="184" y="22" class="font-sans card-badge" fill="#ffffff">認証・外観</text>
+    <text x="12" y="46" class="font-sans desc">• Bluesky / Threads 認証情報管理</text>
+    <text x="12" y="66" class="font-sans desc">• LIVE未ログイン時保存非活性ガード</text>
+    <text x="12" y="86" class="font-sans desc">• アクセントテーマカラー即時切替</text>
+  </g>
+  <!-- 設定ボタン (X: 966, Y: 296) への正確な接続線 -->
+  <path d="M 1500 202 L 1500 240 L 966 240 L 966 294" fill="none" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrowSky)"/>
+  <circle cx="966" cy="296" r="4" fill="#38bdf8"/>
+
+  <!-- 【カード 7】📁 サーバー登録情報 -->
+  <g transform="translate(1650, 96)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="230" height="106" rx="8" fill="url(#cardGrad)" stroke="#34d399" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title" fill="#d1fae5">📁 サーバー登録情報</text>
+    <rect x="156" y="10" width="62" height="18" rx="9" fill="#065f46"/>
+    <text x="166" y="22" class="font-sans card-badge" fill="#d1fae5">暗号化移行</text>
+    <text x="12" y="46" class="font-sans desc" fill="#a7f3d0">• /data/account_vault.json 保持</text>
+    <text x="12" y="66" class="font-sans desc" fill="#a7f3d0">• 他PCへの暗号化移行バックアップ</text>
+    <text x="12" y="86" class="font-sans desc" fill="#a7f3d0">• 未連携時ダウンロード非活性</text>
+  </g>
+  <!-- サーバー登録情報ボタン (X: 1026, Y: 296) への正確な接続線 -->
+  <path d="M 1760 202 L 1760 250 L 1026 250 L 1026 294" fill="none" stroke="#34d399" stroke-width="1.8" marker-end="url(#arrowEmerald)"/>
+  <circle cx="1026" cy="296" r="4" fill="#34d399"/>
+
+  <!-- ==================== 左側: エディタ ＆ 同時投稿 ==================== -->
+  <!-- 【カード 8】✨ AIアシスト ＆ ハッシュタグ提案 -->
+  <g transform="translate(40, 360)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="260" height="150" rx="8" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title">✨ AIアシスト ＆ タグ提案</text>
+    <rect x="180" y="10" width="68" height="18" rx="9" fill="#0284c7"/>
+    <text x="188" y="22" class="font-sans card-badge" fill="#ffffff">文章最適化</text>
+    <text x="12" y="52" class="font-sans desc">• AI文面調整・トーン最適化</text>
+    <text x="12" y="74" class="font-sans desc">• 定型文・例文・任意区切り(---)</text>
+    <text x="12" y="96" class="font-sans desc">• 本文からのハッシュタグ推論候補</text>
+    <text x="12" y="118" class="font-sans desc">• Threads専用トピックタグ付与</text>
+  </g>
+  <!-- エディタ左側への引き出し線 -->
+  <path d="M 300 435 L 330 435" fill="none" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrowSky)"/>
+  <circle cx="330" cy="435" r="4" fill="#38bdf8"/>
+
+  <!-- 【カード 9】🚀 同時投稿 ＆ 長文自動スレッド分割 -->
+  <g transform="translate(40, 560)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="260" height="150" rx="8" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title">🚀 Bluesky＆Threads同時投稿</text>
+    <rect x="180" y="10" width="68" height="18" rx="9" fill="#0284c7"/>
+    <text x="190" y="22" class="font-sans card-badge" fill="#ffffff">文字数判定</text>
+    <text x="12" y="52" class="font-sans desc">• Bluesky (300字) / Threads (500字)</text>
+    <text x="12" y="74" class="font-sans desc">• 制限超過時の文末自然分割ツリー</text>
+    <text x="12" y="96" class="font-sans desc">• 画像最大20件添付＆Altテキスト</text>
+    <text x="12" y="118" class="font-sans desc">• 自動下書き保存（リロード復元）</text>
+  </g>
+  <!-- 同時投稿ボタンへの引き出し線 -->
+  <path d="M 300 635 L 450 635 L 450 910 L 480 910" fill="none" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrowSky)"/>
+  <circle cx="480" cy="910" r="4" fill="#38bdf8"/>
+
+  <!-- ==================== 右側: プレビュー ＆ アプリ情報 ==================== -->
+  <!-- 【カード 10】📱 リアルタイム公式プレビュー -->
+  <g transform="translate(1620, 360)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="260" height="150" rx="8" fill="url(#cardGrad)" stroke="#c084fc" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title">📱 リアルタイムプレビュー</text>
+    <rect x="176" y="10" width="72" height="18" rx="9" fill="#7e22ce"/>
+    <text x="184" y="22" class="font-sans card-badge" fill="#ffffff">公式UIスキン</text>
+    <text x="12" y="52" class="font-sans desc">• Bluesky公式UIスキン完全シミュレート</text>
+    <text x="12" y="74" class="font-sans desc">• Threads公式UIスキン完全シミュレート</text>
+    <text x="12" y="96" class="font-sans desc">• スレッド連結ビジュアライザー表示</text>
+    <text x="12" y="118" class="font-sans desc">• 文字サイズ切替・仕様比較モード</text>
+  </g>
+  <!-- プレビュー右側への引き出し線 -->
+  <path d="M 1620 435 L 1590 435" fill="none" stroke="#c084fc" stroke-width="1.8" marker-end="url(#arrowPurple)"/>
+  <circle cx="1590" cy="435" r="4" fill="#c084fc"/>
+
+  <!-- 【カード 11】ℹ️ アプリ情報 ＆ 終了確認 -->
+  <g transform="translate(1620, 560)" filter="url(#cardGlow)">
+    <rect x="0" y="0" width="260" height="150" rx="8" fill="url(#cardGrad)" stroke="#64748b" stroke-width="1.2"/>
+    <text x="12" y="24" class="font-sans card-title">ℹ️ アプリ情報 ＆ 終了確認</text>
+    <rect x="184" y="10" width="64" height="18" rx="9" fill="#1e293b"/>
+    <text x="194" y="22" class="font-sans card-badge" fill="#94a3b8">安全終了</text>
+    <text x="12" y="52" class="font-sans desc">• アプリバージョン・ライセンス確認</text>
+    <text x="12" y="74" class="font-sans desc">• 未保存下書きの自動保存確認</text>
+    <text x="12" y="96" class="font-sans desc">• 誤操作によるタブクローズ防止</text>
+    <text x="12" y="118" class="font-sans desc">• 次回起動時の状態完全復元</text>
+  </g>
+  <!-- アプリ情報/終了ボタン (X: 1086, Y: 296) への引き出し線 -->
+  <path d="M 1620 635 L 1086 635 L 1086 298" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrowSky)"/>
+  <circle cx="1086" cy="296" r="4" fill="#94a3b8"/>
+
+  <!-- 最下部フッターテキスト -->
+  <text x="560" y="1040" class="font-sans" font-size="12" fill="#475569">
+    CrossPost Web Studio • Bluesky &amp; Threads Multi-Platform Publisher • System Architecture Infographic
+  </text>
+</svg>
+`;
+
+// 保存
+const publicPath = path.resolve('public', 'crosspost_system_infographic.svg');
+const assetsPath = path.resolve('src', 'assets', 'images', 'crosspost_system_infographic.svg');
+
+fs.writeFileSync(publicPath, svgContent, 'utf-8');
+console.log('Saved to', publicPath);
+
+fs.mkdirSync(path.dirname(assetsPath), { recursive: true });
+fs.writeFileSync(assetsPath, svgContent, 'utf-8');
+console.log('Saved to', assetsPath);

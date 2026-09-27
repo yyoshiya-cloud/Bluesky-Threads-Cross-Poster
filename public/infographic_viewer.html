@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CrossPost Web Studio - アプリ機能構成 ＆ 画面遷移図 (PNG保存対応)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #070b14;
+      color: #f8fafc;
+      font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    header {
+      width: 100%;
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      padding: 14px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .app-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      background: #0284c7;
+      color: #e0f2fe;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-weight: 700;
+    }
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-png {
+      background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+      color: #ffffff;
+      border: 1px solid #38bdf8;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+      transition: all 0.2s ease;
+    }
+    .btn-png:hover {
+      background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(2, 132, 199, 0.6);
+    }
+    .btn-secondary {
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid #334155;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .btn-secondary:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+    .main-container {
+      width: 100%;
+      max-width: 1920px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    .canvas-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 1920px;
+      background: #030712;
+      border-radius: 16px;
+      border: 1px solid #1e293b;
+      overflow: hidden;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(2, 132, 199, 0.15);
+    }
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .notice-bar {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 13px;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .drop-hint {
+      color: #38bdf8;
+      font-weight: 600;
+    }
+    .file-input-wrapper {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .file-input-label {
+      background: #1e293b;
+      border: 1px dashed #38bdf8;
+      color: #38bdf8;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .file-input-label:hover {
+      background: #0c4a6e;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <div class="app-title">
+        <span>CrossPost Web Studio</span>
+        <span class="badge">完全日本語版・機能図 ＆ 画面遷移図</span>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="file-input-wrapper">
+        <label for="imageUpload" class="file-input-label">
+          🖼️ スクリーンショット画像を差し替え
+        </label>
+        <input type="file" id="imageUpload" accept="image/*" style="display:none;" />
+      </div>
+      <button id="downloadPngBtn" class="btn-png">
+        💾 PNG画像として保存（ダウンロード）
+      </button>
+      <a href="/" class="btn-secondary">
+        ← アプリへ戻る
+      </a>
+    </div>
+  </header>
+
+  <div class="main-container">
+    <div class="notice-bar">
+      <div>
+        <span>📌 <strong>高解像度PNG出力対応</strong>: ヘッダーの各ボタン（LIVE MODE, 分析, 使い方, 予約, 履歴, 設定, サーバー情報）の<strong>正確な座標から直接引き出し線が接続</strong>されています。</span>
+      </div>
+      <div class="drop-hint">
+        ※ 「PNG画像として保存」を押すと1920×1080の高解像度PNGファイルが保存されます
+      </div>
+    </div>
+
+    <div class="canvas-wrapper">
+      <canvas id="infographicCanvas" width="1920" height="1080"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('infographicCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // 内部スクリーンショット画像オブジェクト
+    let mainScreenshotImg = new Image();
+    // デフォルト画像またはプレースホルダー
+    mainScreenshotImg.crossOrigin = 'anonymous';
+
+    // ユーザーがアップロードしたスクリーンショット
+    const imageUploadInput = document.getElementById('imageUpload');
+    imageUploadInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          mainScreenshotImg = new Image();
+          mainScreenshotImg.onload = () => drawInfographic();
+          mainScreenshotImg.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // ドラッグ＆ドロップ対応
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        const file = e.dataTransfer.files[0];
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          mainScreenshotImg = new Image();
+          mainScreenshotImg.onload = () => drawInfographic();
+          mainScreenshotImg.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // 初期読み込み: 添付画像を読み込み（同ドメイン内のアセットまたは生成プレースホルダー）
+    mainScreenshotImg.onload = () => drawInfographic();
+    mainScreenshotImg.onerror = () => {
+      // 画像が見つからない場合でも枠と実寸画面を描画
+      drawInfographic();
+    };
+    // 添付画像パスを試行
+    mainScreenshotImg.src = '/screenshot_editor.png';
+
+    // インフォグラフィック全描画関数 (1920 x 1080)
+    function drawInfographic() {
+      // 1. 背景描画
+      const bgGrad = ctx.createLinearGradient(0, 0, 1920, 1080);
+      bgGrad.addColorStop(0, '#070b14');
+      bgGrad.addColorStop(0.5, '#0b1120');
+      bgGrad.addColorStop(1, '#030712');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, 1920, 1080);
+
+      // グリッド線
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.04)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= 1920; x += 80) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, 1080);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= 1080; y += 80) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(1920, y);
+        ctx.stroke();
+      }
+
+      // 2. 最上部ヘッダーバナー
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, 40, 24, 1840, 52, 10, true, true);
+
+      ctx.fillStyle = '#0284c7';
+      roundRect(ctx, 54, 34, 32, 32, 8, true, false);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillText('CrossPost Web Studio', 98, 56);
+
+      ctx.fillStyle = '#0284c7';
+      roundRect(ctx, 350, 39, 150, 22, 11, true, false);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('BLUESKY & THREADS', 362, 54);
+
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1;
+      roundRect(ctx, 515, 39, 210, 22, 11, true, true);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('機能構成 ＆ 画面遷移インフォグラフィック', 525, 54);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '600 13px sans-serif';
+      ctx.fillText('高解像度PNG保存対応 / 完全日本語仕様', 1540, 56);
+
+      // 3. 中央: メイン投稿エディタ画面（添付画像を原画そのまま配置）
+      // 配置サイズ: 幅 1280px, 高さ 720px (16:9)
+      // 配置位置: X = 320, Y = 280
+      const imgX = 320;
+      const imgY = 280;
+      const imgW = 1280;
+      const imgH = 720;
+
+      // 外枠ドロップシャドウとボーダー
+      ctx.save();
+      ctx.shadowColor = 'rgba(2, 132, 199, 0.3)';
+      ctx.shadowBlur = 30;
+      ctx.shadowOffsetY = 10;
+      ctx.fillStyle = '#0b1120';
+      roundRect(ctx, imgX, imgY, imgW, imgH, 12, true, false);
+      ctx.restore();
+
+      // 画像の描画（読み込まれていれば実画像を描画）
+      if (mainScreenshotImg.complete && mainScreenshotImg.naturalWidth > 0) {
+        ctx.save();
+        clipRoundRect(ctx, imgX, imgY, imgW, imgH, 12);
+        ctx.drawImage(mainScreenshotImg, imgX, imgY, imgW, imgH);
+        ctx.restore();
+      } else {
+        // 画像未ロード時のリアルなプレースホルダーUI
+        drawFallbackScreenshot(ctx, imgX, imgY, imgW, imgH);
+      }
+
+      // 画像枠線
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 2;
+      roundRect(ctx, imgX, imgY, imgW, imgH, 12, false, true);
+
+      // 画面上部ラベルバッジ
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 1;
+      roundRect(ctx, imgX + 16, imgY - 14, 250, 26, 6, true, true);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('📱 メイン投稿エディタ画面（原画そのまま）', imgX + 24, imgY + 3);
+
+      // 4. 各ボタンの正確な座標の計算 (1280x720 基準)
+      // 元スクリーンショットでの比率:
+      // ヘッダーバーのY座標: imgY + 16 (高さ約30pxの中心 = imgY + 18)
+      // ボタン群のX座標比率 (元画像 1920 基準):
+      // - LIVE MODE: X = 160 -> imgX + (160/1920)*imgW = imgX + 107
+      // - 分析: X = 590 -> imgX + (590/1920)*imgW = imgX + 393
+      // - 使い方: X = 665 -> imgX + (665/1920)*imgW = imgX + 443
+      // - 予約: X = 745 -> imgX + (745/1920)*imgW = imgX + 497
+      // - 履歴: X = 835 -> imgX + (835/1920)*imgW = imgX + 557
+      // - 設定: X = 965 -> imgX + (965/1920)*imgW = imgX + 643
+      // - サーバー情報: X = 1055 -> imgX + (1055/1920)*imgW = imgX + 703
+      // - アプリ情報: X = 1150 -> imgX + (1150/1920)*imgW = imgX + 767
+
+      const headerY = imgY + 18;
+
+      // 5. 周囲の説明カード ＆ 正確な位置からの引き出し線
+      // 【カード 1】🔑 モード切替・認証 (DEMO ↔ LIVE)
+      // LIVE MODE バッジの位置: (imgX + 107, headerY)
+      drawCallout({
+        pinX: imgX + 107,
+        pinY: headerY,
+        cardX: 40,
+        cardY: 96,
+        cardW: 280,
+        cardH: 104,
+        title: '🔑 モード切替・認証',
+        badge: 'DEMO ↔ LIVE',
+        badgeColor: '#0284c7',
+        borderColor: '#38bdf8',
+        bullets: [
+          'DEMOモード: 擬似投稿で全機能を安全にテスト',
+          'LIVEモード: 実際のBluesky＆Threadsへ配信',
+          'ヘッダーのMODEバッジから即時切り替え'
+        ]
+      });
+
+      // 【カード 2】📊 分析・データ管理
+      // 分析ボタン位置: (imgX + 393, headerY)
+      drawCallout({
+        pinX: imgX + 393,
+        pinY: headerY,
+        cardX: 340,
+        cardY: 96,
+        cardW: 240,
+        cardH: 104,
+        title: '📊 分析・データ管理',
+        badge: '統計＆JSON',
+        badgeColor: '#0284c7',
+        borderColor: '#38bdf8',
+        bullets: [
+          'プラットフォーム別投稿比率グラフ',
+          '文字数・分割頻度の傾向集計',
+          '完全JSONバックアップ＆マージ復元'
+        ]
+      });
+
+      // 【カード 3】📘 使い方 ＆ 機能ガイド
+      // 使い方ボタン位置: (imgX + 443, headerY)
+      drawCallout({
+        pinX: imgX + 443,
+        pinY: headerY,
+        cardX: 600,
+        cardY: 96,
+        cardW: 240,
+        cardH: 104,
+        title: '📘 使い方ガイド',
+        badge: '全20機能解説',
+        badgeColor: '#0284c7',
+        borderColor: '#38bdf8',
+        bullets: [
+          'クイックスタート・投稿の流れ',
+          '長文分割＆画像最適化仕様',
+          'FAQ ＆ 運用実用TIPS 7選'
+        ]
+      });
+
+      // 【カード 4】📅 予約投稿カレンダー
+      // 予約カレンダーボタン位置: (imgX + 497, headerY)
+      drawCallout({
+        pinX: imgX + 497,
+        pinY: headerY,
+        cardX: 860,
+        cardY: 96,
+        cardW: 240,
+        cardH: 104,
+        title: '📅 予約投稿カレンダー',
+        badge: '日時指定キュー',
+        badgeColor: '#4f46e5',
+        borderColor: '#818cf8',
+        bullets: [
+          '月間カレンダー＆週間タイムライン',
+          'ドラッグ＆ドロップでの日時変更',
+          '今すぐ投稿への切り替え・削除'
+        ]
+      });
+
+      // 【カード 5】📜 投稿履歴 ＆ リポスト
+      // 履歴ボタン位置: (imgX + 557, headerY)
+      drawCallout({
+        pinX: imgX + 557,
+        pinY: headerY,
+        cardX: 1120,
+        cardY: 96,
+        cardW: 240,
+        cardH: 104,
+        title: '📜 投稿履歴＆リポスト',
+        badge: 'ログ＆再投稿',
+        badgeColor: '#7e22ce',
+        borderColor: '#c084fc',
+        bullets: [
+          '過去投稿の高速キーワード検索',
+          'ワンクリックで本文復元（リポスト）',
+          'スレッド返信先ポストの指定'
+        ]
+      });
+
+      // 【カード 6】⚙️ アカウント・API設定
+      // 設定ボタン位置: (imgX + 643, headerY)
+      drawCallout({
+        pinX: imgX + 643,
+        pinY: headerY,
+        cardX: 1380,
+        cardY: 96,
+        cardW: 250,
+        cardH: 104,
+        title: '⚙️ アカウント・API設定',
+        badge: '認証・外観',
+        badgeColor: '#0284c7',
+        borderColor: '#38bdf8',
+        bullets: [
+          'Bluesky / Threads 認証情報管理',
+          'LIVE未ログイン時保存非活性ガード',
+          'アクセントテーマカラー即時切替'
+        ]
+      });
+
+      // 【カード 7】📁 サーバー登録情報
+      // サーバー登録情報ボタン位置: (imgX + 703, headerY)
+      drawCallout({
+        pinX: imgX + 703,
+        pinY: headerY,
+        cardX: 1650,
+        cardY: 96,
+        cardW: 230,
+        cardH: 104,
+        title: '📁 サーバー登録情報',
+        badge: '暗号化移行',
+        badgeColor: '#065f46',
+        borderColor: '#34d399',
+        bullets: [
+          '/data/account_vault.json 保持',
+          '他PCへの暗号化移行バックアップ',
+          '未連携時ダウンロード非活性'
+        ]
+      });
+
+      // 【カード 8】✨ AIアシスト ＆ ハッシュタグ・トピック提案（左側）
+      // エディタ左側位置: (imgX + 20, imgY + 350)
+      drawLeftCallout({
+        pinX: imgX + 10,
+        pinY: imgY + 360,
+        cardX: 40,
+        cardY: 340,
+        cardW: 260,
+        cardH: 150,
+        title: '✨ AIアシスト ＆ タグ提案',
+        badge: '文章最適化',
+        badgeColor: '#0284c7',
+        borderColor: '#38bdf8',
+        bullets: [
+          'AI文面調整・トーン最適化',
+          '定型文・例文・任意区切り(---)',
+          '本文からのハッシュタグ推論候補',
+          'Threads専用トピックタグ付与'
+        ]
+      });
+
+      // 【カード 9】🚀 同時投稿 ＆ 長文自動スレッド分割（左下）
+      // 同時投稿ボタン位置: (imgX + 150, imgY + 680)
+      drawLeftCallout({
+        pinX: imgX + 150,
+        pinY: imgY + 680,
+        cardX: 40,
+        cardY: 530,
+        cardW: 260,
+        cardH: 150,
+        title: '🚀 Bluesky＆Threads同時投稿',
+        badge: '文字数判定',
+        badgeColor: '#0284c7',
+        borderColor: '#38bdf8',
+        bullets: [
+          'Bluesky (300字) / Threads (500字)',
+          '制限超過時の文末自然分割ツリー',
+          '画像最大20件添付＆Altテキスト',
+          '自動下書き保存（リロード復元）'
+        ]
+      });
+
+      // 【カード 10】📱 リアルタイム公式プレビュー（右側）
+      // プレビュー右側位置: (imgX + 1150, imgY + 350)
+      drawRightCallout({
+        pinX: imgX + 1270,
+        pinY: imgY + 360,
+        cardX: 1620,
+        cardY: 340,
+        cardW: 260,
+        cardH: 150,
+        title: '📱 リアルタイムプレビュー',
+        badge: '公式UIスキン',
+        badgeColor: '#7e22ce',
+        borderColor: '#c084fc',
+        bullets: [
+          'Bluesky公式UIスキン完全シミュレート',
+          'Threads公式UIスキン完全シミュレート',
+          'スレッド連結ビジュアライザー表示',
+          '文字サイズ切替・仕様比較モード'
+        ]
+      });
+
+      // 【カード 11】ℹ️ アプリ情報 ＆ 終了確認（右下）
+      // アプリ情報/終了ボタン位置: (imgX + 767, headerY)
+      drawRightCallout({
+        pinX: imgX + 1270,
+        pinY: imgY + 680,
+        cardX: 1620,
+        cardY: 530,
+        cardW: 260,
+        cardH: 150,
+        title: 'ℹ️ アプリ情報 ＆ 終了確認',
+        badge: '安全終了',
+        badgeColor: '#1e293b',
+        borderColor: '#64748b',
+        bullets: [
+          'アプリバージョン・ライセンス確認',
+          '未保存下書きの自動保存確認',
+          '誤操作によるタブクローズ防止',
+          '次回起動時の状態完全復元'
+        ]
+      });
+
+      // 最下部フッター情報
+      ctx.fillStyle = '#475569';
+      ctx.font = '500 12px sans-serif';
+      ctx.fillText('CrossPost Web Studio • Bluesky & Threads Multi-Platform Publisher • System Architecture Infographic', 560, 1040);
+    }
+
+    // 上部カード用引き出し線＆カード描画
+    function drawCallout(cfg) {
+      const cardMidX = cfg.cardX + cfg.cardW / 2;
+      const cardBottomY = cfg.cardY + cfg.cardH;
+
+      // 引き出し線の描画: pin (cfg.pinX, cfg.pinY) から上へ直角に折れ曲がって cardBottomY へ
+      ctx.save();
+      ctx.strokeStyle = cfg.borderColor;
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([]);
+      
+      ctx.beginPath();
+      ctx.moveTo(cfg.pinX, cfg.pinY);
+      // ピンから上に20px垂直に伸び、次にカード底面中央のXへ水平に走り、カード底面へ上る
+      const elbowY = cfg.pinY - 25;
+      ctx.lineTo(cfg.pinX, elbowY);
+      ctx.lineTo(cardMidX, elbowY);
+      ctx.lineTo(cardMidX, cardBottomY);
+      ctx.stroke();
+
+      // ピンの発光ドット
+      ctx.fillStyle = cfg.borderColor;
+      ctx.shadowColor = cfg.borderColor;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(cfg.pinX, cfg.pinY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // カード本体描画
+      drawCardBox(cfg);
+    }
+
+    // 左側カード用引き出し線
+    function drawLeftCallout(cfg) {
+      const cardRightX = cfg.cardX + cfg.cardW;
+      const cardMidY = cfg.cardY + cfg.cardH / 2;
+
+      ctx.save();
+      ctx.strokeStyle = cfg.borderColor;
+      ctx.lineWidth = 1.8;
+
+      ctx.beginPath();
+      ctx.moveTo(cfg.pinX, cfg.pinY);
+      ctx.lineTo(cfg.pinX - 30, cfg.pinY);
+      ctx.lineTo(cfg.pinX - 30, cardMidY);
+      ctx.lineTo(cardRightX, cardMidY);
+      ctx.stroke();
+
+      // ピン
+      ctx.fillStyle = cfg.borderColor;
+      ctx.shadowColor = cfg.borderColor;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(cfg.pinX, cfg.pinY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      drawCardBox(cfg);
+    }
+
+    // 右側カード用引き出し線
+    function drawRightCallout(cfg) {
+      const cardLeftX = cfg.cardX;
+      const cardMidY = cfg.cardY + cfg.cardH / 2;
+
+      ctx.save();
+      ctx.strokeStyle = cfg.borderColor;
+      ctx.lineWidth = 1.8;
+
+      ctx.beginPath();
+      ctx.moveTo(cfg.pinX, cfg.pinY);
+      ctx.lineTo(cfg.pinX + 30, cfg.pinY);
+      ctx.lineTo(cfg.pinX + 30, cardMidY);
+      ctx.lineTo(cardLeftX, cardMidY);
+      ctx.stroke();
+
+      // ピン
+      ctx.fillStyle = cfg.borderColor;
+      ctx.shadowColor = cfg.borderColor;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(cfg.pinX, cfg.pinY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      drawCardBox(cfg);
+    }
+
+    // カードボックスの共通描画
+    function drawCardBox(cfg) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+      ctx.shadowBlur = 14;
+      ctx.shadowOffsetY = 6;
+
+      // カード背景
+      ctx.fillStyle = '#0f172a';
+      roundRect(ctx, cfg.cardX, cfg.cardY, cfg.cardW, cfg.cardH, 8, true, false);
+      ctx.restore();
+
+      // カード枠線
+      ctx.strokeStyle = cfg.borderColor;
+      ctx.lineWidth = 1.2;
+      roundRect(ctx, cfg.cardX, cfg.cardY, cfg.cardW, cfg.cardH, 8, false, true);
+
+      // タイトル
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12.5px sans-serif';
+      ctx.fillText(cfg.title, cfg.cardX + 10, cfg.cardY + 22);
+
+      // バッジ
+      if (cfg.badge) {
+        ctx.font = 'bold 9px sans-serif';
+        const badgeW = ctx.measureText(cfg.badge).width + 12;
+        ctx.fillStyle = cfg.badgeColor || '#0284c7';
+        roundRect(ctx, cfg.cardX + cfg.cardW - badgeW - 8, cfg.cardY + 10, badgeW, 16, 8, true, false);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(cfg.badge, cfg.cardX + cfg.cardW - badgeW - 2, cfg.cardY + 21);
+      }
+
+      // 箇条書き項目
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10.5px sans-serif';
+      let bulletY = cfg.cardY + 42;
+      cfg.bullets.forEach((b) => {
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText('•', cfg.cardX + 10, bulletY);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillText(b, cfg.cardX + 20, bulletY);
+        bulletY += 18;
+      });
+    }
+
+    // 角丸矩形描画ヘルパー
+    function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      if (fill) ctx.fill();
+      if (stroke) ctx.stroke();
+    }
+
+    function clipRoundRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.clip();
+    }
+
+    // フォールバック用の詳細描画
+    function drawFallbackScreenshot(ctx, x, y, w, h) {
+      ctx.fillStyle = '#090d16';
+      ctx.fillRect(x, y, w, h);
+
+      // ヘッダー
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(x, y, w, 36);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText('CrossPost Web Studio', x + 16, y + 23);
+
+      ctx.fillStyle = '#064e3b';
+      roundRect(ctx, x + 160, y + 8, 90, 20, 10, true, false);
+      ctx.fillStyle = '#34d399';
+      ctx.font = 'bold 9.5px sans-serif';
+      ctx.fillText('● LIVE MODE', x + 172, y + 22);
+
+      // 右側ボタン群のモック
+      const btnNames = ['📊 分析・データ', '📘 使い方', '📅 予約カレンダー', '📜 履歴', '⚙️ 設定', '📁 サーバー登録情報'];
+      let bx = x + 380;
+      btnNames.forEach(name => {
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1;
+        const bw = ctx.measureText(name).width + 16;
+        roundRect(ctx, bx, y + 8, bw, 20, 4, true, true);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '9.5px sans-serif';
+        ctx.fillText(name, bx + 8, y + 22);
+        bx += bw + 8;
+      });
+
+      // エディタ本文
+      ctx.fillStyle = '#030712';
+      ctx.strokeStyle = '#1e293b';
+      roundRect(ctx, x + 16, y + 50, w * 0.48, h - 110, 8, true, true);
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '11px sans-serif';
+      ctx.fillText('☆自動投稿アプリのテスト投稿です。', x + 28, y + 80);
+      ctx.fillText('【Bluesky & Threads 同時投稿機能のお知らせ】', x + 28, y + 102);
+
+      // プレビュー
+      ctx.fillStyle = '#030712';
+      ctx.strokeStyle = '#1e293b';
+      roundRect(ctx, x + w * 0.51, y + 50, w * 0.47, h - 66, 8, true, true);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('ツリー連結ビジュアライザー ＆ リアルタイムプレビュー', x + w * 0.51 + 16, y + 76);
+    }
+
+    // ==================== PNGダウンロード処理 ====================
+    document.getElementById('downloadPngBtn').addEventListener('click', () => {
+      // Canvasの内容をPNGデータURLに変換
+      const pngUrl = canvas.toDataURL('image/png', 1.0);
+      
+      // ダウンロードリンクを生成して発火
+      const downloadLink = document.createElement('a');
+      downloadLink.download = 'CrossPost_システム機能図_画面遷移図.png';
+      downloadLink.href = pngUrl;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    });
+  </script>
+</body>
+</html>

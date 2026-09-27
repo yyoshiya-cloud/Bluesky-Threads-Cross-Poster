@@ -77,7 +77,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   onOpenSettings,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'features' | 'workflow' | 'faq' | 'tips'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'diagram' | 'features' | 'workflow' | 'faq' | 'tips'>('overview');
   const [expandedFeatureId, setExpandedFeatureId] = useState<string | null>('feature-crosspost');
 
   if (!isOpen) return null;
@@ -713,6 +713,21 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
 
             <button
               type="button"
+              onClick={() => setActiveTab('diagram')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'diagram'
+                  ? 'btn-accent text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <span>🗺️ 機能・画面遷移図</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                図解
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveTab('workflow')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'workflow'
@@ -962,6 +977,120 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: 機能・画面遷移図（インフォグラフィック） */}
+              {activeTab === 'diagram' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                      <div>
+                        <h3 className="text-base font-bold text-white flex items-center gap-2">
+                          🗺️ アプリ機能構成 ＆ 画面遷移図（日本語版）
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                            完全日本語・フルHDベクター
+                          </span>
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-1">
+                          メイン投稿エディタ画面を中心に、各機能モーダルへの遷移・連携フローをすべて日本語で可視化したシステム図です。
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <a
+                          href="/infographic_viewer.html"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>全画面表示 ＆ PNG保存</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // SVGをCanvas経由でPNGに変換してダウンロード
+                            const svgImg = new Image();
+                            svgImg.onload = () => {
+                              const canvas = document.createElement('canvas');
+                              canvas.width = 1920;
+                              canvas.height = 1080;
+                              const ctx = canvas.getContext('2d');
+                              if (ctx) {
+                                ctx.drawImage(svgImg, 0, 0, 1920, 1080);
+                                const pngUrl = canvas.toDataURL('image/png', 1.0);
+                                const a = document.createElement('a');
+                                a.download = 'CrossPost_システム機能図_画面遷移図.png';
+                                a.href = pngUrl;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                              }
+                            };
+                            svgImg.src = '/crosspost_system_infographic.svg';
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow cursor-pointer"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>💾 PNGで保存</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* インフォグラフィック図（SVGプレビュー） */}
+                    <div className="relative group rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-2xl">
+                      <img
+                        src="/crosspost_system_infographic.svg"
+                        alt="CrossPost Web Studio 機能図・画面遷移図"
+                        className="w-full h-auto object-contain cursor-zoom-in hover:brightness-105 transition duration-200"
+                        onClick={() => window.open('/infographic_viewer.html', '_blank')}
+                        title="クリックで高解像度ビューアーを開く"
+                      />
+                      <div className="absolute bottom-3 right-3 pointer-events-none opacity-0 group-hover:opacity-100 transition duration-200 bg-slate-950/80 backdrop-blur-xs px-2.5 py-1 rounded-md text-[11px] text-slate-300 border border-slate-700">
+                        🔍 クリックして全画面で拡大
+                      </div>
+                    </div>
+
+                    {/* 図解の日本語ガイド一覧 */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 text-xs">
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                        <span className="font-bold text-sky-400 flex items-center gap-1.5">
+                          📱 メイン投稿エディタ画面（中央）
+                        </span>
+                        <p className="text-slate-400 leading-relaxed text-[11px]">
+                          左ペインの投稿本文・AIアシスト・ハッシュタグ候補・Threadsトピックタグ、右ペインのリアルタイムプレビュー（Bluesky / Threads）が常時連動。文字数上限に応じた自動ツリー分割をリアルタイムにシミュレートします。
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                        <span className="font-bold text-sky-400 flex items-center gap-1.5">
+                          🔑 動作モード制御（上部）
+                        </span>
+                        <p className="text-slate-400 leading-relaxed text-[11px]">
+                          ヘッダーの「MODE」バッジをクリックするとモード切替ダイアログが開き、DEMOモード（テスト投稿）とLIVEモード（本番投稿）を安全に切り替えることができます。
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                        <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                          📁 サーバー登録情報 ＆ API設定（左側）
+                        </span>
+                        <p className="text-slate-400 leading-relaxed text-[11px]">
+                          /data/account_vault.json によるアカウント永続化、他端末移行用の暗号化ダウンロード（未連携時非活性ガード搭載）、トークン有効期限の自動カウントダウンおよび更新を行います。
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                        <span className="font-bold text-purple-400 flex items-center gap-1.5">
+                          📊 予約・分析・履歴管理（右側）
+                        </span>
+                        <p className="text-slate-400 leading-relaxed text-[11px]">
+                          日時指定予約カレンダー（月間/週間）、過去ポストの検索・ワンクリック再投稿・スレッド返信先指定、プラットフォーム別比率の統計グラフや完全JSONバックアップ書き出し/マージ復元を提供します。
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
