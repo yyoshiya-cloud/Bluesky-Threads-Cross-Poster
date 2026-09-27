@@ -267,25 +267,25 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
       />
 
       {/* ヘッダーエリア */}
-      <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/90 shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shrink-0 shadow-xs">
+      <div className="px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-950/80 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 shadow-sm">
             <Database className="w-5 h-5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 id="server-vault-drawer-title" className="text-base font-bold text-white tracking-tight">
+              <h2 id="server-vault-drawer-title" className="text-base sm:text-lg font-bold text-white tracking-tight">
                 サーバー登録情報
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 LIVE MODE
               </span>
-              <span className="text-[11px] text-slate-400 hidden sm:inline-block font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 hidden sm:inline-block font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
                 /data/account_vault.json
               </span>
             </div>
-            <p className="text-xs text-slate-400 truncate mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5 truncate sm:whitespace-normal">
               クラウドディスクに安全に永続化されている認証情報（リアルタイムプレビュー領域で表示）
             </p>
           </div>
@@ -296,7 +296,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
             type="button"
             onClick={fetchServerVault}
             disabled={isLoading}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition cursor-pointer disabled:opacity-40"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition cursor-pointer disabled:opacity-40 flex items-center justify-center"
             title="サーバー保管情報を再取得"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-400' : ''}`} />
@@ -304,7 +304,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition cursor-pointer flex items-center justify-center shrink-0"
             aria-label="閉じる"
             title="閉じる (Esc)"
           >

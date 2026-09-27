@@ -375,24 +375,6 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* LIVEモード限定: サーバー登録情報一覧ボタン */}
-        {!isDemoMode && (onOpenServerVault || onToggleServerVault) && (
-          <button
-            id="header-server-vault-button"
-            type="button"
-            onClick={onToggleServerVault || onOpenServerVault}
-            className={`relative p-2 sm:px-3 sm:py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-xs ${
-              isServerVaultOpen
-                ? 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-900/30'
-                : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 border-emerald-500/40 hover:border-emerald-500/60'
-            }`}
-            title="LIVEモードでサーバー（/data/account_vault.json）に登録されているBluesky・Threadsのアカウント情報を一覧で確認"
-          >
-            <Database className="w-4 h-4 text-emerald-400" />
-            <span className="hidden sm:inline">サーバー登録情報</span>
-          </button>
-        )}
-
         {/* 分析・データボタン */}
         {onOpenAnalytics && (
           <button
@@ -478,21 +460,25 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* アプリ終了ボタン */}
-        {onOpenQuitConfirm && (
+        {/* LIVEモード限定: サーバー登録情報一覧ボタン（設定の右に配置） */}
+        {!isDemoMode && (onOpenServerVault || onToggleServerVault) && (
           <button
-            id="header-quit-button"
+            id="header-server-vault-button"
             type="button"
-            onClick={onOpenQuitConfirm}
-            className="bg-slate-900 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-800 hover:border-rose-900/60 p-2 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center gap-1.5 text-xs font-medium cursor-pointer shadow-sm"
-            title="アプリケーションを終了 (Ctrl+Q / Cmd+Q)"
+            onClick={onToggleServerVault || onOpenServerVault}
+            className={`relative p-2 sm:px-3 sm:py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-xs ${
+              isServerVaultOpen
+                ? 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-900/30'
+                : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 border-emerald-500/40 hover:border-emerald-500/60'
+            }`}
+            title="LIVEモードでサーバー（/data/account_vault.json）に登録されているBluesky・Threadsのアカウント情報を一覧で確認"
           >
-            <Power className="w-4 h-4 text-rose-400/80" />
-            <span className="hidden lg:inline">終了</span>
+            <Database className="w-4 h-4 text-emerald-400" />
+            <span className="hidden sm:inline">サーバー登録情報</span>
           </button>
         )}
 
-        {/* 終了ボタンの右: アプリ説明ウインド表示ボタン */}
+        {/* アプリ説明ウインド表示ボタン（終了ボタンと入れ替え） */}
         {onOpenAboutApp && (
           <button
             id="header-about-app-button"
@@ -503,6 +489,20 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Info className="w-4 h-4 text-sky-400" />
             <span className="hidden lg:inline">アプリ情報</span>
+          </button>
+        )}
+
+        {/* アプリ終了ボタン（アプリ情報ボタンと入れ替え） */}
+        {onOpenQuitConfirm && (
+          <button
+            id="header-quit-button"
+            type="button"
+            onClick={onOpenQuitConfirm}
+            className="bg-slate-900 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-800 hover:border-rose-900/60 p-2 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center gap-1.5 text-xs font-medium cursor-pointer shadow-sm"
+            title="アプリケーションを終了 (Ctrl+Q / Cmd+Q)"
+          >
+            <Power className="w-4 h-4 text-rose-400/80" />
+            <span className="hidden lg:inline">終了</span>
           </button>
         )}
       </div>

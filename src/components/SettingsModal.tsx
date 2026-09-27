@@ -464,22 +464,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       }`}
     >
       {/* モーダルヘッダー */}
-      <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 border-b border-slate-800 bg-slate-950/90 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-accent-subtle text-accent-light border border-accent">
+      <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-950/80 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-accent-subtle text-accent-light border border-accent shadow-sm flex items-center justify-center shrink-0">
               <Settings className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                <span>設定メニュー</span>
-                <span className="text-xs font-normal text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700/60 hidden sm:inline">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-slate-100 tracking-tight">
+                  設定メニュー
+                </h2>
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700/60 hidden sm:inline">
                   Bluesky & Threads
                 </span>
-              </h2>
-              <p className="text-xs text-slate-400">リアルタイムプレビュー領域で認証・外観・アカウントを管理</p>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5 truncate sm:whitespace-normal">リアルタイムプレビュー領域で認証・外観・アカウントを管理</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {/* サーバー登録情報・移行（ダウンロード/アップロード）ボタン */}
             {onOpenServerVault && (
               <button
@@ -526,11 +528,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               id="close-settings-modal-button"
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-xs"
-              title="設定メニューを閉じてリアルタイムプレビューに戻る"
+              className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition cursor-pointer flex items-center justify-center shrink-0"
+              title="閉じる (Esc)"
+              aria-label="閉じる"
             >
-              <span>プレビューへ戻る</span>
-              <CloseIcon className="w-3.5 h-3.5" />
+              <CloseIcon className="w-5 h-5" />
             </button>
           </div>
         </div>

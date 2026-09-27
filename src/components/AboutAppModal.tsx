@@ -31,7 +31,7 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
   return (
     <div
       id="about-app-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -39,17 +39,17 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="about-modal-title"
-        className="relative w-full max-w-2xl bg-[#0D121F] border border-slate-700/80 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden animate-in zoom-in-95 duration-150 text-slate-200"
+        className="relative w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden animate-in zoom-in-95 duration-150 text-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 上部グラデーションデコレーション */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0085ff] via-purple-500 to-pink-500 opacity-90" />
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-accent via-sky-500 to-purple-500 opacity-90" />
 
         {/* ヘッダーエリア (アプリアイコン・タイトル・バージョン・最終更新日) */}
-        <div className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/60">
+        <div className="px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-950/80 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             {/* 画面左上と同一のアイコン */}
-            <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-700/80 bg-slate-900 flex items-center justify-center shrink-0 shadow-md">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-slate-700/80 bg-slate-900 flex items-center justify-center shrink-0 shadow-md">
               <img
                 src="/favicon.svg"
                 alt="CrossPost Icon"
@@ -59,21 +59,21 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 id="about-modal-title" className="text-base font-bold text-white tracking-tight">
+                <h2 id="about-modal-title" className="text-base sm:text-lg font-bold text-white tracking-tight">
                   {APP_NAME}
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30">
                   Version {APP_VERSION}
                 </span>
                 <span
-                  className="text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-700/60"
+                  className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-700/60"
                   title="Publish/デプロイまたはGitコミットにより自動更新されます"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   最終更新日: {formatAppBuildDate()}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 truncate mt-0.5">
+              <p className="text-xs text-slate-400 mt-0.5 truncate sm:whitespace-normal">
                 Bluesky & Threads 同時・分割配信マルチプラットフォームスタジオ
               </p>
             </div>
@@ -81,10 +81,11 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer shrink-0"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition cursor-pointer flex items-center justify-center shrink-0"
             title="閉じる (Esc)"
+            aria-label="閉じる"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 

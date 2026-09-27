@@ -25,6 +25,8 @@ import {
   BarChart3,
   MessageSquare,
   Reply,
+  Network,
+  Database,
 } from 'lucide-react';
 
 interface UserGuideModalProps {
@@ -126,6 +128,21 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
       tips: 'プレビューを見ながら改行位置やスレッド分割、画像カルーセルの配置を微調整できるため、投稿先ごとの最適なレイアウトで発信できます。',
     },
     {
+      id: 'feature-visualizer',
+      title: '🎚️ ツリー連結ビジュアライザー & ワンクリック折りたたみ機能',
+      category: 'core',
+      icon: Network,
+      summary: '長文や複数画像でスレッド（ツリー）分割された際、各ポストの連結度合いを0%〜100%まで自在に可視化・調整。ポスト個別精査・密着ツリー表示や、ワンクリック折りたたみ・自動記憶に対応します。',
+      details: [
+        '【スレッド分割時の自動出現】長文や画像複数添付によって投稿が2件以上に分割された際、プレビュー上部に専用のコントローラーが展開されます。',
+        '【3段階の連結表示モード】①「分離モード (0%〜25%)」: 各ポストを独立したカード枠で表示し、1投稿ごとの独立した見た目や文字数収まりを個別に精査可能。②「標準モード (26%〜71%)」: 公式アプリに準拠したバランスの良い返信ライン表示。③「密着モード (72%〜100%)」: ポスト間の余白をギュッと密着させ、スカイブルーやパープルの光彩ネオンラインを点灯。さらに「#1 ➔ #2 連結点（何文字目で分割されたか）」のジャンクションノードを表示。',
+        '【クイックプリセット切り替え】「分離 (0%)」「標準 (50%)」「密着 (100%)」の3つのワンタップボタンで瞬時に切り替え可能。',
+        '【分割ポスト・ナビゲーションインスペクター】「🦋 Bluesky: #1 (300字), #2 (240字)」「🌀 Threads: #1 (500字)」などの分割ボタンをクリックすると、プレビュー内の該当ポストへ瞬時にフォーカス・ハイライトされ、長文のどの部分がどのスレッドに割り振られているかが一目で分かります。',
+        '【ワンクリック折りたたみ・展開】ヘッダーバーまたは「折りたたむ / 展開」ボタンをクリックしてコンパクトに1行化・再展開が可能。折りたたみ時も現在の連結度・モード・各SNSの分割件数がスマートに表示され、開閉状態はブラウザ（localStorage）に自動記憶されます。',
+      ],
+      tips: 'スレッド全体の連続した読みやすさをチェックしたい時は「密着 (100%)」、1投稿ごとの見栄えや文字数制限の余裕を念入りに確認したい時は「分離 (0%)」が便利です。不要な時はヘッダーをクリックして折りたためばプレビュー画面を広く使えます。',
+    },
+    {
       id: 'feature-tabs',
       title: '📑 プラットフォーム別個別タブ編集（共通 / Bluesky専用 / Threads専用）',
       category: 'editing',
@@ -214,16 +231,16 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
     },
     {
       id: 'feature-snippets',
-      title: '📋 定型文・スニペット管理 & 例文テンプレート挿入',
+      title: '📋 定型文・スニペット管理 & 例文ドロップダウン（全文表示・文字数タグ付き）',
       category: 'editing',
       icon: FileText,
-      summary: 'よく使う挨拶文、署名、リンク集、定型ハッシュタグをスニペットとしてストックし、ワンクリックで本文に挿入できます。',
+      summary: 'よく使う挨拶文、署名、リンク集をスニペットとしてストック可能。さらに多種多様な例文（全7件）を文字切り捨てなしの完全表示でワンクリック挿入できます。',
       details: [
-        '「📋 定型文」ボタンからモーダルを開き、挨拶・告知・リンク集などのテンプレートを即座に本文へ挿入。',
-        '独自の定型文をカテゴリ別（日常・告知・ブログ・技術など）に新規作成・編集・削除可能。',
-        'エディタ右上の「📝 例文」ドロップダウンからは、長文コラムや任意分割テストなど多種多様なサンプル文章をワンクリックで読み込み可能。',
+        '【定型文モーダル】「📋 定型文」ボタンからモーダルを開き、挨拶・告知・リンク集などのテンプレートを即座に本文へ挿入。独自の定型文をカテゴリ別（日常・告知・ブログ・技術など）に新規作成・編集・削除可能。',
+        '【例文ドロップダウン（完全表示）】エディタ右上の「✨ 例文」ボタンから全7件のサンプル文章を展開可能。従来の文字切り捨て（...）を完全撤廃し、タイトル、カッコ内の用途説明、文字数目安バッジ、カテゴリタグ（総合紹介、任意分割、長文スレッド等）、要約プレビューを省略なく完全に表示。',
+        '【スムーズな操作性】例文メニューは右上の閉じる（✕）ボタンのほか、外側クリックやEscキーでも瞬時に閉じられます。',
       ],
-      tips: '署名や固定リンク、告知定型文を登録しておくと、日々の投稿作成時間を大幅に短縮できます。',
+      tips: '長文分割や任意区切り（---）の挙動をすぐ試したい時は、「✨ 例文」から「任意区切りテスト」や「長文コラム」を読み込むとプレビューのシミュレーションが一発で確認できます。',
     },
     {
       id: 'feature-context-menu',
@@ -335,9 +352,28 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
         '選択したテーマはブラウザに自動保存されます。',
       ],
     },
+    {
+      id: 'feature-server-vault',
+      title: '🗄️ サーバー登録情報一覧 & アカウント復元（LIVEモード限定）',
+      category: 'account',
+      icon: Database,
+      summary: 'ヘッダー「設定」の右隣に新設。サーバー上の安全な保管庫（/data/account_vault.json）に登録された連携アカウント情報をいつでもワンクリックで一覧確認・再取得できます。',
+      details: [
+        '【設定の右隣から即座にアクセス】LIVEモード時、ヘッダー右上の「設定」の右隣にある「サーバー登録情報」ボタンから即座に開閉可能。',
+        '【登録アカウントの透明な確認】サーバーに保存されているBluesky（ハンドル名・セッション情報）およびThreads（ユーザー名・アクセストークン有効期限）の登録状態を一覧で可視化。',
+        '【端末変更・キャッシュ消去時の安心復元】ブラウザのシークレットモードやキャッシュクリア後でも、サーバー登録情報を元にワンクリックで即座に連携状態を復元できます。',
+      ],
+      tips: 'ヘッダーの設定ボタンの右隣にある「サーバー登録情報」ボタンをクリックするだけで、現在サーバーに記憶されているアカウント情報を素早く確認できます。',
+    },
   ];
 
   const overviewCards: OverviewCard[] = [
+    {
+      id: 'ov-visualizer',
+      icon: Network,
+      title: '🎚️ ツリー連結ビジュアライザー',
+      description: 'スレッド分割時に出現。スライダー（0%〜100%）で独立カード個別確認〜光彩密着ツリーまで連結度を自在に調整。ワンクリック折りたたみにも対応。',
+    },
     {
       id: 'ov-reply',
       icon: MessageSquare,
@@ -349,6 +385,12 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
       icon: Sparkles,
       title: '✨ AIアシスト & トーン自動調整',
       description: '自然なスレッド分割、Bluesky・Threads別のトーン自動調整、誤字脱字・シャドウバン規約リスク点検を搭載。一時的な混雑時も自動再試行＆代替モデルで安定稼働します。',
+    },
+    {
+      id: 'ov-samples',
+      icon: FileText,
+      title: '📋 例文挿入（全文表示 & タグ付き）',
+      description: '文字切り捨てを完全撤廃。全7件のサンプル文章を文字数バッジや用途タグ、要約プレビューと共に完全に確認してワンクリックで読み込めます。',
     },
     {
       id: 'ov-tabs',
@@ -369,22 +411,10 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
       description: '月間グリッドや週間タイムライン（横スクロール/7列）で配信予定を一括可視化。新規予約の作成や本文・日時・区分の変更、エディタ復元、即時実行を直接操作できます。',
     },
     {
-      id: 'ov-images',
-      icon: ImageIcon,
-      title: '🖼️ 画像・動画添付 & 直感ドラッグ並び替え',
-      description: '最大20件の画像・動画（MP4等）を添付可能。ドラッグ＆ドロップでの直感的な並び替えや全画面拡大プレビューに対応。',
-    },
-    {
-      id: 'ov-splitter',
-      icon: Scissors,
-      title: '✂️ 任意区切り (---) & 自動スレッド分割',
-      description: '文章中に --- を挟むだけで好きな位置でスレッドを分割。文字数制限を超えても自然な文末で自動的にツリー（スレッド）化します。',
-    },
-    {
-      id: 'ov-topics',
-      icon: Tag,
-      title: '🌀 Threadsトピック & ハッシュタグ提案',
-      description: 'Threadsの全分割投稿に公式トピックタグを一括適用。AI・キーワード解析によるタグ提案やオリジナルタグの保存も可能。',
+      id: 'ov-server-vault',
+      icon: Database,
+      title: '🗄️ サーバー登録情報（設定の右）',
+      description: 'ヘッダー「設定」の右隣に新設。サーバー保管庫（/data/account_vault.json）に保持された連携アカウント情報を安全に一覧確認・復元可能。',
     },
     {
       id: 'ov-preview',
@@ -418,6 +448,21 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   ];
 
   const faqItems: FaqItem[] = [
+    {
+      id: 'faq-visualizer',
+      question: 'スレッド分割時に表示される「ツリー連結ビジュアライザー」とは何ですか？折りたためますか？',
+      answer: '長文や複数画像によって投稿が2件以上のスレッドに自動分割された際、プレビュー上部に自動出現する可視化・調整バーです。スライダーを動かすことで「分離（0%: 各ポストを独立カードで個別確認）」「標準（50%）」「密着（100%: 光彩ラインと分割点ジャンクションで連続性を確認）」を自在に切り替えられます。また、ヘッダーバーまたは右端の「折りたたむ」ボタンをクリックするとワンタッチでコンパクトに折りたため、状態はブラウザに自動記憶されます。',
+    },
+    {
+      id: 'faq-samples',
+      question: '「例文」ボタンのドロップダウンにはどんな文章が入っていますか？',
+      answer: 'アプリ紹介・機能紹介、任意区切りテスト（---）、絵文字たっぷり開発ログ（約400字・Bluesky分割/Threads1投稿の境界テスト）、リンク＆@メンション自動Facet化、長文コラム（約700字・自動スレッド分割テスト）、ニュース発表、短文Tipsなど全7件が用意されています。タイトルや説明文、文字数目安タグがすべて完全表示されており、ワンクリックで本文へ反映できます。',
+    },
+    {
+      id: 'faq-server-vault',
+      question: 'ヘッダーの「サーバー登録情報」ボタン（設定の右）は何ですか？',
+      answer: 'LIVE（本番）モード時に利用できる機能です。サーバー（/data/account_vault.json）に安全に保存されているBlueskyおよびThreadsの連携アカウント情報を一覧で確認できます。ブラウザのキャッシュを削除したり別の端末から開いた場合でも、サーバーからワンクリックでアカウントを再取得してログイン状態を復元できます。',
+    },
     {
       id: 'faq-reply',
       question: '既存の投稿にリプライ（返信・ツリー追記）して投稿するにはどうすればよいですか？',
@@ -605,25 +650,25 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   return (
     <div
       id="user-guide-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
     >
-      <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-slate-900 border border-slate-700/80 w-full max-w-4xl rounded-2xl shadow-2xl shadow-black/80 overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
         {/* ヘッダー */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-accent-subtle text-accent-light border border-accent flex items-center justify-center shadow-sm">
+        <div className="px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-accent-subtle text-accent-light border border-accent flex items-center justify-center shadow-sm shrink-0">
               <BookOpen className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-slate-100">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-slate-100 tracking-tight">
                   CrossPost Web Studio 使い方 & 機能ガイド
                 </h2>
-                <span className="badge-accent px-2 py-0.5 rounded-full text-[10px] font-bold">
+                <span className="badge-accent px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold">
                   最新版ドキュメント
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 mt-0.5 truncate sm:whitespace-normal">
                 実装されている全機能の詳細と、快適なSNSクロス投稿のためのステップガイド
               </p>
             </div>
@@ -632,7 +677,9 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition cursor-pointer flex items-center justify-center shrink-0"
+            title="閉じる (Esc)"
+            aria-label="閉じる"
           >
             <X className="w-5 h-5" />
           </button>
@@ -808,7 +855,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
         )}
 
         {/* コンテンツ本体 */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-300 text-xs sm:text-sm leading-relaxed">
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 text-slate-300 text-xs sm:text-sm">
           {/* 全体で検索結果0件の場合の表示 */}
           {isSearching && totalHits === 0 ? (
             <div className="py-16 text-center space-y-3">
@@ -1198,23 +1245,26 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
 
                   {/* 実用 TIPS・裏ワザ セクション */}
                   {filteredTips.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="text-xs font-bold text-accent-light uppercase tracking-wider px-1 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        実用 TIPS & 業務効率化テクニック{isSearching && ` (${filteredTips.length}件)`}
-                      </h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between px-1">
+                        <h3 className="text-xs font-bold text-accent-light uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          実用 TIPS & 業務効率化テクニック{isSearching && ` (${filteredTips.length}件)`}
+                        </h3>
+                        <span className="text-[11px] text-slate-400 font-mono">全{filteredTips.length}件</span>
+                      </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {filteredTips.map((tip) => (
                           <div
                             key={tip.id}
-                            className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5"
+                            className="p-2.5 sm:p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700/80 transition-colors flex flex-col justify-between"
                           >
-                            <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                              <span className="text-base">{tip.icon}</span>
-                              <span>{tip.title}</span>
+                            <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5 mb-1 leading-snug">
+                              <span className="text-sm shrink-0">{tip.icon}</span>
+                              <span className="truncate">{tip.title}</span>
                             </div>
-                            <p className="text-xs text-slate-400 leading-relaxed">
+                            <p className="text-[11px] sm:text-xs text-slate-400 leading-snug">
                               {tip.description}
                             </p>
                           </div>

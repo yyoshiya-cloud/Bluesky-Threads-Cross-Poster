@@ -18,6 +18,14 @@ import {
   Sliders,
   Play,
   Film,
+  GitCommit,
+  Link2,
+  Unlink,
+  Network,
+  Sparkles,
+  ArrowDownCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface ThreadPreviewProps {
@@ -101,6 +109,49 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
     } catch {}
   };
 
+  // ツリー形式（分割ポスト）の連結具合を可視化するスライダー値 (0%〜100%, デフォルト65%)
+  const [connectionDegree, setConnectionDegree] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('cross_poster_thread_connection_degree');
+      if (saved !== null) {
+        const num = Number(saved);
+        if (!isNaN(num) && num >= 0 && num <= 100) {
+          return num;
+        }
+      }
+    } catch {}
+    return 65;
+  });
+
+  const handleConnectionDegreeChange = (val: number) => {
+    setConnectionDegree(val);
+    try {
+      localStorage.setItem('cross_poster_thread_connection_degree', String(val));
+    } catch {}
+  };
+
+  // ツリー連結ビジュアライザーの折りたたみ状態
+  const [isVisualizerCollapsed, setIsVisualizerCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('cross_poster_thread_visualizer_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleVisualizerCollapse = () => {
+    setIsVisualizerCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('cross_poster_thread_visualizer_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // フォーカス中の分割ポストインデックス（タイムラインからクリックでハイライト）
+  const [focusedSplitIndex, setFocusedSplitIndex] = useState<number | null>(null);
+
   // プレビュー内の動画同時デコード負荷・フリーズ防止のためのアクティブ動画ID
   const [activePlayingVideoId, setActivePlayingVideoId] = useState<string | null>(null);
 
@@ -109,6 +160,40 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
   const blueskyDisplayName = blueskyHandle.split('.')[0] || 'Creator';
   const threadsUsername = credentials?.threadsUsername?.replace(/^@/, '') || 'creator';
   const cleanedThreadsTopic = threadsTopic?.trim().replace(/^#+/, '') || '';
+
+  // ツリー連結可視化の計算値
+  const isSeparated = connectionDegree <= 25;
+  const isStandard = connectionDegree > 25 && connectionDegree < 72;
+  const isSeamless = connectionDegree >= 72;
+  const connectorOpacity = Math.max(0.2, connectionDegree / 100);
+
+  // リプライ対象の検出とプレビュー表示制御
+  // - Threadsのリプライ投稿の場合はThreadsのみプレビューを表示（Blueskyは非表示）
+  // - Blueskyのリプライ投稿の場合はBlueskyのみプレビューを表示（Threadsは非表示）
+  // - リプライ投稿をキャンセルした場合は両方（選択されたプラットフォーム）表示
+  const hasBlueskyReply = Boolean(
+    replySettings?.blueskyResolved ||
+    (replySettings?.blueskyTargetUrl && replySettings.blueskyTargetUrl.trim().length > 0)
+  );
+  const hasThreadsReply = Boolean(
+    replySettings?.threadsResolved ||
+    (replySettings?.threadsTargetUrl && replySettings.threadsTargetUrl.trim().length > 0)
+  );
+
+  let effectiveShowBluesky = postToBluesky;
+  let effectiveShowThreads = postToThreads;
+
+  if (hasThreadsReply && !hasBlueskyReply) {
+    effectiveShowBluesky = false;
+    effectiveShowThreads = true;
+  } else if (hasBlueskyReply && !hasThreadsReply) {
+    effectiveShowBluesky = true;
+    effectiveShowThreads = false;
+  }
+
+  const hasSplitPosts =
+    (effectiveShowBluesky && blueskySplits.length > 1) ||
+    (effectiveShowThreads && threadsSplits.length > 1);
 
   // 本文中のリンク・メンション・ハッシュタグの強調表示
   const renderRichText = (rawText: string, isBluesky = false) => {
@@ -464,7 +549,7 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
             </div>
 
             {/* スレッド本体エリア */}
-            <div className="p-3 sm:p-4 divide-y divide-[#1e2a38]/60 min-w-0">
+            <div className={`p-3 sm:p-4 min-w-0 ${isSeparated && blueskySplits.length > 1 ? 'space-y-3' : 'divide-y divide-[#1e2a38]/60'}`}>
               {replySettings?.enabled && replySettings.blueskyResolved && (
                 <div className="mb-3 p-2.5 rounded-xl bg-[#0085ff]/10 border border-[#0085ff]/30 text-xs space-y-1">
                   <div className="flex items-center gap-1.5 text-[#0085ff] font-semibold text-[11px]">
@@ -488,14 +573,96 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                 blueskySplits.map((split, idx) => {
                   const isLast = idx === blueskySplits.length - 1;
                   const attachImgs = split.images ?? (split.hasImages ? images.slice(0, 4) : []);
+                  const isFocused = focusedSplitIndex === split.index;
 
+                  {/* カード分離表示モード（スライダー 0%〜25%） */}
+                  if (isSeparated && blueskySplits.length > 1) {
+                    return (
+                      <div
+                        key={idx}
+                        id={`bsky-split-card-${split.index}`}
+                        onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
+                        className={`relative group p-3.5 rounded-xl bg-[#0e1624] border transition-all duration-200 cursor-pointer ${
+                          isFocused
+                            ? 'border-[#0085ff] ring-2 ring-[#0085ff]/50 bg-[#0e192c] shadow-md shadow-[#0085ff]/10'
+                            : 'border-[#1e2a38] hover:border-[#0085ff]/50 shadow-xs'
+                        }`}
+                      >
+                        {/* 独立ポストヘッダー */}
+                        <div className="flex items-center justify-between text-[11px] pb-2 mb-2.5 border-b border-[#1e2a38]/80">
+                          <div className="flex items-center gap-1.5 font-semibold text-sky-400 font-mono">
+                            <GitCommit className="w-3.5 h-3.5 text-[#0085ff]" />
+                            <span>ポスト #{split.index} / {split.total}</span>
+                            {idx === 0 ? (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 font-sans">
+                                親ポスト
+                              </span>
+                            ) : (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-900 text-slate-300 border border-slate-700 font-sans">
+                                返信 #{split.index}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400">
+                            <span>{split.charCount}文字 / 300字</span>
+                            {attachImgs.length > 0 && (
+                              <>
+                                <span className="text-slate-600">·</span>
+                                <span>{attachImgs.length}メディア</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
+                          <div className="relative shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#0085ff] via-sky-500 to-cyan-300 flex items-center justify-center font-bold text-xs text-white shadow-xs">
+                              {blueskyDisplayName.slice(0, 1).toUpperCase()}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className="font-bold text-slate-100">{blueskyDisplayName}</span>
+                              <span className="text-slate-400 font-mono text-[11px]">@{blueskyHandle}</span>
+                            </div>
+                            {split.text ? (
+                              <p className={`mt-1.5 ${FONT_SIZE_CONFIG[fontSize].textClass} text-slate-100 whitespace-pre-wrap break-words [overflow-wrap:anywhere]`}>
+                                {renderRichText(split.text, true)}
+                              </p>
+                            ) : (
+                              <p className="mt-1 text-xs text-slate-400 italic">（画像のみの返信ポスト）</p>
+                            )}
+                            {attachImgs.length > 0 && (
+                              <div className="mt-2 w-full min-w-0">{renderBlueskyImageGrid(attachImgs)}</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  {/* 標準ツリー または シームレス密着モード */}
                   return (
-                    <div key={idx} className="relative group pt-3 first:pt-0 min-w-0">
+                    <div
+                      key={idx}
+                      id={`bsky-split-item-${split.index}`}
+                      onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
+                      className={`relative group transition-all duration-200 min-w-0 cursor-pointer ${
+                        isFocused ? 'bg-[#0085ff]/10 rounded-xl px-2.5 py-2 -mx-2.5 ring-1 ring-[#0085ff]/50' : ''
+                      } ${isSeamless && blueskySplits.length > 1 ? 'pt-1.5 pb-2' : 'pt-3 pb-3'} first:pt-0`}
+                    >
                       {/* スレッド接続ライン (Blueskyブルーの滑らかな垂直線) */}
                       {!isLast && (
                         <div
-                          className="absolute left-[19px] top-12 bottom-0 w-[2px] bg-gradient-to-b from-[#0085ff]/50 via-sky-800/40 to-[#0085ff]/20 z-0"
-                          style={{ minHeight: '36px' }}
+                          className={`absolute left-[19px] top-12 bottom-0 z-0 transition-all duration-200 ${
+                            isSeamless && blueskySplits.length > 1
+                              ? 'w-[3.5px] -ml-[0.75px] bg-gradient-to-b from-[#0085ff] via-cyan-400 to-[#0085ff] shadow-[0_0_10px_rgba(0,133,255,0.7)]'
+                              : 'w-[2px] bg-gradient-to-b from-[#0085ff]/70 via-sky-800/40 to-[#0085ff]/30'
+                          }`}
+                          style={{
+                            opacity: connectorOpacity,
+                            minHeight: isSeamless && blueskySplits.length > 1 ? '26px' : '38px',
+                          }}
                         />
                       )}
 
@@ -528,6 +695,11 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                               <span className="text-slate-400 text-[11px] sm:text-xs shrink-0 select-none">
                                 {idx === 0 ? '1分' : `返信 #${split.index}`}
                               </span>
+                              {blueskySplits.length > 1 && (
+                                <span className="text-[10px] text-sky-400/80 font-mono ml-1">
+                                  ({split.charCount}字)
+                                </span>
+                              )}
                             </div>
                             <button
                               type="button"
@@ -615,6 +787,22 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                           </div>
                         </div>
                       </div>
+
+                      {/* 連結度合い可視化: 次のポストとの結合ジャンクションノード */}
+                      {connectionDegree >= 35 && blueskySplits.length > 1 && !isLast && (
+                        <div className="relative pl-[36px] sm:pl-[44px] -mt-0.5 mb-2 z-10 pointer-events-none">
+                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono border backdrop-blur-xs transition-all ${
+                            isSeamless
+                              ? 'bg-[#0085ff]/20 border-[#0085ff]/70 text-sky-200 shadow-sm shadow-[#0085ff]/30 ring-1 ring-[#0085ff]/40'
+                              : 'bg-slate-900/95 border-slate-700/80 text-slate-300'
+                          }`}>
+                            <Link2 className={`w-3 h-3 text-[#0085ff] ${isSeamless ? 'animate-pulse' : ''}`} />
+                            <span className="font-semibold">#{split.index} ➔ #{split.index + 1} 連結点</span>
+                            <span className="text-slate-500">·</span>
+                            <span className="text-slate-300 font-sans">{split.charCount}字で分割</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -641,29 +829,76 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
               </span>
             </div>
 
-            <div className="space-y-0 relative bg-slate-950/70 rounded-xl border border-slate-800/80 p-2.5 sm:p-3 overflow-hidden">
+            <div className={`relative bg-slate-950/70 rounded-xl border border-slate-800/80 p-2.5 sm:p-3 overflow-hidden ${isSeparated && blueskySplits.length > 1 ? 'space-y-2.5' : 'space-y-0'}`}>
               {blueskySplits.length === 0 ? (
                 <div className="py-8 text-center text-slate-500 text-xs">
                   テキストを入力するとプレビューが表示されます
                 </div>
               ) : (
-                blueskySplits.map((split, idx) => (
-                  <div key={idx} className="relative flex items-start gap-2.5 py-2 border-b border-slate-800/40 last:border-b-0">
-                    <div className="w-7 h-7 rounded-full bg-[#0085ff] flex items-center justify-center text-white text-xs font-bold shrink-0">
-                      {blueskyDisplayName[0]?.toUpperCase() || 'B'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1 text-xs min-w-0">
-                        <span className="font-bold text-slate-100 truncate">{blueskyDisplayName}</span>
-                        <span className="text-slate-500 text-[10px] truncate">@{blueskyHandle}</span>
+                blueskySplits.map((split, idx) => {
+                  const isFocused = focusedSplitIndex === split.index;
+
+                  if (isSeparated && blueskySplits.length > 1) {
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
+                        className={`p-2.5 rounded-lg bg-slate-900 border transition cursor-pointer ${
+                          isFocused ? 'border-[#0085ff] ring-1 ring-[#0085ff]' : 'border-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[10px] font-mono text-sky-400 pb-1.5 mb-1.5 border-b border-slate-800">
+                          <span className="font-bold">ポスト #{split.index} / {split.total}</span>
+                          <span className="text-slate-400">{split.charCount}文字</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <div className="w-6 h-6 rounded-full bg-[#0085ff] flex items-center justify-center text-white text-xs font-bold shrink-0">
+                            {blueskyDisplayName[0]?.toUpperCase() || 'B'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="font-bold text-slate-100">{blueskyDisplayName}</span>
+                              <span className="text-slate-500 text-[10px]">@{blueskyHandle}</span>
+                            </div>
+                            <p className={`mt-0.5 ${FONT_SIZE_CONFIG[fontSize].textClass} text-slate-100 whitespace-pre-wrap break-words [overflow-wrap:anywhere]`}>
+                              {renderRichText(split.text, true)}
+                            </p>
+                            {split.images && renderBlueskyImageGrid(split.images)}
+                          </div>
+                        </div>
                       </div>
-                      <p className={`mt-0.5 ${FONT_SIZE_CONFIG[fontSize].textClass} text-slate-100 whitespace-pre-wrap break-words [overflow-wrap:anywhere]`}>
-                        {renderRichText(split.text, true)}
-                      </p>
-                      {split.images && renderBlueskyImageGrid(split.images)}
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
+                      className={`relative flex items-start gap-2.5 py-2 border-b border-slate-800/40 last:border-b-0 cursor-pointer ${
+                        isFocused ? 'bg-sky-500/10 rounded px-1' : ''
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-[#0085ff] flex items-center justify-center text-white text-xs font-bold shrink-0">
+                        {blueskyDisplayName[0]?.toUpperCase() || 'B'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 text-xs min-w-0">
+                          <span className="font-bold text-slate-100 truncate">{blueskyDisplayName}</span>
+                          <span className="text-slate-500 text-[10px] truncate">@{blueskyHandle}</span>
+                          {blueskySplits.length > 1 && (
+                            <span className="text-[10px] text-sky-400/80 font-mono ml-1">
+                              (#{split.index} · {split.charCount}字)
+                            </span>
+                          )}
+                        </div>
+                        <p className={`mt-0.5 ${FONT_SIZE_CONFIG[fontSize].textClass} text-slate-100 whitespace-pre-wrap break-words [overflow-wrap:anywhere]`}>
+                          {renderRichText(split.text, true)}
+                        </p>
+                        {split.images && renderBlueskyImageGrid(split.images)}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -741,7 +976,7 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
             </div>
 
             {/* スレッド本体エリア */}
-            <div className="p-3 sm:p-4 divide-y divide-neutral-800/60 min-w-0">
+            <div className={`p-3 sm:p-4 min-w-0 ${isSeparated && threadsSplits.length > 1 ? 'space-y-3' : 'divide-y divide-neutral-800/60'}`}>
               {replySettings?.enabled && replySettings.threadsResolved && (
                 <div className={`mb-3 p-2.5 rounded-xl border text-xs space-y-1 ${
                   replySettings.threadsResolved.isOwnerMatch
@@ -776,14 +1011,94 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                 threadsSplits.map((split, idx) => {
                   const isLast = idx === threadsSplits.length - 1;
                   const attachImgs = split.hasImages ? images : [];
+                  const isFocused = focusedSplitIndex === split.index;
 
+                  {/* カード分離表示モード（スライダー 0%〜25%） */}
+                  if (isSeparated && threadsSplits.length > 1) {
+                    return (
+                      <div
+                        key={idx}
+                        id={`threads-split-card-${split.index}`}
+                        onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
+                        className={`relative group p-3.5 rounded-xl bg-neutral-900/90 border transition-all duration-200 cursor-pointer ${
+                          isFocused
+                            ? 'border-purple-500 ring-2 ring-purple-500/50 bg-neutral-900 shadow-md shadow-purple-950/30'
+                            : 'border-neutral-800 hover:border-purple-500/50 shadow-xs'
+                        }`}
+                      >
+                        {/* 独立ポストヘッダー */}
+                        <div className="flex items-center justify-between text-[11px] pb-2 mb-2.5 border-b border-neutral-800">
+                          <div className="flex items-center gap-1.5 font-semibold text-purple-400 font-mono">
+                            <GitCommit className="w-3.5 h-3.5 text-purple-400" />
+                            <span>スレッド #{split.index} / {split.total}</span>
+                            {idx === 0 ? (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800 font-sans">
+                                親ポスト
+                              </span>
+                            ) : (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-neutral-950 text-neutral-300 border border-neutral-700 font-sans">
+                                返信 #{split.index}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] font-mono text-neutral-400">
+                            <span>{split.charCount}文字 / 500字</span>
+                            {attachImgs.length > 0 && (
+                              <>
+                                <span className="text-neutral-600">·</span>
+                                <span>{attachImgs.length}メディア</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
+                          <div className="relative shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-700 via-pink-600 to-amber-500 p-0.5 shadow-xs">
+                              <div className="w-full h-full rounded-full bg-black flex items-center justify-center font-bold text-xs text-white">
+                                {threadsUsername.slice(0, 1).toUpperCase()}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className="font-bold text-white">{threadsUsername}</span>
+                              <BadgeCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                            </div>
+                            {split.text ? (
+                              <p className={`mt-1.5 ${FONT_SIZE_CONFIG[fontSize].textClass} text-neutral-100 whitespace-pre-wrap break-words [overflow-wrap:anywhere]`}>
+                                {renderRichText(split.text, false)}
+                              </p>
+                            ) : null}
+                            {attachImgs.length > 0 && renderThreadsImageGrid(attachImgs)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  {/* 標準ツリー または シームレス密着モード */}
                   return (
-                    <div key={idx} className="relative group pt-3 first:pt-0 min-w-0">
-                      {/* Threads特有の垂直コネクター線 (ダークグレーの洗練された細線) */}
+                    <div
+                      key={idx}
+                      id={`threads-split-item-${split.index}`}
+                      onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
+                      className={`relative group transition-all duration-200 min-w-0 cursor-pointer ${
+                        isFocused ? 'bg-purple-950/20 rounded-xl px-2.5 py-2 -mx-2.5 ring-1 ring-purple-500/50' : ''
+                      } ${isSeamless && threadsSplits.length > 1 ? 'pt-1.5 pb-2' : 'pt-3 pb-3'} first:pt-0`}
+                    >
+                      {/* Threads特有の垂直コネクター線 */}
                       {!isLast && (
                         <div
-                          className="absolute left-[19px] top-12 bottom-0 w-[1.5px] bg-neutral-700 z-0"
-                          style={{ minHeight: '36px' }}
+                          className={`absolute left-[19px] top-12 bottom-0 z-0 transition-all duration-200 ${
+                            isSeamless && threadsSplits.length > 1
+                              ? 'w-[3px] -ml-[0.75px] bg-gradient-to-b from-purple-500 via-pink-400 to-purple-600 shadow-[0_0_10px_rgba(168,85,247,0.7)]'
+                              : 'w-[1.5px] bg-neutral-700'
+                          }`}
+                          style={{
+                            opacity: connectorOpacity,
+                            minHeight: isSeamless && threadsSplits.length > 1 ? '26px' : '38px',
+                          }}
                         />
                       )}
 
@@ -814,6 +1129,11 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                               <span className="text-neutral-400 text-[11px] sm:text-xs select-none shrink-0">
                                 {idx === 0 ? '2分' : `スレッド #${split.index}`}
                               </span>
+                              {threadsSplits.length > 1 && (
+                                <span className="text-[10px] text-purple-400/80 font-mono ml-1">
+                                  ({split.charCount}字)
+                                </span>
+                              )}
 
                               {/* 投稿ヘッダー内：Threads公式トピックタグ（インラインバッジ） */}
                               {cleanedThreadsTopic && (
@@ -896,6 +1216,22 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                           </div>
                         </div>
                       </div>
+
+                      {/* 連結度合い可視化: 次のポストとの結合ジャンクションノード */}
+                      {connectionDegree >= 35 && threadsSplits.length > 1 && !isLast && (
+                        <div className="relative pl-[36px] sm:pl-[44px] -mt-0.5 mb-2 z-10 pointer-events-none">
+                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono border backdrop-blur-xs transition-all ${
+                            isSeamless
+                              ? 'bg-purple-950/50 border-purple-500/70 text-purple-200 shadow-sm shadow-purple-950/40 ring-1 ring-purple-500/40'
+                              : 'bg-neutral-900/95 border-neutral-700/80 text-neutral-300'
+                          }`}>
+                            <Link2 className={`w-3 h-3 text-purple-400 ${isSeamless ? 'animate-pulse' : ''}`} />
+                            <span className="font-semibold">#{split.index} ➔ #{split.index + 1} 連結点</span>
+                            <span className="text-neutral-500">·</span>
+                            <span className="text-neutral-300 font-sans">{split.charCount}字で分割</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -933,60 +1269,102 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
               </div>
             </div>
 
-            <div className="space-y-0 relative bg-slate-950/70 rounded-xl border border-slate-800/80 p-2.5 sm:p-3 overflow-hidden">
+            <div className={`relative bg-slate-950/70 rounded-xl border border-slate-800/80 p-2.5 sm:p-3 overflow-hidden ${isSeparated && threadsSplits.length > 1 ? 'space-y-2.5' : 'space-y-0'}`}>
               {threadsSplits.length === 0 ? (
                 <div className="py-8 text-center text-slate-500 text-xs">
                   テキストを入力するとプレビューが表示されます
                 </div>
               ) : (
-                threadsSplits.map((split, idx) => (
-                  <div key={idx} className="relative flex items-start gap-2.5 py-2 border-b border-slate-800/40 last:border-b-0">
-                    <div className="relative shrink-0">
-                      <div className="w-7 h-7 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold">
-                        {threadsUsername[0]?.toUpperCase() || 'T'}
-                      </div>
-                      {threadsSplits.length > 1 && (
-                        <span className="absolute -bottom-1 -right-1 bg-neutral-900 text-purple-300 text-[8px] font-mono font-bold px-1 rounded-full border border-purple-600/40">
-                          #{split.index}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between text-xs min-w-0">
-                        <div className="flex items-center gap-1 min-w-0">
-                          <span className="font-bold text-slate-100 truncate">{threadsUsername}</span>
-                          <BadgeCheck className="w-3 h-3 text-purple-400 shrink-0" />
-                          {threadsSplits.length > 1 && (
-                            <span className="text-[10px] text-slate-500 font-mono ml-1 shrink-0">
-                              スレッド #{split.index}
-                            </span>
-                          )}
+                threadsSplits.map((split, idx) => {
+                  const isFocused = focusedSplitIndex === split.index;
+
+                  if (isSeparated && threadsSplits.length > 1) {
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
+                        className={`p-2.5 rounded-lg bg-neutral-900 border transition cursor-pointer ${
+                          isFocused ? 'border-purple-500 ring-1 ring-purple-500' : 'border-neutral-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[10px] font-mono text-purple-400 pb-1.5 mb-1.5 border-b border-neutral-800">
+                          <span className="font-bold">スレッド #{split.index} / {split.total}</span>
+                          <span className="text-neutral-400">{split.charCount}文字</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <div className="w-6 h-6 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                            {threadsUsername[0]?.toUpperCase() || 'T'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="font-bold text-slate-100">{threadsUsername}</span>
+                              <BadgeCheck className="w-3 h-3 text-purple-400 shrink-0" />
+                            </div>
+                            <p className={`mt-0.5 ${FONT_SIZE_CONFIG[fontSize].textClass} text-slate-100 whitespace-pre-wrap break-words [overflow-wrap:anywhere]`}>
+                              {renderRichText(split.text, false)}
+                            </p>
+                            {split.hasImages && renderThreadsImageGrid(images)}
+                          </div>
                         </div>
                       </div>
+                    );
+                  }
 
-                      {/* Threads専用トピックタグ表示 (標準スキン) */}
-                      {threadsTopic && threadsTopic.trim() && (
-                        <div className="mt-1 mb-1 flex items-center gap-1.5 min-w-0">
-                          <span
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-950/80 hover:bg-purple-900/60 text-purple-300 border border-purple-800/60 text-[10px] font-semibold transition cursor-pointer shadow-xs max-w-full"
-                            title={`Threadsトピックタグ: #${threadsTopic.trim().replace(/^#/, '')}`}
-                          >
-                            <span className="text-purple-400 font-bold shrink-0">#</span>
-                            <span className="truncate">{threadsTopic.trim().replace(/^#/, '')}</span>
-                            <span className="text-[8px] text-purple-400/80 ml-0.5 font-mono shrink-0">
-                              トピック
-                            </span>
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
+                      className={`relative flex items-start gap-2.5 py-2 border-b border-slate-800/40 last:border-b-0 cursor-pointer ${
+                        isFocused ? 'bg-purple-950/30 rounded px-1' : ''
+                      }`}
+                    >
+                      <div className="relative shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold">
+                          {threadsUsername[0]?.toUpperCase() || 'T'}
+                        </div>
+                        {threadsSplits.length > 1 && (
+                          <span className="absolute -bottom-1 -right-1 bg-neutral-900 text-purple-300 text-[8px] font-mono font-bold px-1 rounded-full border border-purple-600/40">
+                            #{split.index}
                           </span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between text-xs min-w-0">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <span className="font-bold text-slate-100 truncate">{threadsUsername}</span>
+                            <BadgeCheck className="w-3 h-3 text-purple-400 shrink-0" />
+                            {threadsSplits.length > 1 && (
+                              <span className="text-[10px] text-slate-500 font-mono ml-1 shrink-0">
+                                (#{split.index} · {split.charCount}字)
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      )}
 
-                      <p className={`mt-0.5 ${FONT_SIZE_CONFIG[fontSize].textClass} text-slate-100 whitespace-pre-wrap break-words [overflow-wrap:anywhere]`}>
-                        {renderRichText(split.text, false)}
-                      </p>
-                      {split.hasImages && renderThreadsImageGrid(images)}
+                        {/* Threads専用トピックタグ表示 (標準スキン) */}
+                        {threadsTopic && threadsTopic.trim() && (
+                          <div className="mt-1 mb-1 flex items-center gap-1.5 min-w-0">
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-950/80 hover:bg-purple-900/60 text-purple-300 border border-purple-800/60 text-[10px] font-semibold transition cursor-pointer shadow-xs max-w-full"
+                              title={`Threadsトピックタグ: #${threadsTopic.trim().replace(/^#/, '')}`}
+                            >
+                              <span className="text-purple-400 font-bold shrink-0">#</span>
+                              <span className="truncate">{threadsTopic.trim().replace(/^#/, '')}</span>
+                              <span className="text-[8px] text-purple-400/80 ml-0.5 font-mono shrink-0">
+                                トピック
+                              </span>
+                            </span>
+                          </div>
+                        )}
+
+                        <p className={`mt-0.5 ${FONT_SIZE_CONFIG[fontSize].textClass} text-slate-100 whitespace-pre-wrap break-words [overflow-wrap:anywhere]`}>
+                          {renderRichText(split.text, false)}
+                        </p>
+                        {split.hasImages && renderThreadsImageGrid(images)}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -994,30 +1372,6 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
       </div>
     );
   };
-
-  // リプライ対象の検出とプレビュー表示制御
-  // - Threadsのリプライ投稿の場合はThreadsのみプレビューを表示（Blueskyは非表示）
-  // - Blueskyのリプライ投稿の場合はBlueskyのみプレビューを表示（Threadsは非表示）
-  // - リプライ投稿をキャンセルした場合は両方（選択されたプラットフォーム）表示
-  const hasBlueskyReply = Boolean(
-    replySettings?.blueskyResolved ||
-    (replySettings?.blueskyTargetUrl && replySettings.blueskyTargetUrl.trim().length > 0)
-  );
-  const hasThreadsReply = Boolean(
-    replySettings?.threadsResolved ||
-    (replySettings?.threadsTargetUrl && replySettings.threadsTargetUrl.trim().length > 0)
-  );
-
-  let effectiveShowBluesky = postToBluesky;
-  let effectiveShowThreads = postToThreads;
-
-  if (hasThreadsReply && !hasBlueskyReply) {
-    effectiveShowBluesky = false;
-    effectiveShowThreads = true;
-  } else if (hasBlueskyReply && !hasThreadsReply) {
-    effectiveShowBluesky = true;
-    effectiveShowThreads = false;
-  }
 
   return (
     <div id="thread-preview-container" className="space-y-3 w-full min-w-0 flex-1 flex flex-col h-full">
@@ -1169,6 +1523,223 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
               </ul>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ツリー形式（分割ポスト）の連結具合を可視化・調整するスライダーパネル（折りたたみ可能） */}
+      {hasSplitPosts && (
+        <div
+          id="thread-connection-visualizer-bar"
+          className="rounded-xl bg-gradient-to-r from-slate-900/95 via-[#0e1626]/95 to-purple-950/40 border border-slate-700/80 shadow-md shadow-black/40 overflow-hidden transition-all duration-200 animate-in fade-in"
+        >
+          {/* ヘッダーバー（クリックで折りたたみ／展開をトグル） */}
+          <div
+            onClick={handleToggleVisualizerCollapse}
+            className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer hover:bg-slate-800/35 transition select-none"
+            title={isVisualizerCollapsed ? 'クリックしてツリー連結ビジュアライザーを展開' : 'クリックしてツリー連結ビジュアライザーを折りたたむ'}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-400 shrink-0 shadow-xs">
+                <Network className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                <span className="text-xs sm:text-sm font-bold text-white tracking-tight">
+                  ツリー連結ビジュアライザー
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border transition-colors ${
+                  isSeparated
+                    ? 'bg-amber-950/60 text-amber-300 border-amber-600/50'
+                    : isSeamless
+                    ? 'bg-sky-950/60 text-sky-300 border-sky-500/50 ring-1 ring-sky-500/30'
+                    : 'bg-slate-800 text-slate-200 border-slate-700'
+                }`}>
+                  連結度: {connectionDegree}%
+                </span>
+                <span className="text-[11px] text-slate-400 hidden xs:inline">
+                  {isSeparated ? '【独立カード】' : isSeamless ? '【シームレス密着】' : '【標準ツリー】'}
+                </span>
+                {isVisualizerCollapsed && (
+                  <span className="text-[10px] text-slate-400 font-mono hidden sm:inline ml-1">
+                    ({effectiveShowBluesky && blueskySplits.length > 1 ? `🦋 ${blueskySplits.length}件` : ''}
+                    {effectiveShowBluesky && effectiveShowThreads && blueskySplits.length > 1 && threadsSplits.length > 1 ? ' · ' : ''}
+                    {effectiveShowThreads && threadsSplits.length > 1 ? `🌀 ${threadsSplits.length}件` : ''})
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleVisualizerCollapse();
+                }}
+                className="px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                title={isVisualizerCollapsed ? 'ビジュアライザーを展開' : 'ビジュアライザーを折りたたむ'}
+                aria-label={isVisualizerCollapsed ? 'ビジュアライザーを展開' : 'ビジュアライザーを折りたたむ'}
+              >
+                <span className="text-[11px] hidden sm:inline">{isVisualizerCollapsed ? '展開' : '折りたたむ'}</span>
+                {isVisualizerCollapsed ? (
+                  <ChevronDown className="w-3.5 h-3.5 text-sky-400" />
+                ) : (
+                  <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* 展開時コンテンツ（スライダー・プリセット・ナビゲーター） */}
+          {!isVisualizerCollapsed && (
+            <div className="px-3 pb-3 sm:px-3.5 sm:pb-3.5 border-t border-slate-800/80 pt-2.5 space-y-2.5 animate-in fade-in duration-150">
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
+                <p className="text-[11px] text-slate-400 truncate max-w-full sm:max-w-md">
+                  {isSeparated
+                    ? '各ポストを独立したカード枠で表示し、単体ごとの見た目や文字数を確認できます'
+                    : isSeamless
+                    ? 'ポスト間を密着させ、光彩連結ラインと分割ジャンクションノードで連続性を可視化します'
+                    : '公式SNSアプリに準拠したバランスの良い返信ツリー形式で表示しています'}
+                </p>
+
+                {/* クイックプリセット切り替えボタン */}
+                <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleConnectionDegreeChange(0)}
+                    className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1.5 text-xs ${
+                      isSeparated
+                        ? 'bg-slate-800 text-amber-300 border border-slate-700 font-bold shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="分離モード (0%): 各ポストを独立カードとして個別確認"
+                  >
+                    <Unlink className="w-3.5 h-3.5 text-amber-400" />
+                    <span>分離 (0%)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConnectionDegreeChange(50)}
+                    className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1.5 text-xs ${
+                      isStandard
+                        ? 'bg-slate-800 text-sky-300 border border-slate-700 font-bold shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="標準モード (50%): 通常のSNSツリー表示"
+                  >
+                    <GitCommit className="w-3.5 h-3.5 text-sky-400" />
+                    <span>標準 (50%)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConnectionDegreeChange(100)}
+                    className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1.5 text-xs ${
+                      isSeamless
+                        ? 'bg-gradient-to-r from-sky-600 to-purple-600 text-white font-bold shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="密着モード (100%): 光彩連結線と分割ジャンクションを強調したシームレス表示"
+                  >
+                    <Link2 className="w-3.5 h-3.5 text-white" />
+                    <span>密着 (100%)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* スライダー本体 */}
+              <div className="flex items-center gap-3 pt-1">
+                <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono shrink-0 select-none">
+                  <Unlink className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden xs:inline">分離 (0%)</span>
+                </div>
+
+                <div className="relative flex-1 flex items-center">
+                  <input
+                    id="thread-connection-degree-slider"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={connectionDegree}
+                    onChange={(e) => handleConnectionDegreeChange(Number(e.target.value))}
+                    className="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400 focus:outline-hidden focus:ring-1 focus:ring-sky-400 shadow-inner"
+                    aria-label="スレッド各ポストの連結度合いスライダー"
+                    style={{
+                      background: `linear-gradient(to right, #0284c7 0%, #38bdf8 ${connectionDegree}%, #1e293b ${connectionDegree}%, #1e293b 100%)`,
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center gap-1 text-[11px] text-sky-400 font-mono shrink-0 select-none font-semibold">
+                  <span className="hidden xs:inline">密着 (100%)</span>
+                  <Link2 className="w-3.5 h-3.5 text-sky-400" />
+                </div>
+              </div>
+
+              {/* スレッド分割ポスト ナビゲーション・インスペクター */}
+              <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  <span className="text-slate-400 font-semibold select-none flex items-center gap-1 shrink-0 text-[11px]">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>分割ポスト一覧:</span>
+                  </span>
+
+                  {effectiveShowBluesky && blueskySplits.length > 1 && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="text-sky-400 font-bold font-mono text-[11px]">🦋 Bluesky ({blueskySplits.length}):</span>
+                      {blueskySplits.map((s) => (
+                        <button
+                          key={s.index}
+                          type="button"
+                          onClick={() => setFocusedSplitIndex(focusedSplitIndex === s.index ? null : s.index)}
+                          className={`px-2 py-0.5 rounded text-[11px] font-mono transition cursor-pointer flex items-center gap-1 ${
+                            focusedSplitIndex === s.index
+                              ? 'bg-[#0085ff] text-white font-bold ring-2 ring-sky-300 shadow-xs'
+                              : 'bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700/80'
+                          }`}
+                          title={`クリックしてポスト #${s.index} をプレビュー内でハイライト`}
+                        >
+                          <span>#{s.index}</span>
+                          <span className="text-[10px] text-slate-400 font-sans">({s.charCount}字)</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {effectiveShowThreads && threadsSplits.length > 1 && (
+                    <div className="flex items-center gap-1 flex-wrap ml-1">
+                      <span className="text-purple-400 font-bold font-mono text-[11px]">🌀 Threads ({threadsSplits.length}):</span>
+                      {threadsSplits.map((s) => (
+                        <button
+                          key={s.index}
+                          type="button"
+                          onClick={() => setFocusedSplitIndex(focusedSplitIndex === s.index ? null : s.index)}
+                          className={`px-2 py-0.5 rounded text-[11px] font-mono transition cursor-pointer flex items-center gap-1 ${
+                            focusedSplitIndex === s.index
+                              ? 'bg-purple-600 text-white font-bold ring-2 ring-purple-300 shadow-xs'
+                              : 'bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700/80'
+                          }`}
+                          title={`クリックしてスレッド #${s.index} をプレビュー内でハイライト`}
+                        >
+                          <span>#{s.index}</span>
+                          <span className="text-[10px] text-slate-400 font-sans">({s.charCount}字)</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {focusedSplitIndex !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setFocusedSplitIndex(null)}
+                    className="text-[11px] text-slate-400 hover:text-white underline cursor-pointer shrink-0 ml-auto"
+                  >
+                    ハイライト解除
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

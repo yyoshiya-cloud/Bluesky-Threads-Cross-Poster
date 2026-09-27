@@ -125,30 +125,51 @@ interface EditorSectionProps {
 const SAMPLE_TEXTS = [
   {
     label: '🌟 アプリ紹介・機能紹介（CrossPost Web Studio とは？）',
+    tag: '総合紹介',
+    charCount: '約260字',
+    summary: 'アプリの全体概要、JST予約、スレッド分割、画像・動画添付などのフル機能紹介',
     text: `☆自動投稿アプリのテスト投稿です。\n\n【CrossPost Web Studio とは？】\nBluesky（AT Protocol）と Threads（Meta Graph API）への同時投稿・個別予約を直感的に行えるオールインワンWebエディタです。\n\n長文の自動スレッド分割や任意位置での区切り（---）、日本時間（JST）での予約投稿、投稿区分指定（同時 / Bluesky / Threads）、カスタム時間プリセット、週間横スクロールタイムライン・月間カレンダー管理、Threadsトピックタグ、画像・動画の添付とドラッグ並び替え、AIアシスト（スレッド分割・トーン自動調整・セーフティ点検）など、快適なSNS発信に必要な機能がすべて揃っています。\n\n#個人開発 #Bluesky #Threads #バイブコーディング #GoogleAIStudio`,
   },
   {
     label: '✂️ 任意区切りテスト（--- で好きな位置で2つの投稿に分割）',
+    tag: '任意分割 (---)',
+    charCount: '約190字 (2分割)',
+    summary: '「---」を入力した位置で意図通りに分割されるスレッド機能のテスト',
     text: `☆自動投稿アプリのテスト投稿です。\n\n【お知らせ 1/2】\nBlueskyとThreadsの同時投稿アプリに「任意位置でのスレッド分割」機能が追加されました！✨\n文章中の区切りたい場所に「---」を入力するだけで、思い通りの位置で投稿を分割できます。\n\n---\n\n【お知らせ 2/2】\n各パートが文字数制限（Bluesky 300字 / Threads 500字）を超えている場合でも、自動スレッド分割がスムーズに連動します。\nぜひ快適なクロス投稿をご体験ください！🙌🚀\n#Bluesky #Threads #クロス投稿`,
   },
   {
     label: '✨ 絵文字たっぷり開発ログ（約400字・Bluesky分割 / Threads1投稿）',
+    tag: '絵文字・差分検証',
+    charCount: '約380字',
+    summary: 'Bluesky(300字超)は2分割、Threads(500字内)は1投稿に収まる境界値テスト',
     text: `☆自動投稿アプリのテスト投稿です。\n\n✨【休日の個人開発カフェログ☕️＆最新アップデート速報🚀】\n\n今週末は気分転換にお気に入りのカフェでプログラミング作業中👨‍💻🌿\n美味しいドリップコーヒー☕️とシナモンロール🥐をお供に、Bluesky🦋とThreads🌀の同時投稿ツールの開発を進めました💡\n\n🎉 今回のアップデート内容:\n1️⃣ 絵文字や特殊記号の正確なGrapheme Cluster文字数カウントに対応🎨\n2️⃣ リンク・メンション（@bsky.app）の自動Facetリンク化🔗\n3️⃣ 失敗したツリーだけを再送信できる履歴リトライ機能🔄\n4️⃣ 画像のALTテキスト（代替テキスト）入力サポート🖼️\n\nBlueskyでは300文字を超えるため自動で2件のスレッド🧵に分割され、Threadsでは500文字以内に綺麗に1投稿で収まるテスト文章です🌈✨\n皆さんも快適なSNSライフをお過ごしください！🙌🎉 #個人開発 #Bluesky #Threads`,
   },
   {
     label: '🔗 リンク & @メンション自動Facet化テスト',
+    tag: 'リンク / メンション',
+    charCount: '約130字',
+    summary: 'URLリンクや@メンションが自動認識されてリッチリンク・Facetになるか確認',
     text: `☆自動投稿アプリのテスト投稿です。\n\nBlueskyとThreadsへのクロス投稿テスト中！\n公式アカウント @bsky.app や @threads.net をぜひチェックしてみてください。\n\n公式サイト:\n・Bluesky: https://bsky.social\n・Threads: https://threads.net\n\n#Bluesky #Threads #ATProto`,
   },
   {
     label: '🧵 長文コラム（約700字・自動スレッド分割テスト）',
+    tag: '長文スレッド',
+    charCount: '約700字 (3〜4分割)',
+    summary: '複数回の自動スレッド分割やツリー連結ビジュアライザーの動作確認に最適',
     text: `☆自動投稿アプリのテスト投稿です。\n\n【分散型SNS時代のクロスプラットフォーム運用戦略と情報発信の未来】\n\n現代のソーシャルメディア運用において、特定のプラットフォームに過度に依存するリスクが強く認識されるようになりました。それに伴い、Blueskyに代表されるAT Protocolを活用したオープンな分散型ネットワークと、Instagramの強力なソーシャルグラフを基盤とするThreadsのような大規模プラットフォームを戦略的に併用するクリエイターや企業が急速に増加しています。\n\nそれぞれのプラットフォームには明確なカルチャーと強みがあります。Blueskyは技術者やクリエイターが集い、ユーザー自身がアルゴリズムを選択できるカスタムフィードや、ポータブルな分散型ID（DID）による自由度の高いオープンウェブの精神が息づいています。一方のThreadsは、親しみやすい日常の会話やトレンドの拡散力に優れ、多様で幅広いオーディエンスへ迅速にリーチできる即効性を誇ります。\n\nしかし、同時に運用者を悩ませるのが「文字数制限の差異」と「スレッド分割の手間」です。Blueskyの1投稿あたり300文字、Threadsの500文字という異なる仕様に対し、手動で改行や区切りを調整して投稿し直す作業は大きな負担となります。\n\n本アプリケーションは、入力された文章の文脈や句読点、段落のまとまりを自動解析し、読者にとって最も自然で読みやすい位置で(1/N)などの連番を付与しながらスレッド化を行います。これにより、本格的な長文コラムや考察記事、プロダクトのアップデート告知なども、各SNSの読書体験を損なうことなく最適な形で届けることが可能になります。長文コンテンツでも安心してクロス投稿を行っていただけます。`,
   },
   {
     label: '🦋 ニュース・発表（中長文・約350字）',
+    tag: '告知・リリース',
+    charCount: '約340字',
+    summary: '箇条書きリストを含む新機能告知やお知らせ形式のテスト文章',
     text: `☆自動投稿アプリのテスト投稿です。\n\n【Bluesky & Threads 同時投稿機能のお知らせ】\n本日、分散型SNS「Bluesky」と「Threads」にスムーズに同時投稿できるWebエディタを公開しました！\n\n■ 主な特長\n1. Bluesky (300文字) と Threads (500文字) の文字数制限をリアルタイム判定\n2. 制限を超える長文は自然な文末でツリー（スレッド）投稿へ自動分割\n3. リンクや @メンション の自動Facetリンク化、画像Altテキスト入力に対応\n4. 自動下書き保存機能により、ブラウザリロードや誤操作時も入力内容が消失する心配がありません\n\n複数プラットフォームへの情報発信をよりシームレスに実現します。ぜひお試しください！`,
   },
   {
     label: '💻 技術Tips・短文（1投稿に収まる文字数）',
+    tag: 'Tips・短文',
+    charCount: '約110字',
+    summary: '分割されずに1投稿の制限内に余裕で収まるコンパクトな技術Tips文章',
     text: `☆自動投稿アプリのテスト投稿です。\n\nBlueskyのAT Protocolは、分散型ID（did:plc）とXRPCエンドポイントによるオープンなデータ管理が特徴です。\nアプリパスワードを発行することで、メインのパスワードを安全に保護しながら外部ツールから安全に投稿（createRecord）を行うことができます。`,
   },
 ];
@@ -220,7 +241,29 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   onToggleServerVault,
 }) => {
   const [showSamples, setShowSamples] = useState(false);
+  const samplesDropdownRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 例文ドロップダウンの外側クリック / Escキー検知
+  useEffect(() => {
+    if (!showSamples) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (samplesDropdownRef.current && !samplesDropdownRef.current.contains(e.target as Node)) {
+        setShowSamples(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowSamples(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showSamples]);
 
   // エディタタブ状態: 'common' (共通ベース) | 'bluesky' (Bluesky個別) | 'threads' (Threads個別)
   const [activeEditorTab, setActiveEditorTab] = useState<'common' | 'bluesky' | 'threads'>('common');
@@ -1014,23 +1057,57 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 </button>
 
                 {showSamples && !isNeitherSelected && (
-                  <div className="absolute left-0 mt-1.5 w-64 bg-[#111726] border border-slate-600 rounded-xl shadow-2xl p-2 z-30 space-y-1">
-                    <div className="text-[11px] font-bold text-slate-300 px-2 py-1 border-b border-slate-700">
-                      サンプル文章を挿入
-                    </div>
-                    {SAMPLE_TEXTS.map((s, idx) => (
+                  <div
+                    ref={samplesDropdownRef}
+                    className="absolute left-0 mt-1.5 w-[340px] xs:w-[420px] sm:w-[500px] md:w-[540px] max-w-[calc(100vw-2rem)] bg-[#0c121e] border border-slate-700/90 rounded-2xl shadow-2xl shadow-black/90 p-2.5 z-40 space-y-1.5 max-h-[75vh] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150"
+                  >
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-200 px-2 py-1.5 border-b border-slate-800/80">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>サンプル文章を挿入（全{SAMPLE_TEXTS.length}件）</span>
+                      </div>
                       <button
-                        key={idx}
                         type="button"
-                        onClick={() => {
-                          handleActiveTextChange(s.text);
-                          setShowSamples(false);
-                        }}
-                        className="w-full text-left text-xs text-slate-200 hover:bg-slate-800/80 p-2 rounded-lg transition truncate cursor-pointer"
+                        onClick={() => setShowSamples(false)}
+                        className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition cursor-pointer"
+                        title="閉じる (Esc)"
+                        aria-label="閉じる"
                       >
-                        {s.label}
+                        <X className="w-3.5 h-3.5" />
                       </button>
-                    ))}
+                    </div>
+
+                    <div className="space-y-1 pt-0.5">
+                      {SAMPLE_TEXTS.map((s, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            handleActiveTextChange(s.text);
+                            setShowSamples(false);
+                          }}
+                          className="w-full text-left p-2.5 rounded-xl border border-transparent hover:border-slate-700/80 bg-slate-900/50 hover:bg-slate-800/80 transition cursor-pointer flex flex-col gap-1 group"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-100 group-hover:text-amber-300 transition-colors whitespace-normal break-words leading-snug">
+                              {s.label}
+                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                                {s.charCount}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-start gap-2 text-[11px] text-slate-400 group-hover:text-slate-300 whitespace-normal break-words leading-relaxed pt-0.5">
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-950/60 text-amber-300 border border-amber-800/50 shrink-0 font-medium">
+                              {s.tag}
+                            </span>
+                            <span className="leading-snug">{s.summary}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
