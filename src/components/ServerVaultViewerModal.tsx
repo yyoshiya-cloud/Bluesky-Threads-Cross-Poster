@@ -40,6 +40,7 @@ interface ServerVaultViewerModalProps {
   onOpenSettings?: () => void;
   isBlueskyLoggedIn?: boolean;
   isThreadsLoggedIn?: boolean;
+  isDemoMode?: boolean;
 }
 
 export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
@@ -48,6 +49,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
   onOpenSettings,
   isBlueskyLoggedIn = false,
   isThreadsLoggedIn = false,
+  isDemoMode = false,
 }) => {
   const [serverVault, setServerVault] = useState<SavedAccountVault | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -228,8 +230,17 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
     }
   };
 
-  const hasBluesky = Boolean(serverVault?.bluesky?.identifier);
-  const hasThreads = Boolean(serverVault?.threads?.accessToken);
+  const hasBluesky = Boolean(
+    serverVault?.bluesky?.identifier &&
+    !serverVault.bluesky.identifier.toLowerCase().includes('demo')
+  ) || (isBlueskyLoggedIn && !isDemoMode);
+
+  const hasThreads = Boolean(
+    serverVault?.threads?.accessToken &&
+    !serverVault.threads.accessToken.toUpperCase().includes('DEMO')
+  ) || (isThreadsLoggedIn && !isDemoMode);
+
+  const isUnlinked = !hasBluesky && !hasThreads;
   // Threads有効期限計算
   const threadsExpiry = serverVault?.threads?.tokenExpiresAt
     ? calculateTokenExpiryInfo(serverVault.threads.tokenExpiresAt)
@@ -361,9 +372,13 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
                 <button
                   type="button"
                   onClick={handleDownloadBackup}
-                  disabled={isExporting || (!hasBluesky && !hasThreads)}
+                  disabled={isExporting || isUnlinked}
                   className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-emerald-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="アカウント情報をAES-256暗号化してダウンロード"
+                  title={
+                    isUnlinked
+                      ? 'アカウントが未連携のため、ダウンロードは無効化されています'
+                      : 'アカウント情報をAES-256暗号化してダウンロード'
+                  }
                 >
                   <Download className={`w-3.5 h-3.5 ${isExporting ? 'animate-bounce' : ''}`} />
                   <span>{isExporting ? '暗号化出力中...' : 'ダウンロード'}</span>

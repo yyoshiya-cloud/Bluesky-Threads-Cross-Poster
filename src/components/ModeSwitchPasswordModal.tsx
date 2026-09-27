@@ -6,16 +6,21 @@ import {
   EyeOff,
   AlertCircle,
   X as CloseIcon,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   verifyModePassword,
 } from '../utils/modeSecurity';
+import {
+  verifyAdminPassword,
+} from '../utils/adminConfig';
 
 interface ModeSwitchPasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirmSwitch: () => void;
   targetModeIsLive: boolean; // true: ライブモードへ移行, false: デモモードへ移行
+  onActivateAdminMode?: () => void;
 }
 
 export const ModeSwitchPasswordModal: React.FC<ModeSwitchPasswordModalProps> = ({
@@ -23,6 +28,7 @@ export const ModeSwitchPasswordModal: React.FC<ModeSwitchPasswordModalProps> = (
   onClose,
   onConfirmSwitch,
   targetModeIsLive,
+  onActivateAdminMode,
 }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -42,25 +48,37 @@ export const ModeSwitchPasswordModal: React.FC<ModeSwitchPasswordModalProps> = (
 
   if (!isOpen) return null;
 
-  // パスワード認証 & モード切替の実行
+  // パスワード認証 & モード切替または管理者モード起動の実行
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
-    if (!password.trim()) {
+    const trimmedPassword = password.trim();
+    if (!trimmedPassword) {
       setErrorMessage('パスワードを入力してください。');
       return;
     }
 
     setIsVerifying(true);
     try {
-      const isValid = await verifyModePassword(password);
-      if (isValid) {
+      // 1. 管理者パスワードの検証（初期値: admin）
+      if (verifyAdminPassword(trimmedPassword)) {
+        if (onActivateAdminMode) {
+          onActivateAdminMode();
+        }
+        onClose();
+        return;
+      }
+
+      // 2. LIVE/DEMO モード切替用パスワードの検証
+      const isValidModePass = await verifyModePassword(trimmedPassword);
+      if (isValidModePass) {
         onConfirmSwitch();
         onClose();
-      } else {
-        setErrorMessage('パスワードが正しくありません。');
+        return;
       }
+
+      setErrorMessage('パスワードが正しくありません。');
     } catch (err: any) {
       setErrorMessage(`認証エラー: ${err.message}`);
     } finally {

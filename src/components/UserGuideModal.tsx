@@ -1258,13 +1258,13 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                         {filteredTips.map((tip) => (
                           <div
                             key={tip.id}
-                            className="p-2.5 sm:p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700/80 transition-colors flex flex-col justify-between"
+                            className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700/80 transition-colors flex flex-col gap-1.5"
                           >
-                            <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5 mb-1 leading-snug">
+                            <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5 leading-tight">
                               <span className="text-sm shrink-0">{tip.icon}</span>
-                              <span className="truncate">{tip.title}</span>
+                              <span>{tip.title}</span>
                             </div>
-                            <p className="text-[11px] sm:text-xs text-slate-400 leading-snug">
+                            <p className="text-[11px] sm:text-xs text-slate-400 leading-normal">
                               {tip.description}
                             </p>
                           </div>

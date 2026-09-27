@@ -27,6 +27,7 @@ import {
   FileText,
   Link as LinkIcon,
   Database,
+  KeyRound,
 } from 'lucide-react';
 import {
   getModeSecurityConfig,
@@ -68,6 +69,7 @@ interface SettingsModalProps {
   onOpenUserGuide?: () => void;
   onOpenCommErrors?: () => void;
   onOpenServerVault?: () => void;
+  onOpenAdminModal?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -82,6 +84,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onDeleteSavedAccount,
   onOpenCommErrors,
   onOpenServerVault,
+  onOpenAdminModal,
 }) => {
   const [form, setForm] = useState<ApiCredentials>({ ...credentials });
   const [vault, setVault] = useState<SavedAccountVault>(() => getSavedAccountVault());
@@ -111,6 +114,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     form.isDemoMode ||
     isDemoValuesInForm
   );
+
+  // Bluesky / Threads ログイン状態（設定情報が存在するか）の判定
+  const isBlueskyConfigured = Boolean(
+    (form.blueskyIdentifier?.trim() && form.blueskyAppPassword?.trim()) ||
+    (credentials.blueskyIdentifier?.trim() && credentials.blueskyAppPassword?.trim()) ||
+    vault.bluesky?.identifier
+  );
+
+  const isThreadsConfigured = Boolean(
+    (form.threadsAccessToken?.trim() || form.threadsUserId?.trim()) ||
+    (credentials.threadsAccessToken?.trim() || credentials.threadsUserId?.trim()) ||
+    vault.threads?.accessToken
+  );
+
+  // Bluesky、Threads共に未ログイン状態かどうか
+  const isAllLoggedOut = !isBlueskyConfigured && !isThreadsConfigured;
 
   // モード切替パスワード設定用ステート
   const [secConfig, setSecConfig] = useState(() => getModeSecurityConfig());
@@ -499,7 +518,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </button>
             )}
 
-            {/* タイトル行の「ログ」ボタン（デモモード時は非表示、実用モード時は画面にログファイルを表示） */}
+            {/* タイトル行の「ログ」ボタン */}
             {!isEffectiveDemoMode && (
               <button
                 id="settings-title-comm-logs-button"
@@ -1581,15 +1600,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 id="save-settings-button"
                 type="button"
                 onClick={handleSave}
-                disabled={isEffectiveDemoMode}
+                disabled={isEffectiveDemoMode || (!isEffectiveDemoMode && isAllLoggedOut)}
                 className={`px-5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md ${
-                  isEffectiveDemoMode
+                  isEffectiveDemoMode || (!isEffectiveDemoMode && isAllLoggedOut)
                     ? 'bg-slate-800 text-slate-500 border border-slate-700/60 cursor-not-allowed shadow-none opacity-60'
                     : isSaveSuccess
                     ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30 cursor-pointer'
                     : 'btn-accent text-white cursor-pointer shadow-accent/25'
                 }`}
-                title={isEffectiveDemoMode ? 'DEMOモード中はアカウント設定の保存は保護のため無効化されています' : 'アカウント設定を端末およびサーバーに確実に保存'}
+                title={
+                  isEffectiveDemoMode
+                    ? 'DEMOモード中はアカウント設定の保存は保護のため無効化されています'
+                    : isAllLoggedOut
+                    ? 'LIVEモードでBluesky・Threadsが未ログイン状態のため、アカウント設定の保存は無効化されています'
+                    : 'アカウント設定を端末およびサーバーに確実に保存'
+                }
               >
                 {isSaveSuccess ? (
                   <>

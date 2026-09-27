@@ -120,6 +120,8 @@ interface EditorSectionProps {
   isServerVaultOpen?: boolean;
   onCloseServerVault?: () => void;
   onToggleServerVault?: () => void;
+  isAdminMode?: boolean;
+  onOpenAdminModal?: () => void;
 }
 
 const SAMPLE_TEXTS = [
@@ -239,6 +241,8 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   isServerVaultOpen = false,
   onCloseServerVault,
   onToggleServerVault,
+  isAdminMode = false,
+  onOpenAdminModal,
 }) => {
   const [showSamples, setShowSamples] = useState(false);
   const samplesDropdownRef = useRef<HTMLDivElement>(null);
@@ -1914,17 +1918,23 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
             {/* モード1: 同時投稿 (即時実行) */}
             {postMode === 'instant' && (
               <div className="space-y-1.5 animate-in fade-in duration-150">
+                {isAdminMode && (
+                  <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/50 text-amber-200 text-xs flex items-center justify-center gap-2 font-bold shadow-xs">
+                    <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+                    <span>🔒 管理者モード起動中のため投稿処理はできません</span>
+                  </div>
+                )}
                 {isDemo ? (
                   <>
                     <button
                       id="submit-crosspost-button"
                       type="button"
                       onClick={handleSafeSubmitPost}
-                      disabled={!hasContent || (!postToBluesky && !postToThreads) || isReplyBlocked}
+                      disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads) || isReplyBlocked}
                       className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 active:bg-sky-500/35 border border-sky-400/40 hover:border-sky-400/60 disabled:opacity-40 disabled:cursor-not-allowed text-sky-100 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer shadow-sm"
                     >
                       <Sparkles className="w-4 h-4 text-sky-300/80" />
-                      <span>{getPostButtonLabel()}</span>
+                      <span>{isAdminMode ? '🔒 管理者モード（投稿制限中）' : getPostButtonLabel()}</span>
                     </button>
                     <p className="text-[10px] text-sky-300/80 text-center font-medium">
                       ※DEMOモードのため実際のSNSには投稿されず、安全に投稿シミュレーション・履歴作成をお試しいただけます。
@@ -1935,11 +1945,11 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     id="submit-crosspost-button"
                     type="button"
                     onClick={handleSafeSubmitPost}
-                    disabled={!hasContent || (!postToBluesky && !postToThreads) || isReplyBlocked}
+                    disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads) || isReplyBlocked}
                     className="w-full py-2.5 sm:py-3 px-4 rounded-xl btn-accent disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer animate-in fade-in duration-150"
                   >
                     <Send className="w-3.5 h-3.5" />
-                    <span>{getPostButtonLabel()}</span>
+                    <span>{isAdminMode ? '🔒 管理者モード（投稿制限中）' : getPostButtonLabel()}</span>
                   </button>
                 )}
               </div>
@@ -2115,12 +2125,14 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                   id="submit-schedule-button"
                   type="button"
                   onClick={handleScheduleSubmit}
-                  disabled={!hasContent || (!postToBluesky && !postToThreads) || relativeJst.isPast || isReplyBlocked}
+                  disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads) || relativeJst.isPast || isReplyBlocked}
                   className="w-full py-2.5 px-3 rounded-lg btn-accent disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg"
                 >
                   <Clock className="w-3.5 h-3.5" />
                   <span>
-                    {relativeJst.isPast
+                    {isAdminMode
+                      ? '🔒 管理者モード起動中のため予約追加不可'
+                      : relativeJst.isPast
                       ? '未来の日本時間を指定してください'
                       : isDemo
                       ? `【${PLATFORM_CATEGORY_CONFIG[currentPlatformCategory].shortName}】日本時間 ${formatToJstString(scheduledTargetTimestamp)} にデモ予約を追加`
@@ -2166,6 +2178,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               onOpenUserGuide={onOpenUserGuide}
               onOpenCommErrors={onOpenCommErrors}
               onOpenServerVault={onOpenServerVault}
+              onOpenAdminModal={onOpenAdminModal}
             />
           )}
 
@@ -2184,6 +2197,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
             isThreadsLoggedIn={Boolean(
               credentials.threadsConnected || credentials.threadsAccessToken
             )}
+            isDemoMode={isDemoMode}
           />
         </div>
       </div>

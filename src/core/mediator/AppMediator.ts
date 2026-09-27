@@ -532,6 +532,15 @@ export class AppMediator implements IMediatorArbitrator {
       }
 
       case 'LOGOUT': {
+        const isDemo = this.computeIsDemoMode();
+        if (isDemo) {
+          // DEMOモードの場合はデモアカウント接続を維持・再設定し、ログアウトさせない
+          this.credentials = { ...DEMO_CREDENTIALS };
+          localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
+          this.notifyListeners();
+          break;
+        }
+
         const nextCreds = { ...this.credentials };
         if (event.payload === 'bluesky' || event.payload === 'all') {
           nextCreds.blueskyIdentifier = '';

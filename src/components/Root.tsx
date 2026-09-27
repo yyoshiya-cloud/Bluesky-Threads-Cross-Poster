@@ -12,6 +12,7 @@ import { QuitConfirmModal } from './QuitConfirmModal';
 import { ModeSwitchPasswordModal } from './ModeSwitchPasswordModal';
 import { CommErrorModal } from './CommErrorModal';
 import { AboutAppModal } from './AboutAppModal';
+import { AdminModal } from './AdminModal';
 import { DesktopContextMenu } from './DesktopContextMenu';
 import { ToastContainer } from './ToastContainer';
 import { DEMO_CREDENTIALS } from '../utils/postApi';
@@ -34,6 +35,8 @@ export interface RootProps {
 export const Root: React.FC<RootProps> = ({ viewModel }) => {
   const dispatch = useEventDispatch();
   const [isCommErrorModalOpen, setIsCommErrorModalOpen] = useState(false);
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
   // アプリケーション終了状態（TERMINATED ステート）の描画
   if (viewModel.isAppTerminated) {
@@ -118,6 +121,9 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         onSelectTheme={(theme) => dispatch({ type: 'SELECT_THEME', payload: theme })}
         onLogout={(platform) => dispatch({ type: 'LOGOUT', payload: platform })}
         onRestoreSavedAccount={() => dispatch({ type: 'RESTORE_SAVED_ACCOUNT' })}
+        isAdminMode={isAdminMode}
+        onOpenAdminModal={() => setIsAdminModalOpen(true)}
+        onDeactivateAdminMode={() => setIsAdminMode(false)}
       />
 
       {/* 2. メインコンテンツ領域 (Passive View: EditorSection) */}
@@ -211,6 +217,8 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
           onClearReplyTarget={(platform) =>
             dispatch({ type: 'CLEAR_REPLY_TARGET', payload: platform || 'all' })
           }
+          isAdminMode={isAdminMode}
+          onOpenAdminModal={() => setIsAdminModalOpen(true)}
         />
       </main>
 
@@ -315,11 +323,25 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         onClose={() => dispatch({ type: 'CLOSE_MODAL', payload: 'modePassword' })}
         onConfirmSwitch={() => dispatch({ type: 'TOGGLE_DEMO_MODE' })}
         targetModeIsLive={viewModel.isDemoMode}
+        onActivateAdminMode={() => {
+          setIsAdminMode(true);
+          setIsAdminModalOpen(true);
+        }}
       />
 
       <AboutAppModal
         isOpen={Boolean(viewModel.modals.aboutApp)}
         onClose={() => dispatch({ type: 'CLOSE_MODAL', payload: 'aboutApp' })}
+      />
+
+      <AdminModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        isAdminMode={isAdminMode}
+        onActivateAdminMode={() => setIsAdminMode(true)}
+        onDeactivateAdminMode={() => setIsAdminMode(false)}
+        onResetCredentials={() => dispatch({ type: 'LOGOUT', payload: 'all' })}
+        onVersionChanged={() => dispatch({ type: 'NOTIFY', payload: { type: 'success', title: 'バージョン更新', message: 'アプリバージョンが変更されました。' } })}
       />
 
       {/* 5. グローバルトースト通知コンテナ */}
