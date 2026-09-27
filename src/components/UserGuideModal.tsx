@@ -1006,47 +1006,21 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                           className="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          <span>全画面表示 ＆ PNG保存</span>
+                          <span>全画面表示</span>
                         </a>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            // SVGをCanvas経由でPNGに変換してダウンロード
-                            const svgImg = new Image();
-                            svgImg.onload = () => {
-                              const canvas = document.createElement('canvas');
-                              canvas.width = 1920;
-                              canvas.height = 1080;
-                              const ctx = canvas.getContext('2d');
-                              if (ctx) {
-                                ctx.drawImage(svgImg, 0, 0, 1920, 1080);
-                                const pngUrl = canvas.toDataURL('image/png', 1.0);
-                                const a = document.createElement('a');
-                                a.download = 'CrossPost_システム機能図_画面遷移図.png';
-                                a.href = pngUrl;
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                              }
-                            };
-                            svgImg.src = '/crosspost_system_infographic.svg';
-                          }}
-                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow cursor-pointer"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          <span>💾 PNGで保存</span>
-                        </button>
                       </div>
                     </div>
 
-                    {/* インフォグラフィック図（SVGプレビュー） */}
-                    <div className="relative group rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-2xl">
+                    {/* インフォグラフィック図（添付スクリーンショット原画完全内包版） */}
+                    <div 
+                      className="relative group rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-2xl w-full cursor-zoom-in"
+                      onClick={() => window.open('/infographic_viewer.html', '_blank')}
+                      title="クリックで全画面ビューアーを開く"
+                    >
                       <img
                         src="/crosspost_system_infographic.svg"
                         alt="CrossPost Web Studio 機能図・画面遷移図"
-                        className="w-full h-auto object-contain cursor-zoom-in hover:brightness-105 transition duration-200"
-                        onClick={() => window.open('/infographic_viewer.html', '_blank')}
-                        title="クリックで高解像度ビューアーを開く"
+                        className="w-full h-auto object-contain block hover:brightness-105 transition duration-200"
                       />
                       <div className="absolute bottom-3 right-3 pointer-events-none opacity-0 group-hover:opacity-100 transition duration-200 bg-slate-950/80 backdrop-blur-xs px-2.5 py-1 rounded-md text-[11px] text-slate-300 border border-slate-700">
                         🔍 クリックして全画面で拡大

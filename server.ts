@@ -1597,6 +1597,36 @@ ${cleanText}
   });
 
   // -------------------------------------------------------------
+  // システムインフォグラフィック用 スクリーンショット画像アップロードAPI
+  // -------------------------------------------------------------
+  app.post('/api/upload_screenshot', uploadMiddleware.single('screenshot'), (req, res) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ success: false, error: '画像ファイルが送信されていません。' });
+        return;
+      }
+
+      const publicDest = path.join(process.cwd(), 'public', 'screenshot_editor.png');
+      const distDest = path.join(process.cwd(), 'dist', 'screenshot_editor.png');
+
+      fs.writeFileSync(publicDest, req.file.buffer);
+      try {
+        if (fs.existsSync(path.join(process.cwd(), 'dist'))) {
+          fs.writeFileSync(distDest, req.file.buffer);
+        }
+      } catch (e) {
+        console.warn('dist/screenshot_editor.png write warning:', e);
+      }
+
+      console.log('✅ スクリーンショット画像が正常に保存されました:', publicDest);
+      res.json({ success: true, message: 'スクリーンショットが更新されました。' });
+    } catch (err: any) {
+      console.error('スクリーンショット保存エラー:', err);
+      res.status(500).json({ success: false, error: err.message || '保存に失敗しました。' });
+    }
+  });
+
+  // -------------------------------------------------------------
   // Bluesky (AT Protocol) エンドポイント
   // -------------------------------------------------------------
 

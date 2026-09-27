@@ -1251,6 +1251,29 @@ ${cleanText}
     res.setHeader("Content-Length", totalSize);
     res.send(item.buffer);
   });
+  app.post("/api/upload_screenshot", uploadMiddleware.single("screenshot"), (req, res) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ success: false, error: "\u753B\u50CF\u30D5\u30A1\u30A4\u30EB\u304C\u9001\u4FE1\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002" });
+        return;
+      }
+      const publicDest = import_path.default.join(process.cwd(), "public", "screenshot_editor.png");
+      const distDest = import_path.default.join(process.cwd(), "dist", "screenshot_editor.png");
+      import_fs.default.writeFileSync(publicDest, req.file.buffer);
+      try {
+        if (import_fs.default.existsSync(import_path.default.join(process.cwd(), "dist"))) {
+          import_fs.default.writeFileSync(distDest, req.file.buffer);
+        }
+      } catch (e) {
+        console.warn("dist/screenshot_editor.png write warning:", e);
+      }
+      console.log("\u2705 \u30B9\u30AF\u30EA\u30FC\u30F3\u30B7\u30E7\u30C3\u30C8\u753B\u50CF\u304C\u6B63\u5E38\u306B\u4FDD\u5B58\u3055\u308C\u307E\u3057\u305F:", publicDest);
+      res.json({ success: true, message: "\u30B9\u30AF\u30EA\u30FC\u30F3\u30B7\u30E7\u30C3\u30C8\u304C\u66F4\u65B0\u3055\u308C\u307E\u3057\u305F\u3002" });
+    } catch (err) {
+      console.error("\u30B9\u30AF\u30EA\u30FC\u30F3\u30B7\u30E7\u30C3\u30C8\u4FDD\u5B58\u30A8\u30E9\u30FC:", err);
+      res.status(500).json({ success: false, error: err.message || "\u4FDD\u5B58\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002" });
+    }
+  });
   async function uploadBlueskyVideo(buffer, mimeType, fileName, did, accessJwt, pdsEndpoint) {
     const uploadName = fileName || "video.mp4";
     const videoServiceUrl = "https://video.bsky.app";
