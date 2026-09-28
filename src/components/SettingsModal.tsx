@@ -1388,7 +1388,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* ハッシュタグ & Threads専用トピック メンテナンス */}
           {platformTab === 'maintenance' && (
-            <TagTopicMaintenance />
+            <TagTopicMaintenance isDemoMode={isEffectiveDemoMode} />
           )}
 
           {/* モード切替セキュリティ設定（ライブモード時のみ） */}

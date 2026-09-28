@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Hash,
   Plus,
@@ -18,6 +18,11 @@ import {
   ChevronRight,
   FolderPlus,
   Layers,
+  Download,
+  Upload,
+  FileJson,
+  AlertTriangle,
+  FileText,
 } from 'lucide-react';
 import {
   getSavedCustomTags,
@@ -45,15 +50,22 @@ import {
   resetSavedThreadsTopics,
   clearAllThreadsTopics,
 } from '../utils/topicStorage';
+import {
+  exportTagsAndSnippetsJson,
+  parseAndValidateTagsAndSnippetsJson,
+  applyTagsAndSnippetsData,
+  ParseTagsAndSnippetsResult,
+} from '../utils/exportImportHelper';
 
 interface TagTopicMaintenanceProps {
   onNotify?: (message: string) => void;
+  isDemoMode?: boolean;
 }
 
 // カテゴリ作成時のクイック選択用絵文字
 const EMOJI_PRESETS = ['🏷️', '🌐', '💻', '🤖', '☕', '📷', '📈', '🎨', '🎵', '🐱', '🍣', '🍜', '🍚', '✈️', '🎮', '📚', '⚾', '💡', '🔥', '🌸'];
 
-export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNotify }) => {
+export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNotify, isDemoMode = false }) => {
   // サブタブ: 'hashtags' (お気に入り) | 'categories' (トレンド・カテゴリ一覧) | 'threads_topics' (Threads専用)
   const [activeSubTab, setActiveSubTab] = useState<'hashtags' | 'categories' | 'threads_topics'>('hashtags');
 
@@ -92,12 +104,92 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
   const [notice, setNotice] = useState<string | null>(null);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
 
+  // --- ダウンロード・アップロード（インポート/エクスポート）状態 ---
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [parsedImportData, setParsedImportData] = useState<ParseTagsAndSnippetsResult | null>(null);
+  const [importMode, setImportMode] = useState<'merge' | 'overwrite'>('merge');
+  const [isImporting, setIsImporting] = useState(false);
+
   const showNotification = (msg: string) => {
     setNotice(msg);
     if (onNotify) onNotify(msg);
     setTimeout(() => {
       setNotice((prev) => (prev === msg ? null : prev));
     }, 2800);
+  };
+
+  // JSONダウンロード実行
+  const handleExportJson = () => {
+    try {
+      exportTagsAndSnippetsJson();
+      showNotification('💾 ハッシュタグ・トピック・カテゴリ・定型文をダウンロードしました');
+    } catch (e: any) {
+      showNotification(`❌ エクスポートに失敗しました: ${e?.message || 'エラー'}`);
+    }
+  };
+
+  // ファイル選択トリガー
+  const handleTriggerUpload = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  // ファイル読み込みハンドラ
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (!content) return;
+      const result = parseAndValidateTagsAndSnippetsJson(content);
+      setParsedImportData(result);
+      setImportModalOpen(true);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.onerror = () => {
+      showNotification('❌ ファイルの読み込みに失敗しました');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  // インポート実行
+  const handleExecuteImport = () => {
+    if (!parsedImportData || !parsedImportData.success) return;
+    setIsImporting(true);
+    try {
+      const result = applyTagsAndSnippetsData(
+        {
+          customHashtags: parsedImportData.customHashtags,
+          threadsTopics: parsedImportData.threadsTopics,
+          categories: parsedImportData.categories,
+          snippets: parsedImportData.snippets,
+        },
+        { mode: importMode }
+      );
+
+      // 最新化
+      setCustomTags(getSavedCustomTags());
+      const updatedCats = getSavedCategories();
+      setCategories(updatedCats);
+      setThreadsTopics(getSavedThreadsTopics());
+
+      setImportModalOpen(false);
+      setParsedImportData(null);
+
+      const modeText = importMode === 'overwrite' ? '完全上書き' : '追加マージ';
+      showNotification(
+        `🎉 データのインポート（${modeText}）が完了しました！（タグ: ${result.addedHashtagsCount}件, トピック: ${result.addedTopicsCount}件, カテゴリ: ${result.addedCategoriesCount}件, 定型文: ${result.addedSnippetsCount}件）`
+      );
+    } catch (e: any) {
+      showNotification(`❌ インポート適用に失敗しました: ${e?.message || 'エラー'}`);
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   // 外部からの更新イベントを購読
@@ -425,6 +517,15 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
+      {/* 隠しファイル入力要素 */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept=".json,application/json"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       {/* 上部ヘッダー情報 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
         <div className="flex items-center gap-2.5">
@@ -440,6 +541,31 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
             </p>
           </div>
         </div>
+
+        {/* ダウンロード（エクスポート） / アップロード（インポート）ボタン（LIVEモード時のみ表示） */}
+        {!isDemoMode && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleExportJson}
+              title="登録したハッシュタグ・Threadsトピック・トレンドカテゴリ・定型文をJSONファイルとしてダウンロード"
+              className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-sky-300 hover:text-white border border-sky-500/40 hover:border-sky-400 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <Download className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span>ダウンロード</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleTriggerUpload}
+              title="保存したJSONファイルからハッシュタグ・トピック・カテゴリ・定型文をアップロードして登録"
+              className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <Upload className="w-3.5 h-3.5 shrink-0" />
+              <span>アップロード</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* アクション通知バナー */}
@@ -711,8 +837,8 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
               )}
             </div>
 
-            {/* 一括リセット・クリアボタン */}
-            <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80">
+            {/* 一括リセットボタン */}
+            <div className="pt-2 flex flex-wrap items-center justify-start gap-2 border-t border-slate-800/80">
               <button
                 type="button"
                 onClick={handleResetHashtags}
@@ -722,17 +848,6 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
                 <RotateCcw className="w-3.5 h-3.5 text-sky-400" />
                 <span>初期デフォルトに戻す</span>
               </button>
-
-              {customTags.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearAllHashtags}
-                  className="px-3 py-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-950/60 text-rose-400 text-xs border border-rose-900/30 transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>すべてクリア</span>
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -1139,20 +1254,6 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
                     })
                   )}
                 </div>
-
-                {/* カテゴリ内タグ一括クリア */}
-                {currentCategory.tags.length > 0 && (
-                  <div className="pt-2 flex justify-end border-t border-slate-800/60">
-                    <button
-                      type="button"
-                      onClick={handleClearAllCategoryTags}
-                      className="px-3 py-1 rounded-lg bg-rose-950/20 hover:bg-rose-950/50 text-rose-400 text-xs border border-rose-900/30 transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>このカテゴリのタグをすべてクリア</span>
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -1339,8 +1440,8 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
               </div>
             </div>
 
-            {/* 一括リセット・クリアボタン */}
-            <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80">
+            {/* 一括リセットボタン */}
+            <div className="pt-2 flex flex-wrap items-center justify-start gap-2 border-t border-slate-800/80">
               <button
                 type="button"
                 onClick={handleResetTopics}
@@ -1350,15 +1451,173 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
                 <RotateCcw className="w-3.5 h-3.5 text-purple-400" />
                 <span>初期デフォルトに戻す</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-              {threadsTopics.length > 0 && (
+      {/* ==================== インポート（アップロード）確認モーダル ==================== */}
+      {importModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* モーダルヘッダー */}
+            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center border border-sky-500/30">
+                  <Upload className="w-4 h-4" />
+                </div>
+                <h4 className="text-sm font-bold text-white">
+                  データ読み込み（インポート）の確認
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportModalOpen(false);
+                  setParsedImportData(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* モーダルボディ */}
+            <div className="p-5 overflow-y-auto space-y-4 text-xs">
+              {parsedImportData && !parsedImportData.success ? (
+                <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/80 text-rose-300 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-sm text-rose-200">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>ファイルの読み込みに失敗しました</span>
+                  </div>
+                  <p className="text-xs text-rose-300/90 leading-relaxed">
+                    {parsedImportData.error || '有効なJSONファイルではありません。形式を確認してください。'}
+                  </p>
+                </div>
+              ) : parsedImportData && parsedImportData.success ? (
+                <>
+                  {/* データサマリー */}
+                  <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5">
+                    <div className="flex items-center justify-between text-slate-300 border-b border-slate-800 pb-2">
+                      <span className="font-bold flex items-center gap-1.5 text-white">
+                        <FileJson className="w-4 h-4 text-sky-400" />
+                        <span>検出されたデータ内訳</span>
+                      </span>
+                      {parsedImportData.stats?.exportedAtJst && (
+                        <span className="text-[10px] text-slate-400">
+                          出力日時: {parsedImportData.stats.exportedAtJst}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[11px] text-slate-400 block">🏷️ お気に入りハッシュタグ</span>
+                        <span className="text-sm font-bold text-sky-400 font-mono">
+                          {parsedImportData.customHashtags.length} 件
+                        </span>
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[11px] text-slate-400 block">💬 Threadsトピック</span>
+                        <span className="text-sm font-bold text-purple-400 font-mono">
+                          {parsedImportData.threadsTopics.length} 件
+                        </span>
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[11px] text-slate-400 block">📂 トレンド・カテゴリ</span>
+                        <span className="text-sm font-bold text-emerald-400 font-mono">
+                          {parsedImportData.categories.length} カテゴリ ({parsedImportData.stats?.categoryTagsCount || 0} タグ)
+                        </span>
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[11px] text-slate-400 block">📑 定型文（スニペット）</span>
+                        <span className="text-sm font-bold text-amber-400 font-mono">
+                          {parsedImportData.snippets.length} 件
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 取り込み方式の選択 */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-200 block">
+                      取り込み方法の選択:
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setImportMode('merge')}
+                        className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1.5 ${
+                          importMode === 'merge'
+                            ? 'bg-sky-950/60 border-sky-500/80 text-white shadow-xs'
+                            : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs flex items-center gap-1.5 text-sky-300">
+                            <span>➕ 既存に追加（マージ）</span>
+                          </span>
+                          {importMode === 'merge' && <Check className="w-3.5 h-3.5 text-sky-400" />}
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          現在の登録データを残し、新しいタグ・カテゴリ・定型文のみを追加します（重複はスキップ）。
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setImportMode('overwrite')}
+                        className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1.5 ${
+                          importMode === 'overwrite'
+                            ? 'bg-rose-950/60 border-rose-500/80 text-white shadow-xs'
+                            : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs flex items-center gap-1.5 text-rose-300">
+                            <span>⚠️ 完全上書き</span>
+                          </span>
+                          {importMode === 'overwrite' && <Check className="w-3.5 h-3.5 text-rose-400" />}
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          現在の登録データをすべて削除し、ファイルの内容で完全に置き換えます。
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {/* モーダルフッター */}
+            <div className="px-5 py-3.5 border-t border-slate-800 bg-slate-950/80 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setImportModalOpen(false);
+                  setParsedImportData(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer"
+              >
+                キャンセル
+              </button>
+
+              {parsedImportData && parsedImportData.success && (
                 <button
                   type="button"
-                  onClick={handleClearAllTopics}
-                  className="px-3 py-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-950/60 text-rose-400 text-xs border border-rose-900/30 transition flex items-center gap-1.5 cursor-pointer"
+                  disabled={isImporting}
+                  onClick={handleExecuteImport}
+                  className={`px-4 py-2 rounded-xl text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm ${
+                    importMode === 'overwrite'
+                      ? 'bg-rose-600 hover:bg-rose-500'
+                      : 'bg-sky-600 hover:bg-sky-500'
+                  }`}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>すべてクリア</span>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{importMode === 'overwrite' ? '完全上書きで登録' : '追加マージで登録'}</span>
                 </button>
               )}
             </div>

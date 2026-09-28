@@ -1,6 +1,14 @@
 import { PostHistoryItem, ScheduledPostItem, SnippetItem } from '../types';
 import { formatToJstString, formatHistoryTimestampJst } from './scheduledStorage';
-import { loadSnippetsFromStorage } from './snippetStorage';
+import { loadSnippetsFromStorage, saveSnippetsToStorage } from './snippetStorage';
+import {
+  getSavedCustomTags,
+  saveCustomTagsList,
+  TopicCategory,
+  getSavedCategories,
+  saveCategoriesList,
+} from './hashtagSuggester';
+import { getSavedThreadsTopics, saveThreadsTopicsList } from './topicStorage';
 
 /**
  * CSVセル用エスケープ処理（カンマ、ダブルクォート、改行を含む文字列を安全にクォート）
@@ -326,4 +334,331 @@ export function parseAndValidateBackupJson(jsonString: string): ImportBackupResu
       error: `JSONファイルの解析に失敗しました: ${err?.message || '構文エラー'}`,
     };
   }
+}
+
+/**
+  * 5. ハッシュタグ・Threadsトピック・トレンドカテゴリ・定型文のバックアップデータ構造
+  */
+export interface CustomTagsAndSnippetsBackupData {
+  version: string;
+  exportedAt: number;
+  exportedAtJst: string;
+  app: string;
+  dataType: 'crosspost_tags_and_templates';
+  customHashtags: string[];
+  threadsTopics: string[];
+  categories: TopicCategory[];
+  snippets: SnippetItem[];
+  metadata?: {
+    totalCustomHashtagsCount: number;
+    totalThreadsTopicsCount: number;
+    totalCategoriesCount: number;
+    totalCategoryTagsCount: number;
+    totalSnippetsCount: number;
+  };
+}
+
+/**
+  * 登録ハッシュタグ、Threadsトピック、トレンド・カテゴリ、定型文をまとめてJSONファイルとしてダウンロード
+  */
+export function exportTagsAndSnippetsJson(): void {
+  const now = Date.now();
+  const customHashtags = getSavedCustomTags();
+  const threadsTopics = getSavedThreadsTopics();
+  const categories = getSavedCategories();
+  const snippets = loadSnippetsFromStorage();
+
+  const totalCategoryTags = categories.reduce((sum, cat) => sum + (cat.tags?.length || 0), 0);
+
+  const backupData: CustomTagsAndSnippetsBackupData = {
+    version: '1.0.0',
+    exportedAt: now,
+    exportedAtJst: formatToJstString(now),
+    app: 'CrossPost Web Studio',
+    dataType: 'crosspost_tags_and_templates',
+    customHashtags: customHashtags || [],
+    threadsTopics: threadsTopics || [],
+    categories: categories || [],
+    snippets: snippets || [],
+    metadata: {
+      totalCustomHashtagsCount: customHashtags?.length || 0,
+      totalThreadsTopicsCount: threadsTopics?.length || 0,
+      totalCategoriesCount: categories?.length || 0,
+      totalCategoryTagsCount: totalCategoryTags,
+      totalSnippetsCount: snippets?.length || 0,
+    },
+  };
+
+  const jsonContent = JSON.stringify(backupData, null, 2);
+  const filename = `crosspost_tags_templates_${getFilenameTimestamp()}.json`;
+  downloadFile(jsonContent, filename, 'application/json;charset=utf-8;');
+}
+
+/**
+  * 6. アップロードされたハッシュタグ・トピック・定型文JSONファイルのパース & 検証
+  */
+export interface ParseTagsAndSnippetsResult {
+  success: boolean;
+  customHashtags: string[];
+  threadsTopics: string[];
+  categories: TopicCategory[];
+  snippets: SnippetItem[];
+  error?: string;
+  stats?: {
+    customHashtagsCount: number;
+    threadsTopicsCount: number;
+    categoriesCount: number;
+    categoryTagsCount: number;
+    snippetsCount: number;
+    exportedAtJst?: string;
+  };
+}
+
+export function parseAndValidateTagsAndSnippetsJson(jsonString: string): ParseTagsAndSnippetsResult {
+  try {
+    const data = JSON.parse(jsonString);
+
+    if (!data || typeof data !== 'object') {
+      return {
+        success: false,
+        customHashtags: [],
+        threadsTopics: [],
+        categories: [],
+        snippets: [],
+        error: 'JSONの形式が無効です。',
+      };
+    }
+
+    // 1. お気に入りハッシュタグの抽出と整形
+    const rawHashtags = Array.isArray(data.customHashtags)
+      ? data.customHashtags
+      : Array.isArray(data.customTags)
+      ? data.customTags
+      : [];
+    const validHashtags: string[] = rawHashtags
+      .map((t: any) => String(t || '').replace(/^#+/, '').trim())
+      .filter(Boolean);
+
+    // 2. Threads専用トピックタグの抽出と整形
+    const rawTopics = Array.isArray(data.threadsTopics)
+      ? data.threadsTopics
+      : Array.isArray(data.savedTopics)
+      ? data.savedTopics
+      : [];
+    const validTopics: string[] = rawTopics
+      .map((t: any) => String(t || '').replace(/^#+/, '').trim())
+      .filter(Boolean);
+
+    // 3. トレンド・カテゴリの抽出と整形
+    const rawCategories = Array.isArray(data.categories) ? data.categories : [];
+    const validCategories: TopicCategory[] = rawCategories
+      .filter((cat: any) => cat && typeof cat === 'object' && cat.name)
+      .map((cat: any) => ({
+        name: String(cat.name).trim(),
+        icon: String(cat.icon || '🏷️').trim() || '🏷️',
+        tags: Array.isArray(cat.tags)
+          ? cat.tags.map((t: any) => String(t || '').replace(/^#+/, '').trim()).filter(Boolean)
+          : [],
+      }))
+      .filter((c) => c.name.length > 0);
+
+    // 4. 定型文（スニペット）の抽出と整形
+    const rawSnippets = Array.isArray(data.snippets)
+      ? data.snippets
+      : Array.isArray(data.templates)
+      ? data.templates
+      : [];
+    const validSnippets: SnippetItem[] = rawSnippets
+      .filter((s: any) => s && typeof s === 'object' && (s.title || s.content))
+      .map((s: any) => ({
+        id: String(s.id || `snippet-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`),
+        title: String(s.title || '無題の定型文'),
+        content: String(s.content || ''),
+        blueskyContent: s.blueskyContent ? String(s.blueskyContent) : undefined,
+        threadsContent: s.threadsContent ? String(s.threadsContent) : undefined,
+        threadsTopic: s.threadsTopic ? String(s.threadsTopic) : undefined,
+        category: s.category || 'custom',
+        categoryName: s.categoryName ? String(s.categoryName) : undefined,
+        icon: s.icon ? String(s.icon) : '📑',
+        createdAt: Number(s.createdAt || Date.now()),
+        updatedAt: Number(s.updatedAt || Date.now()),
+        useCount: Number(s.useCount || 0),
+        isPreset: Boolean(s.isPreset),
+      }));
+
+    const totalCategoryTags = validCategories.reduce((sum, c) => sum + c.tags.length, 0);
+
+    if (
+      validHashtags.length === 0 &&
+      validTopics.length === 0 &&
+      validCategories.length === 0 &&
+      validSnippets.length === 0
+    ) {
+      return {
+        success: false,
+        customHashtags: [],
+        threadsTopics: [],
+        categories: [],
+        snippets: [],
+        error: 'ファイル内に有効なハッシュタグ、トピック、カテゴリ、または定型文データが見つかりませんでした。',
+      };
+    }
+
+    return {
+      success: true,
+      customHashtags: validHashtags,
+      threadsTopics: validTopics,
+      categories: validCategories,
+      snippets: validSnippets,
+      stats: {
+        customHashtagsCount: validHashtags.length,
+        threadsTopicsCount: validTopics.length,
+        categoriesCount: validCategories.length,
+        categoryTagsCount: totalCategoryTags,
+        snippetsCount: validSnippets.length,
+        exportedAtJst: data.exportedAtJst,
+      },
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      customHashtags: [],
+      threadsTopics: [],
+      categories: [],
+      snippets: [],
+      error: `JSONファイルの解析に失敗しました: ${err?.message || '構文エラー'}`,
+    };
+  }
+}
+
+/**
+  * 7. 読み込んだハッシュタグ・トピック・カテゴリ・定型文をブラウザストレージに適用（追加マージ または 完全上書き）
+  */
+export interface ApplyTagsAndSnippetsOptions {
+  mode: 'merge' | 'overwrite'; // 'merge': 既存データを残して追加, 'overwrite': ファイル内容で完全上書き
+}
+
+export function applyTagsAndSnippetsData(
+  data: {
+    customHashtags: string[];
+    threadsTopics: string[];
+    categories: TopicCategory[];
+    snippets: SnippetItem[];
+  },
+  options: ApplyTagsAndSnippetsOptions
+): {
+  addedHashtagsCount: number;
+  addedTopicsCount: number;
+  addedCategoriesCount: number;
+  addedSnippetsCount: number;
+} {
+  const { mode } = options;
+
+  let addedHashtagsCount = 0;
+  let addedTopicsCount = 0;
+  let addedCategoriesCount = 0;
+  let addedSnippetsCount = 0;
+
+  // 1. お気に入りハッシュタグの適用
+  if (data.customHashtags && data.customHashtags.length > 0) {
+    if (mode === 'overwrite') {
+      saveCustomTagsList(data.customHashtags);
+      addedHashtagsCount = data.customHashtags.length;
+    } else {
+      const current = getSavedCustomTags();
+      const existingSet = new Set(current.map((t) => t.toLowerCase()));
+      const toAdd = data.customHashtags.filter((t) => !existingSet.has(t.toLowerCase()));
+      if (toAdd.length > 0) {
+        saveCustomTagsList([...current, ...toAdd]);
+        addedHashtagsCount = toAdd.length;
+      }
+    }
+  }
+
+  // 2. Threads専用トピックタグの適用
+  if (data.threadsTopics && data.threadsTopics.length > 0) {
+    if (mode === 'overwrite') {
+      saveThreadsTopicsList(data.threadsTopics);
+      addedTopicsCount = data.threadsTopics.length;
+    } else {
+      const current = getSavedThreadsTopics();
+      const existingSet = new Set(current.map((t) => t.toLowerCase()));
+      const toAdd = data.threadsTopics.filter((t) => !existingSet.has(t.toLowerCase()));
+      if (toAdd.length > 0) {
+        saveThreadsTopicsList([...current, ...toAdd]);
+        addedTopicsCount = toAdd.length;
+      }
+    }
+  }
+
+  // 3. トレンド・カテゴリの適用
+  if (data.categories && data.categories.length > 0) {
+    if (mode === 'overwrite') {
+      saveCategoriesList(data.categories);
+      addedCategoriesCount = data.categories.length;
+    } else {
+      const current = getSavedCategories();
+      const currentCatMap = new Map(current.map((c) => [c.name.toLowerCase(), { ...c, tags: [...c.tags] }]));
+
+      let newCatCount = 0;
+      for (const importedCat of data.categories) {
+        const key = importedCat.name.toLowerCase();
+        if (currentCatMap.has(key)) {
+          // 既存カテゴリが存在する場合はタグをマージ
+          const existingCat = currentCatMap.get(key)!;
+          const tagSet = new Set(existingCat.tags.map((t) => t.toLowerCase()));
+          for (const t of importedCat.tags) {
+            if (!tagSet.has(t.toLowerCase())) {
+              existingCat.tags.push(t);
+              tagSet.add(t.toLowerCase());
+            }
+          }
+          if (importedCat.icon && importedCat.icon !== '🏷️' && existingCat.icon === '🏷️') {
+            existingCat.icon = importedCat.icon;
+          }
+        } else {
+          // 新規カテゴリを追加
+          currentCatMap.set(key, { ...importedCat, tags: [...importedCat.tags] });
+          newCatCount++;
+        }
+      }
+      const mergedCategories = Array.from(currentCatMap.values());
+      saveCategoriesList(mergedCategories);
+      addedCategoriesCount = newCatCount;
+    }
+  }
+
+  // 4. 定型文（スニペット）の適用
+  if (data.snippets && data.snippets.length > 0) {
+    if (mode === 'overwrite') {
+      saveSnippetsToStorage(data.snippets);
+      addedSnippetsCount = data.snippets.length;
+    } else {
+      const current = loadSnippetsFromStorage();
+      const currentTitleMap = new Set(current.map((s) => s.title.trim().toLowerCase()));
+      const currentIdMap = new Set(current.map((s) => s.id));
+
+      const toAdd: SnippetItem[] = [];
+      for (const item of data.snippets) {
+        // 重複判定（タイトルかIDが一致するか）
+        if (!currentTitleMap.has(item.title.trim().toLowerCase()) && !currentIdMap.has(item.id)) {
+          toAdd.push(item);
+          currentTitleMap.add(item.title.trim().toLowerCase());
+          currentIdMap.add(item.id);
+        }
+      }
+
+      if (toAdd.length > 0) {
+        saveSnippetsToStorage([...current, ...toAdd]);
+        addedSnippetsCount = toAdd.length;
+      }
+    }
+  }
+
+  return {
+    addedHashtagsCount,
+    addedTopicsCount,
+    addedCategoriesCount,
+    addedSnippetsCount,
+  };
 }
