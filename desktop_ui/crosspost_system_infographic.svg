@@ -193,7 +193,7 @@
     <rect x="0" y="0" width="235" height="106" rx="8" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.4"/>
     <text x="12" y="24" class="font-sans card-title" fill="#bae6fd">📘 使い方ガイド</text>
     <rect x="148" y="10" width="75" height="18" rx="9" fill="#0284c7"/>
-    <text x="156" y="22" class="font-sans card-badge">全20機能解説</text>
+    <text x="156" y="22" class="font-sans card-badge">全24機能解説</text>
     <text x="12" y="46" class="font-sans desc">• クイックスタート・投稿の流れ</text>
     <text x="12" y="66" class="font-sans desc">• 長文分割＆画像最適化仕様</text>
     <text x="12" y="86" class="font-sans desc">• FAQ ＆ 運用実用TIPS 7選</text>
