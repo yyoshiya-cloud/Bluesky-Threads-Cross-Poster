@@ -158,8 +158,8 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
     <text x="58" y="30" class="font-sans title" font-size="19">CrossPost Web Studio</text>
     <rect x="310" y="13" width="140" height="22" rx="11" fill="#0284c7"/>
     <text x="322" y="28" class="font-sans" font-size="10.5" font-weight="700" fill="#ffffff">BLUESKY &amp; THREADS</text>
-    <rect x="465" y="13" width="190" height="22" rx="11" fill="#1e293b" stroke="#38bdf8" stroke-width="1"/>
-    <text x="475" y="28" class="font-sans" font-size="10.5" font-weight="700" fill="#38bdf8">システム機能 ＆ 画面遷移図</text>
+    <rect x="465" y="13" width="85" height="22" rx="11" fill="#1e293b" stroke="#38bdf8" stroke-width="1"/>
+    <text x="477" y="28" class="font-sans" font-size="10.5" font-weight="700" fill="#38bdf8">画面説明図</text>
     <text x="1480" y="30" class="font-sans" font-size="12" font-weight="600" fill="#94a3b8">全機能詳細ガイド / 完全日本語仕様</text>
   </g>
 
@@ -176,19 +176,18 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
 
   <!-- ==================== 上部 7機能カード ＆ 正確な位置への識別矢印 ==================== -->
 
-  <!-- 【カード 1】🔑 モード切替・認証 (シアン / 実線 / ターゲット: LIVE MODE バッジ X=543, Y=263) -->
+  <!-- 【カード 1】🎛️ 連携ステータス＆操作 (シアン / 実線 / ターゲット: アカウント状態 X=543, Y=263) -->
   <g transform="translate(40, 80)" filter="url(#cardGlow)">
     <rect x="0" y="0" width="245" height="106" rx="8" fill="url(#cardGrad)" stroke="#22d3ee" stroke-width="1.4"/>
-    <text x="12" y="24" class="font-sans card-title" fill="#a5f3fc">🔑 モード切替・認証</text>
-    <rect x="155" y="10" width="78" height="18" rx="9" fill="#0891b2"/>
-    <text x="165" y="22" class="font-sans card-badge">DEMO ↔ LIVE</text>
-    <text x="12" y="46" class="font-sans desc">• DEMOモード: 擬似投稿で全機能を安全テスト</text>
-    <text x="12" y="66" class="font-sans desc">• LIVEモード: 実際のBluesky＆Threadsへ配信</text>
-    <text x="12" y="86" class="font-sans desc">• ヘッダーのMODEバッジから即時切り替え</text>
+    <text x="12" y="24" class="font-sans card-title" fill="#a5f3fc">🎛️ 連携ステータス＆操作</text>
+    <rect x="165" y="10" width="68" height="18" rx="9" fill="#0891b2"/>
+    <text x="175" y="22" class="font-sans card-badge">接続管理</text>
+    <text x="12" y="46" class="font-sans desc">• Bluesky＆Threadsの接続状態を表示</text>
+    <text x="12" y="66" class="font-sans desc">• クリックで詳細ポップアップ＆アカウント管理</text>
+    <text x="12" y="86" class="font-sans desc">• 上部メニューから各管理機能へ素早く遷移</text>
   </g>
   <!-- 矢印1: シアン実線 -->
   <path d="M 162 186 L 162 210 L 543 210 L 543 260" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowCyan)"/>
-  <circle cx="543" cy="263" r="5" fill="#22d3ee" stroke="#0891b2" stroke-width="1.5"/>
 
   <!-- 【カード 2】📊 分析・データ管理 (アンバー / 一点鎖線 6,3 / ターゲット: 分析ボタン X=1056, Y=263) -->
   <g transform="translate(305, 80)" filter="url(#cardGlow)">
@@ -202,7 +201,6 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
   </g>
   <!-- 矢印2: アンバー破線 -->
   <path d="M 422 186 L 422 220 L 1056 220 L 1056 260" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrowAmber)"/>
-  <circle cx="1056" cy="263" r="5" fill="#fbbf24" stroke="#d97706" stroke-width="1.5"/>
 
   <!-- 【カード 3】📘 使い方 ＆ 機能ガイド (スカイ / 実線 / ターゲット: 使い方ボタン X=1123, Y=263) -->
   <g transform="translate(560, 80)" filter="url(#cardGlow)">
@@ -216,7 +214,6 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
   </g>
   <!-- 矢印3: スカイ実線 -->
   <path d="M 677 186 L 677 230 L 1123 230 L 1123 260" fill="none" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrowSky)"/>
-  <circle cx="1123" cy="263" r="5" fill="#38bdf8" stroke="#0284c7" stroke-width="1.5"/>
 
   <!-- 【カード 4】📅 予約投稿カレンダー (インディゴ / 破線 4,4 / ターゲット: 予約カレンダーボタン X=1193, Y=263) -->
   <g transform="translate(815, 80)" filter="url(#cardGlow)">
@@ -230,7 +227,6 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
   </g>
   <!-- 矢印4: インディゴ破線 -->
   <path d="M 932 186 L 932 240 L 1193 240 L 1193 260" fill="none" stroke="#818cf8" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrowIndigo)"/>
-  <circle cx="1193" cy="263" r="5" fill="#818cf8" stroke="#4f46e5" stroke-width="1.5"/>
 
   <!-- 【カード 5】📜 投稿履歴 ＆ リポスト (パープル / 点線 3,3 / ターゲット: 履歴ボタン X=1260, Y=263) -->
   <g transform="translate(1070, 80)" filter="url(#cardGlow)">
@@ -244,7 +240,6 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
   </g>
   <!-- 矢印5: パープル点線 -->
   <path d="M 1187 186 L 1187 220 L 1260 220 L 1260 260" fill="none" stroke="#c084fc" stroke-width="2.2" stroke-dasharray="3,3" marker-end="url(#arrowPurple)"/>
-  <circle cx="1260" cy="263" r="5" fill="#c084fc" stroke="#7e22ce" stroke-width="1.5"/>
 
   <!-- 【カード 6】⚙️ アカウント・API設定 (ブルー / 実線 / ターゲット: 設定ボタン X=1362, Y=263) -->
   <g transform="translate(1325, 80)" filter="url(#cardGlow)">
@@ -258,7 +253,6 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
   </g>
   <!-- 矢印6: ブルー実線 -->
   <path d="M 1447 186 L 1447 230 L 1362 230 L 1362 260" fill="none" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrowBlue)"/>
-  <circle cx="1362" cy="263" r="5" fill="#60a5fa" stroke="#1d4ed8" stroke-width="1.5"/>
 
   <!-- 【カード 7】📁 サーバー登録情報 (エメラルド / 破線 5,3 / ターゲット: サーバー登録情報ボタン X=1433, Y=263) -->
   <g transform="translate(1590, 80)" filter="url(#cardGlow)">
@@ -272,12 +266,11 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
   </g>
   <!-- 矢印7: エメラルド破線 -->
   <path d="M 1735 186 L 1735 215 L 1433 215 L 1433 260" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrowEmerald)"/>
-  <circle cx="1433" cy="263" r="5" fill="#34d399" stroke="#047857" stroke-width="1.5"/>
 
   <!-- ==================== 左側 2機能カード ＆ 識別矢印 ==================== -->
 
-  <!-- 【カード 8】✨ AIアシスト ＆ タグ提案 (イエロー枠の位置 Y=235 に移動 / 白丸削除・クリーン直線 / ターゲット: AIアシストボタン X=485, Y=347) -->
-  <g transform="translate(30, 235)" filter="url(#cardGlow)">
+  <!-- 【カード 8】✨ AIアシスト ＆ タグ提案 (黄色枠の指定位置 Y=505 に移動 / ターゲット: ハッシュタグ・タグ提案エリア X=565, Y=588) -->
+  <g transform="translate(30, 505)" filter="url(#cardGlow)">
     <rect x="0" y="0" width="275" height="155" rx="8" fill="url(#cardGrad)" stroke="#facc15" stroke-width="1.4"/>
     <text x="14" y="24" class="font-sans card-title" fill="#fef08a">✨ AIアシスト ＆ タグ提案</text>
     <rect x="188" y="10" width="75" height="18" rx="9" fill="#ca8a04"/>
@@ -287,11 +280,11 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
     <text x="14" y="96" class="font-sans desc">• 本文からのハッシュタグ推論候補</text>
     <text x="14" y="118" class="font-sans desc">• Threads専用トピックタグ付与</text>
   </g>
-  <!-- 矢印8: イエロー直線 (白丸削除 / カード右端からAIアシストボタンへ一本のクリーンな直線を延伸) -->
-  <line x1="305" y1="347" x2="485" y2="347" stroke="#facc15" stroke-width="2.2" marker-end="url(#arrowYellow)"/>
+  <!-- 矢印8: イエロー直線 (カード右端からハッシュタグ提案エリアへ水平に直結) -->
+  <line x1="305" y1="588" x2="565" y2="588" stroke="#facc15" stroke-width="2.2" marker-end="url(#arrowYellow)"/>
 
-  <!-- 【カード 9】🚀 同時マルチ投稿 (位置 Y=480 / 添付図の手描き水色線の通り下回りルートで再配線) -->
-  <g transform="translate(30, 480)" filter="url(#cardGlow)">
+  <!-- 【カード 9】🚀 同時マルチ投稿 (青色枠の指定位置 Y=765 に移動 / ターゲット: 同時投稿タブ X=570, Y=850) -->
+  <g transform="translate(30, 765)" filter="url(#cardGlow)">
     <rect x="0" y="0" width="275" height="170" rx="8" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.6"/>
     <text x="14" y="24" class="font-sans card-title" fill="#bae6fd">🚀 同時マルチ投稿</text>
     <rect x="184" y="10" width="79" height="18" rx="9" fill="#0284c7"/>
@@ -302,8 +295,8 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
     <text x="14" y="113" class="font-sans desc">• 画像＆動画最大20件添付＆Altテキスト</text>
     <text x="14" y="134" class="font-sans desc">• 自動下書き保存（リロード時復元）</text>
   </g>
-  <!-- 矢印9: スカイ太実線 (添付図の通りカード下辺から垂直に降り、下部から水平に「⚡ 同時投稿」タブへ直結) -->
-  <path d="M 190 650 L 190 918 L 512 918" fill="none" stroke="#38bdf8" stroke-width="2.4" marker-end="url(#arrowSky)"/>
+  <!-- 矢印9: スカイ直線 (カード右端から「⚡ 同時投稿」タブへ水平に直結) -->
+  <line x1="305" y1="850" x2="570" y2="850" stroke="#38bdf8" stroke-width="2.4" marker-end="url(#arrowSky)"/>
 
   <!-- ==================== 右側 2機能カード ＆ 識別矢印 ==================== -->
 
@@ -319,8 +312,7 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
     <text x="14" y="118" class="font-sans desc">• 文字サイズ切替・仕様比較モード</text>
   </g>
   <!-- 矢印10: フューシャ破線 (プレビュー上部の公式UIスキンボタンへ正確に接続) -->
-  <path d="M 1615 435 L 1400 435 L 1400 298 L 1338 298" fill="none" stroke="#e879f9" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrowFuchsia)"/>
-  <circle cx="1330" cy="298" r="5" fill="#e879f9" stroke="#a21caf" stroke-width="1.5"/>
+  <path d="M 1615 435 L 1400 435 L 1400 298 L 1330 298" fill="none" stroke="#e879f9" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrowFuchsia)"/>
 
   <!-- 【カード 11】ℹ️ アプリ情報 ＆ 終了確認 (ローズ / 破線 4,3 / ターゲット: アプリ情報・終了ボタン X=1545, Y=263) -->
   <g transform="translate(1615, 580)" filter="url(#cardGlow)">
@@ -334,8 +326,7 @@ const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
     <text x="14" y="118" class="font-sans desc">• 次回起動時の状態完全復元</text>
   </g>
   <!-- 矢印11: ローズ破線 (ヘッダー右端のアプリ情報＆終了ボタンへ正確に接続) -->
-  <path d="M 1615 655 L 1545 655 L 1545 270" fill="none" stroke="#f43f5e" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrowRose)"/>
-  <circle cx="1545" cy="263" r="5" fill="#f43f5e" stroke="#be123c" stroke-width="1.5"/>
+  <path d="M 1615 655 L 1545 655 L 1545 263" fill="none" stroke="#f43f5e" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrowRose)"/>
 
   <!-- 最下部フッターテキスト -->
   <text x="560" y="1042" class="font-sans" font-size="12" fill="#475569">

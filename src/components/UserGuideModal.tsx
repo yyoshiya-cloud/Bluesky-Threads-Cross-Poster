@@ -86,16 +86,16 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
   const features: FeatureSection[] = [
     {
       id: 'feature-mode',
-      title: '🎯 DEMOモード ＆ LIVEモード即時切替・安全テスト',
+      title: '🎛️ ヘッダーナビゲーション ＆ アカウント接続ステータス管理',
       category: 'account',
       icon: Sliders,
-      summary: 'API接続なしですべての編集・分割・プレビュー機能を試せる「DEMOモード」と、実際のBluesky・Threadsへ即時配信する「LIVEモード」をヘッダーのバッジからワンクリックで切り替えられます。',
+      summary: 'ヘッダー上部からBluesky・Threadsの連携状況を常時把握でき、アカウント詳細確認や各種管理メニュー（分析、使い方、予約カレンダー、履歴、設定）へ即座にアクセスできます。',
       details: [
-        '【初期DEMOモード】APIキーやパスワードを入力することなく、文字数計算、画像添付、AIアシスト、リアルタイムプレビュー、予約カレンダーなどの全機能を安全にテスト可能。',
-        '【ワンクリック切替】ヘッダー左上の「DEMO / LIVE」バッジをクリックするだけで、即座にモードを切り替え可能。',
-        '【LIVE未設定ガード】LIVEモード時にアカウントが未連携の場合は、誤送信を防ぐため自動的に設定ダイアログが案内されます。',
+        '【常時可視化ステータス】ヘッダー上部のアカウントピルでBluesky（🦋）とThreads（🌀）の接続状態（接続中/未連携）をリアルタイムに確認可能。',
+        '【詳細ポップアップ＆クイック操作】ステータスピルをクリックすると連携アカウント詳細が展開し、個別/一括ログアウトや保存済みアカウントの再ログインを素早く実行。',
+        '【ワンクリック・機能ナビゲーション】「📊 分析・データ」「📘 使い方」「📅 予約カレンダー」「📜 履歴」「⚙️ 設定」「🚪 終了」の上部メニューボタンから各ツールへ瞬時にアクセス。',
       ],
-      tips: '初めてお使いになる際や新しい投稿のレイアウト実験を行いたい時は、DEMOモードで気兼ねなくお試しいただけます。',
+      tips: 'ヘッダー上のメニューボタン群を活用することで、エディタで文章を作成しながらいつでも過去の投稿履歴や予約カレンダー、分析データを素早く確認できます。',
     },
     {
       id: 'feature-security',
@@ -773,7 +773,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
-              <span>🗺️ 機能・画面遷移図</span>
+              <span>🗺️ 画面説明図</span>
               <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
                 図解
               </span>
@@ -1034,20 +1034,20 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                 </div>
               )}
 
-              {/* TAB: 機能・画面遷移図（インフォグラフィック） */}
+              {/* TAB: 画面説明図（インフォグラフィック） */}
               {activeTab === 'diagram' && (
                 <div className="space-y-4 animate-in fade-in duration-150">
                   <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
                       <div>
                         <h3 className="text-base font-bold text-white flex items-center gap-2">
-                          🗺️ アプリ機能構成 ＆ 画面遷移図（日本語版）
+                          🗺️ 画面説明図（日本語版）
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
                             完全日本語・フルHDベクター
                           </span>
                         </h3>
                         <p className="text-xs text-slate-400 mt-1">
-                          メイン投稿エディタ画面を中心に、各機能モーダルへの遷移・連携フローをすべて日本語で可視化したシステム図です。
+                          メイン投稿エディタ画面を中心に、各機能モーダルへの遷移・連携フローをすべて日本語で可視化した画面説明図です。
                         </p>
                       </div>
 
@@ -1072,7 +1072,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
                     >
                       <img
                         src="/crosspost_system_infographic.svg"
-                        alt="CrossPost Web Studio 機能図・画面遷移図"
+                        alt="CrossPost Web Studio 画面説明図"
                         className="w-full h-auto object-contain block hover:brightness-105 transition duration-200"
                       />
                       <div className="absolute bottom-3 right-3 pointer-events-none opacity-0 group-hover:opacity-100 transition duration-200 bg-slate-950/80 backdrop-blur-xs px-2.5 py-1 rounded-md text-[11px] text-slate-300 border border-slate-700">
@@ -1093,10 +1093,10 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
 
                       <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
                         <span className="font-bold text-sky-400 flex items-center gap-1.5">
-                          🔑 動作モード制御（上部）
+                          🎛️ ヘッダーナビゲーション＆連携ステータス（上部）
                         </span>
                         <p className="text-slate-400 leading-relaxed text-[11px]">
-                          ヘッダーの「MODE」バッジをクリックするとモード切替ダイアログが開き、DEMOモード（テスト投稿）とLIVEモード（本番投稿）を安全に切り替えることができます。
+                          ヘッダー上部から各SNS（Bluesky / Threads）の接続ステータス確認、分析・データ管理、使い方ガイド、予約カレンダー、投稿履歴、設定モーダルをワンクリックで素早く呼び出せます。
                         </p>
                       </div>
 
@@ -1432,32 +1432,6 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({
               )}
             </>
           )}
-        </div>
-
-        {/* フッター */}
-        <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {onOpenSettings && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenSettings();
-                }}
-                className="text-xs text-accent-light hover:underline font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <span>⚙️ アカウント設定を開く</span>
-              </button>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl btn-accent text-white text-xs font-bold transition cursor-pointer shadow-sm"
-          >
-            閉じる
-          </button>
         </div>
       </div>
     </div>

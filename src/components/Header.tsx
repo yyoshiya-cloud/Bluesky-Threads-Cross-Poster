@@ -1,11 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ApiCredentials, ThemeAccentId } from '../types';
 import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3, Info, Database, ShieldAlert, KeyRound, Lock, Unlock } from 'lucide-react';
 import { hasSavedAccountInVault } from '../utils/accountVault';
 import { calculateTokenExpiryInfo } from '../utils/tokenExpiry';
 import { ThemeSelector } from './ThemeSelector';
 import { getModeSecurityConfig } from '../utils/modeSecurity';
-import { getAppVersion } from '../utils/adminConfig';
+import { getAppVersion, getModeSwitchClickCount } from '../utils/adminConfig';
 
 interface HeaderProps {
   credentials: ApiCredentials;
@@ -89,13 +89,32 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  // タイトルの場所を左クリック3回検知
+  const [requiredClickCount, setRequiredClickCount] = useState<number>(() => getModeSwitchClickCount());
+
+  useEffect(() => {
+    const handleCountChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ count: number }>;
+      if (customEvent.detail?.count) {
+        setRequiredClickCount(customEvent.detail.count);
+      } else {
+        setRequiredClickCount(getModeSwitchClickCount());
+      }
+    };
+    window.addEventListener('crosspost_mode_click_count_changed', handleCountChange);
+    return () => {
+      window.removeEventListener('crosspost_mode_click_count_changed', handleCountChange);
+    };
+  }, []);
+
+  // タイトルの場所を左クリック指定回数検知（管理者設定値、初期値: 3回）
   const handleTitleClick = (e: React.MouseEvent) => {
     // 左クリック（e.button === 0）のみを検知（undefinedも許容）
     if (e.button !== 0 && e.button !== undefined) return;
 
-    // ブラウザ標準のトリプルクリック（e.detail >= 3）を即座に検知
-    if (e.detail && e.detail >= 3) {
+    const targetClicks = requiredClickCount || 3;
+
+    // ブラウザ標準の連続クリック（e.detail >= targetClicks）を即座に検知
+    if (e.detail && e.detail >= targetClicks) {
       titleClickCountRef.current = 0;
       if (titleClickTimerRef.current) {
         clearTimeout(titleClickTimerRef.current);
@@ -105,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({
       return;
     }
 
-    // 手動タイマーによる3回クリックカウント
+    // 手動タイマーによる指定回数クリックカウント
     titleClickCountRef.current += 1;
     const count = titleClickCountRef.current;
 
@@ -113,16 +132,17 @@ export const Header: React.FC<HeaderProps> = ({
       clearTimeout(titleClickTimerRef.current);
     }
 
-    if (count >= 3) {
+    if (count >= targetClicks) {
       titleClickCountRef.current = 0;
       titleClickTimerRef.current = null;
       triggerModeSwitch();
     } else {
-      // 3.5秒以内に3回クリックすれば判定
+      // クリック間隔猶予（回数に応じて3.5秒〜十分な時間を確保）
+      const timeoutMs = Math.max(3500, targetClicks * 1200);
       titleClickTimerRef.current = setTimeout(() => {
         titleClickCountRef.current = 0;
         titleClickTimerRef.current = null;
-      }, 3500);
+      }, timeoutMs);
     }
   };
 

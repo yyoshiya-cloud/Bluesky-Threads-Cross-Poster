@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CrossPost Web Studio - アプリ機能構成 ＆ 画面遷移図（全画面表示）</title>
+  <title>CrossPost Web Studio - 画面説明図（全画面表示）</title>
   <style>
     * {
       box-sizing: border-box;
@@ -160,7 +160,7 @@
   <div class="main-container">
     <div class="notice-bar">
       <div>
-        <span>📌 <strong>完全日本語版 システム機能構成 ＆ 画面遷移図</strong>: 中央のメイン投稿エディタ画面に<strong>ご提供いただいた添付画像原画を最初からそのまま直接埋め込み</strong>しています。</span>
+        <span>📌 <strong>完全日本語版 画面説明図</strong>: 中央のメイン投稿エディタ画面に<strong>ご提供いただいた添付画像原画を最初からそのまま直接埋め込み</strong>しています。</span>
       </div>
       <div class="hint">
         ※ 「PNG画像として保存」を押すと1920×1080の高解像度PNGファイルが保存されます
@@ -168,7 +168,7 @@
     </div>
 
     <div class="diagram-wrapper">
-      <img id="diagramImage" src="/crosspost_system_infographic.svg" alt="CrossPost Web Studio 機能図・画面遷移図" class="diagram-img" />
+      <img id="diagramImage" src="/crosspost_system_infographic.svg" alt="CrossPost Web Studio 画面説明図" class="diagram-img" />
     </div>
   </div>
 
@@ -187,7 +187,7 @@
         ctx.drawImage(tempImg, 0, 0, 1920, 1080);
         const pngUrl = canvas.toDataURL('image/png', 1.0);
         const a = document.createElement('a');
-        a.download = 'CrossPost_システム機能図_画面遷移図.png';
+        a.download = 'CrossPost_画面説明図.png';
         a.href = pngUrl;
         document.body.appendChild(a);
         a.click();

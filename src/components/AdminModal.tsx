@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, ShieldAlert, KeyRound, RefreshCw, Tag, X, Check, Lock, Unlock, AlertTriangle, Sparkles } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, KeyRound, RefreshCw, Tag, X, Check, Lock, Unlock, AlertTriangle, Sparkles, MousePointer, Sliders } from 'lucide-react';
 import {
   verifyAdminPassword,
   setAdminPassword,
   getAppVersion,
   setAppVersion,
   resetAccountConnections,
+  getModeSwitchClickCount,
+  setModeSwitchClickCount,
 } from '../utils/adminConfig';
 
 interface AdminModalProps {
@@ -40,6 +42,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [versionInput, setVersionInput] = useState('');
   const [versionMessage, setVersionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // モード切替クリック回数設定用
+  const [clickCountInput, setClickCountInput] = useState<number>(3);
+  const [clickCountMessage, setClickCountMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   // 初期化二重確認用
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetMessage, setResetMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -53,6 +59,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setPasswordMessage(null);
       setVersionInput(getAppVersion());
       setVersionMessage(null);
+      setClickCountInput(getModeSwitchClickCount());
+      setClickCountMessage(null);
       setShowResetConfirm(false);
       setResetMessage(null);
     }
@@ -120,6 +128,25 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       }
     } else {
       setVersionMessage({ type: 'error', text: 'バージョンの更新に失敗しました。' });
+    }
+  };
+
+  // モード切替クリック回数更新処理
+  const handleUpdateClickCount = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setClickCountMessage(null);
+
+    const val = Number(clickCountInput);
+    if (isNaN(val) || val < 1 || val > 20) {
+      setClickCountMessage({ type: 'error', text: '1〜20の範囲で回数を指定してください。' });
+      return;
+    }
+
+    const success = setModeSwitchClickCount(val);
+    if (success) {
+      setClickCountMessage({ type: 'success', text: `DEMO/LIVE切替の左クリック回数を「${val}回」に設定しました。` });
+    } else {
+      setClickCountMessage({ type: 'error', text: 'クリック回数の設定に失敗しました。' });
     }
   };
 
@@ -296,7 +323,76 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 )}
               </div>
 
-              {/* 2. 初期化設定（LIVEモードのアカウント接続情報の初期化） */}
+              {/* 2. モード切替の左クリック回数設定（DEMO ↔ LIVE） */}
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                    <MousePointer className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>モード切替の左クリック回数設定 (DEMO ↔ LIVE)</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/60">
+                    現在: {getModeSwitchClickCount()}回
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  ヘッダー左上のロゴ・タイトルを連続左クリックしてDEMO/LIVEモード切替（認証ダイアログ）を開く際の必要クリック回数を設定します。
+                </p>
+
+                <form onSubmit={handleUpdateClickCount} className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[1, 2, 3, 4, 5, 7, 10].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => {
+                          setClickCountInput(num);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                          Number(clickCountInput) === num
+                            ? 'bg-cyan-600 text-white border-cyan-400 shadow-sm'
+                            : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+                        }`}
+                      >
+                        {num}回{num === 3 ? ' (初期値)' : ''}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1">
+                      <span className="text-xs text-slate-400">指定回数:</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={clickCountInput}
+                        onChange={(e) => setClickCountInput(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))}
+                        className="w-14 bg-transparent text-xs text-cyan-300 font-bold text-center focus:outline-none font-mono"
+                      />
+                      <span className="text-xs text-slate-400">回</span>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition cursor-pointer shrink-0 shadow-sm"
+                    >
+                      設定を保存
+                    </button>
+                  </div>
+
+                  {clickCountMessage && (
+                    <p className={`text-[11px] flex items-center gap-1 ${
+                      clickCountMessage.type === 'success' ? 'text-emerald-400' : 'text-rose-400'
+                    }`}>
+                      {clickCountMessage.type === 'success' ? <Check className="w-3 h-3 shrink-0" /> : <AlertTriangle className="w-3 h-3 shrink-0" />}
+                      <span>{clickCountMessage.text}</span>
+                    </p>
+                  )}
+                </form>
+              </div>
+
+              {/* 3. 初期化設定（LIVEモードのアカウント接続情報の初期化） */}
               <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">

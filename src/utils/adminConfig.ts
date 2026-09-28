@@ -3,7 +3,43 @@ import { deleteFromVault } from './accountVault';
 
 const ADMIN_PASSWORD_KEY = 'crosspost_admin_password';
 const CUSTOM_APP_VERSION_KEY = 'crosspost_app_version';
+const MODE_SWITCH_CLICK_COUNT_KEY = 'crosspost_mode_switch_click_count';
 const DEFAULT_ADMIN_PASSWORD = 'admin';
+const DEFAULT_MODE_SWITCH_CLICK_COUNT = 3;
+
+/**
+ * DEMO/LIVEモード切替に必要な左クリック回数を取得（初期値: 3回）
+ */
+export function getModeSwitchClickCount(): number {
+  try {
+    const saved = localStorage.getItem(MODE_SWITCH_CLICK_COUNT_KEY);
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= 20) {
+        return parsed;
+      }
+    }
+    return DEFAULT_MODE_SWITCH_CLICK_COUNT;
+  } catch {
+    return DEFAULT_MODE_SWITCH_CLICK_COUNT;
+  }
+}
+
+/**
+ * DEMO/LIVEモード切替に必要な左クリック回数を設定・保存
+ */
+export function setModeSwitchClickCount(count: number): boolean {
+  try {
+    const validCount = Math.max(1, Math.min(20, Math.floor(count)));
+    localStorage.setItem(MODE_SWITCH_CLICK_COUNT_KEY, validCount.toString());
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('crosspost_mode_click_count_changed', { detail: { count: validCount } }));
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * 現在設定されている管理者パスワードを取得（初期値: "admin"）
