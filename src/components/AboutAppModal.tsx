@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, ExternalLink, Sparkles, Send, MessageSquareQuote, Image as ImageIcon, CalendarClock, Eye, BarChart2 } from 'lucide-react';
 import { APP_NAME, formatAppBuildDate } from '../config/appInfo';
-import { getAppVersion } from '../utils/adminConfig';
+import { getAppVersion, syncVersionWithServer } from '../utils/adminConfig';
 
 interface AboutAppModalProps {
   isOpen: boolean;
@@ -12,9 +12,22 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  // Escapeキーで閉じる
+  const [currentVersion, setCurrentVersion] = useState<string>(getAppVersion());
+
+  // 最新バージョン同期 ＆ Escapeキーで閉じる
   useEffect(() => {
     if (!isOpen) return;
+
+    syncVersionWithServer().then((v) => setCurrentVersion(v));
+
+    const handleVersionChanged = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.version) {
+        setCurrentVersion(customEvent.detail.version);
+      }
+    };
+
+    window.addEventListener('crosspost_version_changed', handleVersionChanged);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -24,7 +37,10 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('crosspost_version_changed', handleVersionChanged);
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -33,7 +49,6 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
     <div
       id="about-app-modal-overlay"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
-      onClick={onClose}
     >
       <div
         id="about-app-modal"
@@ -64,7 +79,7 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
                   {APP_NAME}
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30">
-                  Version {getAppVersion()}
+                  Version {currentVersion}
                 </span>
                 <span
                   className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-700/60"

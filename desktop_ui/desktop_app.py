@@ -1171,7 +1171,16 @@ class DesktopAppApi:
         os._exit(0)
 
     def get_app_info(self):
-        return {"name": APP_NAME, "version": "1.0.0", "platform": sys.platform}
+        pkg_path = os.path.join(BASE_DIR, "..", "package.json")
+        version = "1.0.5"
+        if os.path.exists(pkg_path):
+            try:
+                with open(pkg_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    version = data.get("version", version)
+            except Exception:
+                pass
+        return {"name": APP_NAME, "version": version, "platform": sys.platform}
 
 
 # -------------------------------------------------------------

@@ -1,10 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, ShieldAlert, KeyRound, RefreshCw, Tag, X, Check, Lock, Unlock, AlertTriangle, Sparkles, MousePointer, Sliders } from 'lucide-react';
+import {
+  ShieldCheck,
+  ShieldAlert,
+  KeyRound,
+  RefreshCw,
+  Tag,
+  X,
+  Check,
+  Lock,
+  Unlock,
+  AlertTriangle,
+  Sparkles,
+  MousePointer,
+  Sliders,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 import {
   verifyAdminPassword,
   setAdminPassword,
   getAppVersion,
   setAppVersion,
+  updatePackageJsonVersion,
+  syncVersionWithServer,
   resetAccountConnections,
   getModeSwitchClickCount,
   setModeSwitchClickCount,
@@ -32,13 +50,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   // ログインフォーム用
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   // パスワード変更用
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // バージョン変更用
+  const [currentVersion, setCurrentVersion] = useState<string>(getAppVersion());
   const [versionInput, setVersionInput] = useState('');
   const [versionMessage, setVersionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -54,39 +76,50 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     if (isOpen) {
       setPasswordInput('');
       setLoginError('');
+      setShowLoginPassword(false);
       setNewPassword('');
       setConfirmPassword('');
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
       setPasswordMessage(null);
-      setVersionInput(getAppVersion());
+      const v = getAppVersion();
+      setCurrentVersion(v);
+      setVersionInput(v);
       setVersionMessage(null);
       setClickCountInput(getModeSwitchClickCount());
       setClickCountMessage(null);
       setShowResetConfirm(false);
       setResetMessage(null);
+
+      syncVersionWithServer().then((v) => {
+        setCurrentVersion(v);
+        setVersionInput(v);
+      });
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // 管理者モード起動処理
-  const handleLogin = (e: React.FormEvent) => {
+  // 管理者モード起動処理 (サーバー側検証)
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordInput) {
       setLoginError('パスワードを入力してください。');
       return;
     }
 
-    if (verifyAdminPassword(passwordInput)) {
+    const isValid = await verifyAdminPassword(passwordInput);
+    if (isValid) {
       setLoginError('');
       setPasswordInput('');
       onActivateAdminMode();
     } else {
-      setLoginError('管理者パスワードが正しくありません。（初期値: admin）');
+      setLoginError('管理者パスワードが正しくありません。');
     }
   };
 
-  // パスワード変更処理
-  const handleChangePassword = (e: React.FormEvent) => {
+  // パスワード変更処理 (サーバー側ハッシュ更新)
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordMessage(null);
 
@@ -100,34 +133,36 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       return;
     }
 
-    const success = setAdminPassword(newPassword.trim());
+    const success = await setAdminPassword(newPassword.trim());
     if (success) {
-      setPasswordMessage({ type: 'success', text: '管理者パスワードを変更しました。次回より新しいパスワードを使用してください。' });
+      setPasswordMessage({ type: 'success', text: 'サーバー側の管理者パスワードを変更しました。次回より新しいパスワードを使用してください。' });
       setNewPassword('');
       setConfirmPassword('');
     } else {
-      setPasswordMessage({ type: 'error', text: 'パスワードの変更に失敗しました。' });
+      setPasswordMessage({ type: 'error', text: 'パスワードの変更に失敗しました（管理者認証トークンを確認してください）。' });
     }
   };
 
-  // バージョン更新処理
-  const handleUpdateVersion = (e: React.FormEvent) => {
+  // バージョン更新処理 (package.jsonを直接書き換え)
+  const handleUpdateVersion = async (e: React.FormEvent) => {
     e.preventDefault();
     setVersionMessage(null);
 
-    if (!versionInput.trim()) {
+    const trimmed = versionInput.trim();
+    if (!trimmed) {
       setVersionMessage({ type: 'error', text: 'バージョン番号を入力してください。' });
       return;
     }
 
-    const success = setAppVersion(versionInput.trim());
-    if (success) {
-      setVersionMessage({ type: 'success', text: `アプリバージョンを "Ver ${versionInput.trim()}" に更新しました。` });
+    const res = await updatePackageJsonVersion(trimmed);
+    if (res.success) {
+      setCurrentVersion(trimmed);
+      setVersionMessage({ type: 'success', text: `package.json の Version を "Ver ${trimmed}" に書き換え保存しました。` });
       if (onVersionChanged) {
-        onVersionChanged(versionInput.trim());
+        onVersionChanged(trimmed);
       }
     } else {
-      setVersionMessage({ type: 'error', text: 'バージョンの更新に失敗しました。' });
+      setVersionMessage({ type: 'error', text: res.error || 'package.json の書き換えに失敗しました。' });
     }
   };
 
@@ -168,17 +203,35 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   return (
     <div
       id="admin-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 select-none"
       onClick={(e) => {
-        // ウインドウ外・背景領域をクリックしても閉じたり画面遷移させない
-        e.stopPropagation();
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+      onContextMenu={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
       }}
     >
       <div
         id="admin-modal"
         role="dialog"
         aria-modal="true"
-        className="relative w-full max-w-xl bg-slate-900 border border-amber-500/30 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden animate-in zoom-in-95 duration-150 text-slate-200"
+        className={`relative w-full max-w-xl sm:max-w-2xl flex flex-col bg-slate-900 border border-amber-500/30 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden animate-in zoom-in-95 duration-150 text-slate-200 ${
+          isAdminMode
+            ? 'h-[95vh] max-h-[98vh] min-h-[580px] sm:min-h-[660px]'
+            : 'max-h-[92vh] sm:max-h-[94vh]'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* 上部グラデーションデコレーション */}
@@ -208,28 +261,25 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               <p className="text-[11px] text-slate-400 truncate sm:whitespace-normal">
                 {isAdminMode
                   ? 'システム管理者専用設定パネル（投稿・ヘッダー操作はロック中）'
-                  : '管理者モードを起動するにはパスワードを入力してください（初期値: admin）'}
+                  : '管理者モードを起動するには管理者パスワードを入力してください'}
               </p>
             </div>
           </div>
         </div>
 
         {/* モーダルコンテンツ */}
-        <div className="p-3.5 sm:p-4 space-y-3 max-h-[82vh] overflow-y-auto">
+        <div className="p-3.5 sm:p-4 space-y-3 flex-1 overflow-y-auto">
           {!isAdminMode ? (
             /* 未認証時: 管理者ログインフォーム */
             <form onSubmit={handleLogin} className="space-y-3">
               <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 text-amber-300 text-[11px] space-y-1.5">
                 <div className="flex items-center gap-2 font-bold text-amber-200">
                   <KeyRound className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>管理者認証</span>
+                  <span>管理者認証（サーバー検証）</span>
                 </div>
                 <p className="text-amber-300/90 leading-normal">
                   管理者モードを起動すると、投稿操作およびヘッダーボタンの押下がロックされ、システム管理設定（アカウント接続初期化、パスワード変更、アプリバージョン変更）が利用可能になります。
                 </p>
-                <div className="text-[10.5px] text-amber-400/80 bg-amber-950/40 p-1.5 rounded-lg font-mono">
-                  ※ 初期パスワード: <strong className="text-amber-200">admin</strong>
-                </div>
               </div>
 
               <div className="space-y-1">
@@ -241,13 +291,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     <Lock className="w-3.5 h-3.5" />
                   </div>
                   <input
-                    type="password"
+                    type={showLoginPassword ? 'text' : 'password'}
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="パスワードを入力 (初期値: admin)"
+                    placeholder="管理者パスワードを入力"
                     autoFocus
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-10 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                    title={showLoginPassword ? 'パスワードを非表示' : 'パスワードを表示'}
+                    aria-label={showLoginPassword ? 'パスワードを非表示' : 'パスワードを表示'}
+                  >
+                    {showLoginPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
                 </div>
                 {loginError && (
                   <p className="text-[11px] text-rose-400 flex items-center gap-1 font-medium pt-0.5">
@@ -294,7 +353,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     <span>アプリバージョンの変更</span>
                   </div>
                   <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                    現在: Ver {getAppVersion()}
+                    現在: Ver {currentVersion}
                   </span>
                 </div>
 
@@ -457,7 +516,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 )}
               </div>
 
-              {/* 3. 管理者パスワード変更 */}
+              {/* 4. 管理者パスワード変更 */}
               <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200 border-b border-slate-800/80 pb-1.5">
                   <KeyRound className="w-3.5 h-3.5 text-amber-400" />
@@ -466,20 +525,43 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                 <form onSubmit={handleChangePassword} className="space-y-2">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <input
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="新しいパスワード"
-                      className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
-                    />
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="パスワードの再入力"
-                      className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="新しいパスワード"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword((prev) => !prev)}
+                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                        title={showNewPassword ? 'パスワードを非表示' : 'パスワードを表示'}
+                        aria-label={showNewPassword ? 'パスワードを非表示' : 'パスワードを表示'}
+                      >
+                        {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="パスワードの再入力"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((prev) => !prev)}
+                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                        title={showConfirmPassword ? 'パスワードを非表示' : 'パスワードを表示'}
+                        aria-label={showConfirmPassword ? 'パスワードを非表示' : 'パスワードを表示'}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between pt-0.5">
@@ -505,10 +587,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </form>
               </div>
 
-              {/* 4. 管理者モード終了 */}
-              <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
-                <span className="text-[11px] text-slate-400">
-                  通常モードに戻すとボタン押下ロックが解除されます。
+              {/* 5. 管理者モード終了 */}
+              <div className="pt-2.5 pb-1 border-t border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 bg-slate-950/40 -mx-1 px-3 py-2 rounded-xl">
+                <span className="text-[11px] text-slate-400 leading-tight">
+                  通常モードに戻すと投稿・ヘッダーボタンの押下ロックが解除されます。
                 </span>
                 <button
                   type="button"
@@ -516,7 +598,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     onDeactivateAdminMode();
                     onClose();
                   }}
-                  className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition cursor-pointer border border-slate-700 flex items-center gap-1.5 shrink-0 shadow-sm"
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition cursor-pointer border border-slate-700 flex items-center gap-1.5 shrink-0 shadow-md hover:border-slate-600 active:scale-95"
                 >
                   <Unlock className="w-3.5 h-3.5 text-emerald-400" />
                   <span>管理者モード終了</span>

@@ -27,6 +27,7 @@ import {
 import { SavedAccountVault, ApiCredentials } from '../types';
 import { calculateTokenExpiryInfo, formatRefreshedDate } from '../utils/tokenExpiry';
 import { formatSavedDate } from '../utils/accountVault';
+import { getAuthHeaders } from '../utils/modeSecurity';
 import {
   downloadAccountCredentialsBackup,
   parseAndDecryptAccountBackup,
@@ -41,6 +42,7 @@ interface ServerVaultViewerModalProps {
   isBlueskyLoggedIn?: boolean;
   isThreadsLoggedIn?: boolean;
   isDemoMode?: boolean;
+  isModal?: boolean;
 }
 
 export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
@@ -50,6 +52,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
   isBlueskyLoggedIn = false,
   isThreadsLoggedIn = false,
   isDemoMode = false,
+  isModal = false,
 }) => {
   const [serverVault, setServerVault] = useState<SavedAccountVault | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -81,7 +84,10 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
     setIsLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch('/api/credentials/vault', { cache: 'no-store' });
+      const res = await fetch('/api/credentials/vault', {
+        cache: 'no-store',
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) {
         throw new Error(`HTTP Error ${res.status}: サーバーからデータを取得できませんでした`);
       }
@@ -250,21 +256,8 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
   const remainingDays = threadsExpiry?.remainingDays ?? 0;
   const progressPercent = Math.min(100, Math.max(0, Math.round((remainingDays / 60) * 100)));
 
-  return (
-    <aside
-      id="server-vault-drawer"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="server-vault-drawer-title"
-      style={{
-        transform: isOpen ? 'translateX(0%)' : 'translateX(100%)',
-        transition: 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
-        willChange: 'transform',
-      }}
-      className={`absolute inset-x-0 top-0 z-30 bg-[#0B0F19] border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden text-slate-200 ${
-        isOpen ? 'pointer-events-auto' : 'pointer-events-none'
-      }`}
-    >
+  const innerContent = (
+    <>
       {/* 上部グラデーションデコレーション */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-sky-500 to-purple-500 z-10" />
 
@@ -927,6 +920,47 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
             </button>
           </div>
         </div>
+    </>
+  );
+
+  if (isModal) {
+    if (!isOpen) return null;
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          id="server-vault-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="server-vault-drawer-title"
+          className="bg-[#0B0F19] border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col w-full max-w-2xl max-h-[90vh] overflow-hidden text-slate-200 relative animate-in zoom-in-95 duration-150"
+        >
+          {innerContent}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <aside
+      id="server-vault-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="server-vault-drawer-title"
+      style={{
+        transform: isOpen ? 'translateX(0%)' : 'translateX(100%)',
+        transition: 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
+        willChange: 'transform',
+      }}
+      className={`absolute inset-x-0 top-0 z-30 bg-[#0B0F19] border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden text-slate-200 ${
+        isOpen ? 'pointer-events-auto' : 'pointer-events-none'
+      }`}
+    >
+      {innerContent}
     </aside>
   );
 };

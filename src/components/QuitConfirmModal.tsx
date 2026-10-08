@@ -35,7 +35,6 @@ export const QuitConfirmModal: React.FC<QuitConfirmModalProps> = ({
     <div
       id="quit-confirm-modal-overlay"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
-      onClick={onClose}
     >
       <div
         id="quit-confirm-modal"

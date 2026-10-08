@@ -14,6 +14,15 @@ import { SnippetModal } from './SnippetModal';
 import { OgpPreviewSection } from './OgpPreviewSection';
 import { AiAssistModal, AiAssistTab } from './AiAssistModal';
 import { ReplySettingsSection } from './ReplySettingsSection';
+import { UnicodeDecoratorModal } from './UnicodeDecoratorModal';
+import {
+  QuickDecorationItem,
+  QuickDecorCategory,
+  loadQuickDecorationsFromStorage,
+  addQuickDecoration,
+  removeQuickDecoration,
+  resetQuickDecorations,
+} from '../utils/unicodeFontConverter';
 import {
   Send,
   Sparkles,
@@ -42,6 +51,15 @@ import {
   Wand2,
   Image as ImageIcon,
   Link2,
+  Type,
+  Edit2,
+  Check,
+  Focus,
+  Maximize2,
+  Minimize2,
+  Palette,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { QuickTimePreset, TargetPlatformCategory } from '../types';
 import {
@@ -124,57 +142,7 @@ interface EditorSectionProps {
   onOpenAdminModal?: () => void;
 }
 
-const SAMPLE_TEXTS = [
-  {
-    label: '🌟 アプリ紹介・機能紹介（CrossPost Web Studio とは？）',
-    tag: '総合紹介',
-    charCount: '約260字',
-    summary: 'アプリの全体概要、JST予約、スレッド分割、画像・動画添付などのフル機能紹介',
-    text: `☆自動投稿アプリのテスト投稿です。\n\n【CrossPost Web Studio とは？】\nBluesky（AT Protocol）と Threads（Meta Graph API）への同時投稿・個別予約を直感的に行えるオールインワンWebエディタです。\n\n長文の自動スレッド分割や任意位置での区切り（---）、日本時間（JST）での予約投稿、投稿区分指定（同時 / Bluesky / Threads）、カスタム時間プリセット、週間横スクロールタイムライン・月間カレンダー管理、Threadsトピックタグ、画像・動画の添付とドラッグ並び替え、AIアシスト（スレッド分割・トーン自動調整・セーフティ点検）など、快適なSNS発信に必要な機能がすべて揃っています。\n\n#個人開発 #Bluesky #Threads #バイブコーディング #GoogleAIStudio`,
-  },
-  {
-    label: '✂️ 任意区切りテスト（--- で好きな位置で2つの投稿に分割）',
-    tag: '任意分割 (---)',
-    charCount: '約190字 (2分割)',
-    summary: '「---」を入力した位置で意図通りに分割されるスレッド機能のテスト',
-    text: `☆自動投稿アプリのテスト投稿です。\n\n【お知らせ 1/2】\nBlueskyとThreadsの同時投稿アプリに「任意位置でのスレッド分割」機能が追加されました！✨\n文章中の区切りたい場所に「---」を入力するだけで、思い通りの位置で投稿を分割できます。\n\n---\n\n【お知らせ 2/2】\n各パートが文字数制限（Bluesky 300字 / Threads 500字）を超えている場合でも、自動スレッド分割がスムーズに連動します。\nぜひ快適なクロス投稿をご体験ください！🙌🚀\n#Bluesky #Threads #クロス投稿`,
-  },
-  {
-    label: '✨ 絵文字たっぷり開発ログ（約400字・Bluesky分割 / Threads1投稿）',
-    tag: '絵文字・差分検証',
-    charCount: '約380字',
-    summary: 'Bluesky(300字超)は2分割、Threads(500字内)は1投稿に収まる境界値テスト',
-    text: `☆自動投稿アプリのテスト投稿です。\n\n✨【休日の個人開発カフェログ☕️＆最新アップデート速報🚀】\n\n今週末は気分転換にお気に入りのカフェでプログラミング作業中👨‍💻🌿\n美味しいドリップコーヒー☕️とシナモンロール🥐をお供に、Bluesky🦋とThreads🌀の同時投稿ツールの開発を進めました💡\n\n🎉 今回のアップデート内容:\n1️⃣ 絵文字や特殊記号の正確なGrapheme Cluster文字数カウントに対応🎨\n2️⃣ リンク・メンション（@bsky.app）の自動Facetリンク化🔗\n3️⃣ 失敗したツリーだけを再送信できる履歴リトライ機能🔄\n4️⃣ 画像のALTテキスト（代替テキスト）入力サポート🖼️\n\nBlueskyでは300文字を超えるため自動で2件のスレッド🧵に分割され、Threadsでは500文字以内に綺麗に1投稿で収まるテスト文章です🌈✨\n皆さんも快適なSNSライフをお過ごしください！🙌🎉 #個人開発 #Bluesky #Threads`,
-  },
-  {
-    label: '🔗 リンク & @メンション自動Facet化テスト',
-    tag: 'リンク / メンション',
-    charCount: '約130字',
-    summary: 'URLリンクや@メンションが自動認識されてリッチリンク・Facetになるか確認',
-    text: `☆自動投稿アプリのテスト投稿です。\n\nBlueskyとThreadsへのクロス投稿テスト中！\n公式アカウント @bsky.app や @threads.net をぜひチェックしてみてください。\n\n公式サイト:\n・Bluesky: https://bsky.social\n・Threads: https://threads.net\n\n#Bluesky #Threads #ATProto`,
-  },
-  {
-    label: '🧵 長文コラム（約700字・自動スレッド分割テスト）',
-    tag: '長文スレッド',
-    charCount: '約700字 (3〜4分割)',
-    summary: '複数回の自動スレッド分割やツリー連結ビジュアライザーの動作確認に最適',
-    text: `☆自動投稿アプリのテスト投稿です。\n\n【分散型SNS時代のクロスプラットフォーム運用戦略と情報発信の未来】\n\n現代のソーシャルメディア運用において、特定のプラットフォームに過度に依存するリスクが強く認識されるようになりました。それに伴い、Blueskyに代表されるAT Protocolを活用したオープンな分散型ネットワークと、Instagramの強力なソーシャルグラフを基盤とするThreadsのような大規模プラットフォームを戦略的に併用するクリエイターや企業が急速に増加しています。\n\nそれぞれのプラットフォームには明確なカルチャーと強みがあります。Blueskyは技術者やクリエイターが集い、ユーザー自身がアルゴリズムを選択できるカスタムフィードや、ポータブルな分散型ID（DID）による自由度の高いオープンウェブの精神が息づいています。一方のThreadsは、親しみやすい日常の会話やトレンドの拡散力に優れ、多様で幅広いオーディエンスへ迅速にリーチできる即効性を誇ります。\n\nしかし、同時に運用者を悩ませるのが「文字数制限の差異」と「スレッド分割の手間」です。Blueskyの1投稿あたり300文字、Threadsの500文字という異なる仕様に対し、手動で改行や区切りを調整して投稿し直す作業は大きな負担となります。\n\n本アプリケーションは、入力された文章の文脈や句読点、段落のまとまりを自動解析し、読者にとって最も自然で読みやすい位置で(1/N)などの連番を付与しながらスレッド化を行います。これにより、本格的な長文コラムや考察記事、プロダクトのアップデート告知なども、各SNSの読書体験を損なうことなく最適な形で届けることが可能になります。長文コンテンツでも安心してクロス投稿を行っていただけます。`,
-  },
-  {
-    label: '🦋 ニュース・発表（中長文・約350字）',
-    tag: '告知・リリース',
-    charCount: '約340字',
-    summary: '箇条書きリストを含む新機能告知やお知らせ形式のテスト文章',
-    text: `☆自動投稿アプリのテスト投稿です。\n\n【Bluesky & Threads 同時投稿機能のお知らせ】\n本日、分散型SNS「Bluesky」と「Threads」にスムーズに同時投稿できるWebエディタを公開しました！\n\n■ 主な特長\n1. Bluesky (300文字) と Threads (500文字) の文字数制限をリアルタイム判定\n2. 制限を超える長文は自然な文末でツリー（スレッド）投稿へ自動分割\n3. リンクや @メンション の自動Facetリンク化、画像Altテキスト入力に対応\n4. 自動下書き保存機能により、ブラウザリロードや誤操作時も入力内容が消失する心配がありません\n\n複数プラットフォームへの情報発信をよりシームレスに実現します。ぜひお試しください！`,
-  },
-  {
-    label: '💻 技術Tips・短文（1投稿に収まる文字数）',
-    tag: 'Tips・短文',
-    charCount: '約110字',
-    summary: '分割されずに1投稿の制限内に余裕で収まるコンパクトな技術Tips文章',
-    text: `☆自動投稿アプリのテスト投稿です。\n\nBlueskyのAT Protocolは、分散型ID（did:plc）とXRPCエンドポイントによるオープンなデータ管理が特徴です。\nアプリパスワードを発行することで、メインのパスワードを安全に保護しながら外部ツールから安全に投稿（createRecord）を行うことができます。`,
-  },
-];
+import { SAMPLE_TEXTS } from '../config/sampleTexts';
 
 type EditorFontSize = 'sm' | 'md' | 'lg';
 
@@ -273,9 +241,137 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   const [activeEditorTab, setActiveEditorTab] = useState<'common' | 'bluesky' | 'threads'>('common');
   // スニペット（定型文・テンプレート）モーダル表示状態
   const [isSnippetModalOpen, setIsSnippetModalOpen] = useState(false);
+  // 特殊フォント＆飾り罫線モーダル表示状態
+  const [isUnicodeModalOpen, setIsUnicodeModalOpen] = useState(false);
+  const [selectedEditorText, setSelectedEditorText] = useState('');
+  // クイック装飾アイテム状態（登録・削除可能・カテゴリ分類）
+  const [quickDecorations, setQuickDecorations] = useState<QuickDecorationItem[]>(() => loadQuickDecorationsFromStorage());
+  const [selectedDecorCategory, setSelectedDecorCategory] = useState<QuickDecorCategory>('all');
+  const [isManagingQuickDecor, setIsManagingQuickDecor] = useState(false);
+  const [isAddingQuickDecor, setIsAddingQuickDecor] = useState(false);
+  const [newQuickLabel, setNewQuickLabel] = useState('');
+  const [newQuickInsert, setNewQuickInsert] = useState('');
+  const [newQuickCategory, setNewQuickCategory] = useState<'line' | 'box' | 'number' | 'emoji'>('line');
+
+  // 装飾機能の折りたたみメニュー表示状態（localStorageに永続保存・初期値はすっきりしたエディタのため折りたたみ状態）
+  const [isDecorMenuOpen, setIsDecorMenuOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('crosspost_decor_menu_open');
+      return saved !== null ? saved === 'true' : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleDecorMenu = () => {
+    setIsDecorMenuOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('crosspost_decor_menu_open', String(next));
+      } catch {}
+      // 装飾メニュー/ウインドウを閉じた時、実行中の「削除」「追加」「新しい飾り・定型記号をクイックバーに登録」処理を中止し、削除・追加ボタンをオフにする
+      if (!next) {
+        setIsManagingQuickDecor(false);
+        setIsAddingQuickDecor(false);
+        setNewQuickLabel('');
+        setNewQuickInsert('');
+      }
+      return next;
+    });
+  };
+
+  // 装飾メニュー/ウインドウが閉じられた際、削除・追加・登録処理を自動で中止・オフ化
+  useEffect(() => {
+    if (!isDecorMenuOpen) {
+      setIsManagingQuickDecor(false);
+      setIsAddingQuickDecor(false);
+      setNewQuickLabel('');
+      setNewQuickInsert('');
+    }
+  }, [isDecorMenuOpen]);
+
+  // クイック装飾更新イベントの購読
+  useEffect(() => {
+    const handleQuickDecorUpdated = () => {
+      setQuickDecorations(loadQuickDecorationsFromStorage());
+    };
+    window.addEventListener('crosspost_quick_decorations_updated', handleQuickDecorUpdated);
+    return () => window.removeEventListener('crosspost_quick_decorations_updated', handleQuickDecorUpdated);
+  }, []);
+
+  // 新規クイック装飾追加
+  const handleAddNewQuickDecor = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newQuickLabel.trim() || !newQuickInsert) return;
+    const updated = addQuickDecoration(newQuickLabel.trim(), newQuickInsert, newQuickLabel.trim(), newQuickCategory);
+    setQuickDecorations(updated);
+    setNewQuickLabel('');
+    setNewQuickInsert('');
+    setIsAddingQuickDecor(false);
+    if (onNotify) {
+      onNotify({
+        type: 'success',
+        title: 'クイック装飾を追加しました',
+        message: `「${newQuickLabel.trim()}」をクイック装飾バーに登録しました。`,
+      });
+    }
+  };
+
+  // クイック装飾削除
+  const handleRemoveQuickDecor = (id: string, label: string) => {
+    const updated = removeQuickDecoration(id);
+    setQuickDecorations(updated);
+    if (onNotify) {
+      onNotify({
+        type: 'info',
+        title: 'クイック装飾を削除しました',
+        message: `「${label}」をクイック装飾バーから削除しました。`,
+      });
+    }
+  };
+
+  // クイック装飾初期リセット
+  const handleResetQuickDecors = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const updated = resetQuickDecorations();
+    setQuickDecorations(updated);
+    setIsManagingQuickDecor(false);
+    if (onNotify) {
+      onNotify({
+        type: 'success',
+        title: 'クイック装飾を初期化しました',
+        message: 'クイック装飾バーを初期デフォルト一覧（12種類）に戻しました。',
+      });
+    }
+  };
+
   // AIアシストモーダル表示状態
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [aiModalInitialTab, setAiModalInitialTab] = useState<AiAssistTab>('split');
+
+  // 🎯 入力集中モード (Focus Mode) 状態
+  const [isFocusMode, setIsFocusMode] = useState(false);
+
+  // Escキーで集中モードを解除
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFocusMode) {
+        setIsFocusMode(false);
+        if (onNotify) {
+          onNotify({
+            type: 'info',
+            title: '集中モードを解除しました',
+            message: '通常のエディタ表示に戻りました。',
+          });
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFocusMode, onNotify]);
 
   // 個別分岐が実際に有効（非空で共通とは別内容）かどうかの判定
   const isBlueskyCustomized = Boolean(customPlatformText && blueskyText && blueskyText.trim().length > 0);
@@ -288,6 +384,116 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
       : activeEditorTab === 'threads'
       ? (isThreadsCustomized ? threadsText : text)
       : text;
+
+  // 左右連動：現在エディタで編集中のスレッドインデックス（0-indexed）
+  const [activeThreadIndex, setActiveThreadIndex] = useState<number>(0);
+
+  // フローティング投稿ボタン用：静的投稿ボタンの可視状態検知
+  const submitButtonContainerRef = useRef<HTMLDivElement>(null);
+  const [isStaticButtonVisible, setIsStaticButtonVisible] = useState<boolean>(true);
+
+  useEffect(() => {
+    const el = submitButtonContainerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsStaticButtonVisible(entry.isIntersecting);
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // カーソル位置からスレッド番号を計算（手動区切り線および自動分割に対応）
+  const updateActiveThreadIndexFromCursor = (cursorPos: number) => {
+    const textBefore = currentActiveText.slice(0, cursorPos);
+    const matches = textBefore.match(/^\s*(?:-{3,}|={3,})\s*$/gm) || [];
+    if (matches.length > 0) {
+      setActiveThreadIndex(matches.length);
+      return;
+    }
+
+    // 手動区切りがない場合は自動分割リストから位置を算出
+    const activeSplits = postToBluesky ? blueskySplits : threadsSplits;
+    if (activeSplits && activeSplits.length > 1) {
+      let accumulatedLen = 0;
+      let foundIdx = 0;
+      for (let i = 0; i < activeSplits.length; i++) {
+        accumulatedLen += activeSplits[i].text.length;
+        if (cursorPos <= accumulatedLen) {
+          foundIdx = i;
+          break;
+        }
+        foundIdx = i;
+      }
+      setActiveThreadIndex(foundIdx);
+    } else {
+      setActiveThreadIndex(0);
+    }
+  };
+
+  // プレビュー側カードクリックでエディタの該当スレッド位置へジャンプ
+  const handleJumpToThread = (targetIndex: number) => {
+    setActiveThreadIndex(targetIndex);
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    if (targetIndex === 0) {
+      textarea.focus();
+      textarea.setSelectionRange(0, 0);
+      textarea.scrollTop = 0;
+      return;
+    }
+
+    const regex = /^\s*(?:-{3,}|={3,})\s*$/gm;
+    let match: RegExpExecArray | null = null;
+    let count = 0;
+    let foundManual = false;
+    while ((match = regex.exec(currentActiveText)) !== null) {
+      count++;
+      if (count === targetIndex) {
+        foundManual = true;
+        const nextPos = Math.min(match.index + match[0].length + 1, currentActiveText.length);
+        textarea.focus();
+        textarea.setSelectionRange(nextPos, nextPos);
+        const lineHeight = 24;
+        const lineCount = currentActiveText.slice(0, nextPos).split('\n').length;
+        textarea.scrollTop = Math.max(0, (lineCount - 2) * lineHeight);
+        break;
+      }
+    }
+
+    if (!foundManual) {
+      // 自動分割時のオフセットジャンプ
+      const activeSplits = postToBluesky ? blueskySplits : threadsSplits;
+      let offset = 0;
+      for (let i = 0; i < targetIndex && i < activeSplits.length; i++) {
+        offset += activeSplits[i].text.length;
+      }
+      textarea.focus();
+      textarea.setSelectionRange(offset, offset);
+      const lineHeight = 24;
+      const lineCount = currentActiveText.slice(0, offset).split('\n').length;
+      textarea.scrollTop = Math.max(0, (lineCount - 2) * lineHeight);
+    }
+  };
+
+  // サブパネル用：本文中のハッシュタグ検出
+  const hashtagMatches = currentActiveText.match(/#[^\s#　]+/g) || [];
+  const hashtagCount = hashtagMatches.length;
+
+  // サブパネル用：本文中のURL検出
+  const urlMatches = currentActiveText.match(/https?:\/\/[^\s]+/g) || [];
+  const urlCount = urlMatches.length;
+
+  // サブパネル用：添付メディアのALTテキスト入力状況 & 画像・動画分類
+  const altFilledCount = images.filter((img) => img.alt && img.alt.trim().length > 0).length;
+  const imageCount = images.filter((img) => img.mediaType !== 'video').length;
+  const videoCount = images.filter((img) => img.mediaType === 'video').length;
+
+  // スレッド分割数
+  const totalThreadCount = Math.max(blueskySplits.length, threadsSplits.length);
 
   // 現在アクティブなタブのテキスト更新ハンドラ
   const handleActiveTextChange = (newVal: string) => {
@@ -321,11 +527,16 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
 
   // Bluesky専用テキストの分岐を解除（共通と再同期）
   const handleDisableBlueskyCustom = () => {
-    if (window.confirm('Bluesky専用の個別編集を解除し、共通本文と同期しますか？（個別の編集内容はリセットされます）')) {
-      if (onChangeBlueskyText) onChangeBlueskyText('');
-      if (!isThreadsCustomized && onToggleCustomPlatformText) {
-        onToggleCustomPlatformText(false);
-      }
+    if (onChangeBlueskyText) onChangeBlueskyText('');
+    if (!isThreadsCustomized && onToggleCustomPlatformText) {
+      onToggleCustomPlatformText(false);
+    }
+    if (onNotify) {
+      onNotify({
+        type: 'info',
+        title: '🦋 Bluesky同期に戻しました',
+        message: 'Bluesky専用テキストを解除し、共通本文と同期させました。',
+      });
     }
   };
 
@@ -344,11 +555,16 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
 
   // Threads専用テキストの分岐を解除（共通と再同期）
   const handleDisableThreadsCustom = () => {
-    if (window.confirm('Threads専用の個別編集を解除し、共通本文と同期しますか？（個別の編集内容はリセットされます）')) {
-      if (onChangeThreadsText) onChangeThreadsText('');
-      if (!isBlueskyCustomized && onToggleCustomPlatformText) {
-        onToggleCustomPlatformText(false);
-      }
+    if (onChangeThreadsText) onChangeThreadsText('');
+    if (!isBlueskyCustomized && onToggleCustomPlatformText) {
+      onToggleCustomPlatformText(false);
+    }
+    if (onNotify) {
+      onNotify({
+        type: 'info',
+        title: '🌀 Threads同期に戻しました',
+        message: 'Threads専用テキストを解除し、共通本文と同期させました。',
+      });
     }
   };
 
@@ -522,14 +738,16 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   const isBlueskyDisabled = Boolean(hasThreadsReply || !postToBluesky);
   const isThreadsDisabled = Boolean(hasBlueskyReply || !postToThreads);
 
-  // 1. Threads返信先が指定されているが未照合またはリプライ不可
+  // 1. Threads返信先が指定されているが未照合またはリプライ不可（Threads投稿時のみ判定）
   const isThreadsReplyInvalid = Boolean(
+    postToThreads &&
     hasThreadsReply &&
     (!replySettings?.threadsResolved || replySettings.threadsResolved.canReply === false)
   );
 
-  // 2. Bluesky返信先が指定されているが未照合またはリプライ不可
+  // 2. Bluesky返信先が指定されているが未照合またはリプライ不可（Bluesky投稿時のみ判定）
   const isBlueskyReplyInvalid = Boolean(
+    postToBluesky &&
     hasBlueskyReply &&
     (!replySettings?.blueskyResolved || replySettings.blueskyResolved.canReply === false)
   );
@@ -631,7 +849,36 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
     }, 0);
   };
 
-  const hasContent = Boolean(text.trim().length > 0 || (images && images.length > 0));
+  // 特殊フォント・飾り罫線の挿入ハンドラ
+  const handleInsertDecoratedText = (insertContent: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      const newText = currentActiveText ? `${currentActiveText}\n${insertContent}` : insertContent;
+      handleActiveTextChange(newText);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = currentActiveText.substring(0, start);
+    const after = currentActiveText.substring(end);
+
+    const updated = before + insertContent + after;
+    handleActiveTextChange(updated);
+
+    setTimeout(() => {
+      textarea.focus();
+      const newPos = start + insertContent.length;
+      textarea.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
+
+  const hasContent = Boolean(
+    text.trim().length > 0 ||
+    blueskyText.trim().length > 0 ||
+    threadsText.trim().length > 0 ||
+    (images && images.length > 0)
+  );
   const hasMediaOnly = text.trim().length === 0 && Boolean(images && images.length > 0);
   const hasVideo = images.some(
     (img) =>
@@ -672,10 +919,10 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   };
 
   return (
-    <div id="editor-section-container" className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start lg:items-stretch">
-      {/* 左側：エディタ & 設定 */}
-      <div className="lg:col-span-6 xl:col-span-5 space-y-3 min-w-0 w-full flex flex-col">
-        <div className="bg-[#111726] border border-slate-700/80 rounded-2xl p-3.5 sm:p-4 space-y-3 shadow-xl">
+    <div id="editor-section-container" className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start lg:items-stretch pb-16 lg:pb-0">
+      {/* 左側：エディタ & 設定（アイコン表示のため幅を確保） */}
+      <div className="lg:col-span-7 xl:col-span-7 2xl:col-span-6 space-y-3 min-w-0 w-full flex flex-col">
+        <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-3 shadow-xl">
           {/* 上部バー：投稿先トグル & サンプル挿入 */}
           {/* 一体化上部バー：投稿先トグル & エディタ分岐タブ & 例文・クリア */}
           <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-700/80">
@@ -694,7 +941,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     ? 'opacity-35 cursor-not-allowed bg-slate-900/50 text-slate-500 border-slate-800 grayscale pointer-events-none'
                     : postToBluesky
                     ? 'bg-[#0085ff]/20 text-[#38bdf8] border-[#0085ff]/60 ring-1 ring-[#0085ff]/30 cursor-pointer'
-                    : 'bg-[#090D18] text-slate-400 border-slate-700/80 hover:border-slate-600 hover:text-slate-300 cursor-pointer'
+                    : 'bg-[#131d31] text-slate-300 border-slate-700 hover:border-slate-600 hover:text-white cursor-pointer'
                 }`}
               >
                 <input
@@ -729,7 +976,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     ? 'opacity-35 cursor-not-allowed bg-slate-900/50 text-slate-500 border-slate-800 grayscale pointer-events-none'
                     : postToThreads
                     ? 'bg-purple-950/40 text-purple-200 border-purple-500/70 ring-1 ring-purple-500/40 cursor-pointer'
-                    : 'bg-[#090D18] text-slate-400 border-slate-700/80 hover:border-slate-600 hover:text-slate-300 cursor-pointer'
+                    : 'bg-[#131d31] text-slate-300 border-slate-700 hover:border-slate-600 hover:text-white cursor-pointer'
                 }`}
               >
                 <input
@@ -756,7 +1003,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
             {/* プラットフォーム別テキスト分岐タブ (インラインコンパクト) */}
             <div className="flex items-center gap-1.5 sm:gap-2">
               <span className="text-xs font-bold text-slate-200">文書編集:</span>
-              <div className="inline-flex items-center p-0.5 bg-[#090D18] border border-slate-700/80 rounded-lg text-xs">
+              <div className="inline-flex items-center p-0.5 bg-[#131d31] border border-slate-700/80 rounded-lg text-xs">
                 <button
                   type="button"
                   onClick={() => {
@@ -769,7 +1016,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     isCommonDisabled
                       ? 'opacity-35 cursor-not-allowed bg-slate-900/50 text-slate-500 pointer-events-none grayscale'
                       : activeEditorTab === 'common'
-                      ? 'bg-[#1C2438] text-white shadow-sm border border-slate-600 cursor-pointer'
+                      ? 'bg-[#1e293b] text-white shadow-sm border border-slate-600 cursor-pointer'
                       : 'text-slate-300 hover:text-white cursor-pointer'
                   }`}
                   title={
@@ -890,8 +1137,13 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm('共通本文の内容をBluesky専用テキストへ上書きコピーしますか？')) {
-                          if (onChangeBlueskyText) onChangeBlueskyText(text);
+                        if (onChangeBlueskyText) onChangeBlueskyText(text);
+                        if (onNotify) {
+                          onNotify({
+                            type: 'success',
+                            title: '共通本文を反映',
+                            message: '共通本文の内容をBluesky専用テキストへコピーしました。',
+                          });
                         }
                       }}
                       className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium flex items-center gap-1 cursor-pointer transition"
@@ -951,8 +1203,13 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (window.confirm('共通本文の内容をThreads専用テキストへ上書きコピーしますか？')) {
-                            if (onChangeThreadsText) onChangeThreadsText(text);
+                          if (onChangeThreadsText) onChangeThreadsText(text);
+                          if (onNotify) {
+                            onNotify({
+                              type: 'success',
+                              title: '共通本文を反映',
+                              message: '共通本文の内容をThreads専用テキストへコピーしました。',
+                            });
                           }
                         }}
                         className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium flex items-center gap-1 cursor-pointer transition"
@@ -986,11 +1243,12 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
             </div>
           )}
 
-          {/* エディタツールバー：AIアシスト & スニペット挿入 & 任意区切り & 文字サイズ */}
-          <div className="flex flex-wrap items-center justify-between gap-1.5 px-0.5 text-xs">
-            <div className="flex items-center gap-1.5 flex-wrap">
+          {/* エディタツールバー：AIアシストからクリアボタンまで1行表示 */}
+          <div className="flex items-center justify-between gap-1.5 px-0.5 text-xs pb-1 overflow-x-auto scrollbar-none whitespace-nowrap">
+            {/* 左グループ: 【執筆・AI支援 & 装飾トグル】 */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               {/* ✨ AIアシストボタン群 */}
-              <div className="inline-flex items-center bg-[#090D18] p-0.5 rounded-lg border border-slate-700/80 shadow-xs">
+              <div className="inline-flex items-center bg-[#131d31] p-0.5 rounded-lg border border-slate-700 shadow-xs">
                 <button
                   id="open-ai-assist-modal-button"
                   type="button"
@@ -998,7 +1256,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     setAiModalInitialTab('split');
                     setIsAiModalOpen(true);
                   }}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-sky-500/25 hover:bg-sky-500/35 text-sky-200 hover:text-white transition text-xs font-bold cursor-pointer"
+                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-md bg-sky-500/25 hover:bg-sky-500/35 text-sky-200 hover:text-white transition text-xs font-bold cursor-pointer"
                   title="AIによる自然なスレッド分割・校正"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-sky-300" />
@@ -1012,7 +1270,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     setAiModalInitialTab('tone');
                     setIsAiModalOpen(true);
                   }}
-                  className="px-2 py-1 rounded-md hover:bg-purple-500/25 text-purple-300 hover:text-purple-100 transition text-[11px] font-medium cursor-pointer"
+                  className="px-1.5 sm:px-2 py-1 rounded-md hover:bg-purple-500/25 text-purple-300 hover:text-purple-100 transition text-[11px] font-medium cursor-pointer"
                   title="Bluesky/Threads向けトーン自動調整"
                 >
                   <Wand2 className="w-3 h-3 text-purple-300" />
@@ -1025,7 +1283,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     setAiModalInitialTab('safety');
                     setIsAiModalOpen(true);
                   }}
-                  className="px-2 py-1 rounded-md hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-100 transition text-[11px] font-medium cursor-pointer"
+                  className="px-1.5 sm:px-2 py-1 rounded-md hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-100 transition text-[11px] font-medium cursor-pointer"
                   title="セーフティ点検・事前校正"
                 >
                   <ShieldCheck className="w-3 h-3 text-emerald-300" />
@@ -1037,107 +1295,135 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 id="open-snippets-button"
                 type="button"
                 onClick={() => setIsSnippetModalOpen(true)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/40 transition text-xs font-medium cursor-pointer shadow-xs"
+                className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/40 transition text-xs font-medium cursor-pointer shadow-xs"
                 title="定型文・スニペット挿入"
               >
                 <FileText className="w-3 h-3 text-amber-300" />
                 <span>定型文</span>
               </button>
 
-              {/* 例文挿入 */}
-              <div className="relative">
-                <button
-                  id="open-samples-button"
-                  type="button"
-                  onClick={() => setShowSamples(!showSamples)}
-                  disabled={isNeitherSelected}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#0F1424] hover:bg-slate-800 text-slate-200 border border-slate-700/80 transition text-xs font-medium shadow-xs ${
-                    isNeitherSelected ? 'opacity-35 pointer-events-none cursor-not-allowed' : 'cursor-pointer'
-                  }`}
-                  title="サンプル文章を挿入"
-                >
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  <span>例文</span>
-                </button>
+              {/* 例文挿入ボタン */}
+              <button
+                id="open-samples-button"
+                type="button"
+                onClick={() => setShowSamples(true)}
+                disabled={isNeitherSelected}
+                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-[#131d31] hover:bg-slate-800 text-slate-200 border border-slate-700 transition text-xs font-medium shadow-xs ${
+                  isNeitherSelected ? 'opacity-35 pointer-events-none cursor-not-allowed' : 'cursor-pointer hover:text-amber-300'
+                }`}
+                title="サンプル文章（例文）を一覧から挿入"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>例文</span>
+              </button>
 
-                {showSamples && !isNeitherSelected && (
-                  <div
-                    ref={samplesDropdownRef}
-                    className="absolute left-0 mt-1.5 w-[340px] xs:w-[420px] sm:w-[500px] md:w-[540px] max-w-[calc(100vw-2rem)] bg-[#0c121e] border border-slate-700/90 rounded-2xl shadow-2xl shadow-black/90 p-2.5 z-40 space-y-1.5 max-h-[75vh] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150"
-                  >
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-200 px-2 py-1.5 border-b border-slate-800/80">
-                      <div className="flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>サンプル文章を挿入（全{SAMPLE_TEXTS.length}件）</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowSamples(false)}
-                        className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition cursor-pointer"
-                        title="閉じる (Esc)"
-                        aria-label="閉じる"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="space-y-1 pt-0.5">
-                      {SAMPLE_TEXTS.map((s, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            handleActiveTextChange(s.text);
-                            setShowSamples(false);
-                          }}
-                          className="w-full text-left p-2.5 rounded-xl border border-transparent hover:border-slate-700/80 bg-slate-900/50 hover:bg-slate-800/80 transition cursor-pointer flex flex-col gap-1 group"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="text-xs font-bold text-slate-100 group-hover:text-amber-300 transition-colors whitespace-normal break-words leading-snug">
-                              {s.label}
-                            </span>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
-                                {s.charCount}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-start gap-2 text-[11px] text-slate-400 group-hover:text-slate-300 whitespace-normal break-words leading-relaxed pt-0.5">
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-950/60 text-amber-300 border border-amber-800/50 shrink-0 font-medium">
-                              {s.tag}
-                            </span>
-                            <span className="leading-snug">{s.summary}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              {/* 🎨 装飾機能の折りたたみメニュートグルボタン */}
+              <button
+                id="toggle-decor-menu-button"
+                type="button"
+                onClick={handleToggleDecorMenu}
+                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg border transition text-xs font-medium cursor-pointer shadow-xs ${
+                  isDecorMenuOpen
+                    ? 'bg-purple-600/30 text-purple-200 border-purple-500/70 ring-1 ring-purple-500/30 font-bold'
+                    : 'bg-[#131d31] hover:bg-slate-800 text-slate-200 hover:text-purple-300 border-slate-700'
+                }`}
+                title={isDecorMenuOpen ? '装飾メニューを折りたたむ' : '装飾メニューを展開（特殊フォント・飾り罫線・囲み・絵文字）'}
+              >
+                <Palette className="w-3.5 h-3.5 text-purple-400" />
+                <span>装飾</span>
+                {isDecorMenuOpen ? (
+                  <ChevronUp className="w-3 h-3 text-purple-300 ml-0.5" />
+                ) : (
+                  <ChevronDown className="w-3 h-3 text-slate-400 ml-0.5" />
                 )}
-              </div>
+              </button>
+            </div>
 
+            {/* 中央の区切り線（画面幅に余裕がある場合） */}
+            <div className="h-4 w-px bg-slate-700/60 mx-0.5 shrink-0 hidden md:block" />
+
+            {/* 右グループ: 【書式・操作・集中モード・クリア】 */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
               {/* 区切り線挿入 */}
               <button
                 id="insert-manual-separator-button"
                 type="button"
                 onClick={handleInsertSeparator}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#0F1424] hover:bg-slate-800 text-slate-200 border border-slate-700/80 transition text-xs font-medium cursor-pointer shadow-xs"
+                className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-[#131d31] hover:bg-slate-800 text-slate-200 border border-slate-700 transition text-xs font-medium cursor-pointer shadow-xs"
                 title="カーソル位置に区切り線 (---) を挿入してスレッド分割"
               >
                 <Scissors className="w-3 h-3 text-sky-400" />
-                <span>区切る (---)</span>
+                <span>区切る</span>
+                <span className="hidden lg:inline text-[10px] text-slate-400 font-mono">(---)</span>
               </button>
 
-              {/* 投稿内容クリアボタン（区切るボタンの右） */}
+              {/* 文字サイズ切り替え */}
+              <div className="flex items-center bg-[#131d31] p-0.5 rounded-lg border border-slate-700 text-xs font-semibold shadow-xs">
+                {(['sm', 'md', 'lg'] as EditorFontSize[]).map((size) => (
+                  <button
+                    key={size}
+                    id={`editor-font-size-${size}-btn`}
+                    type="button"
+                    onClick={() => handleEditorFontSizeChange(size)}
+                    className={`px-1.5 sm:px-2 py-0.5 rounded text-[11px] transition cursor-pointer ${
+                      editorFontSize === size
+                        ? 'bg-[#1e293b] text-sky-200 border border-slate-600 shadow-xs font-bold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title={`文字サイズ: ${EDITOR_FONT_SIZE_CONFIG[size].label}`}
+                  >
+                    {EDITOR_FONT_SIZE_CONFIG[size].label}
+                  </button>
+                ))}
+              </div>
+
+              {/* 🎯 入力集中モード切り替えボタン */}
+              <button
+                id="toggle-focus-mode-button"
+                type="button"
+                onClick={() => {
+                  const nextState = !isFocusMode;
+                  setIsFocusMode(nextState);
+                  if (onNotify) {
+                    onNotify({
+                      type: 'info',
+                      title: nextState ? '🎯 集中モードを開始しました' : '集中モードを解除しました',
+                      message: nextState
+                        ? 'エディタを広げ、執筆に専念できます（Escキーで解除）。'
+                        : '通常のエディタ表示に戻りました。',
+                    });
+                  }
+                }}
+                className={`px-2 sm:px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs border ${
+                  isFocusMode
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 ring-1 ring-amber-500/30'
+                    : 'bg-[#131d31] hover:bg-slate-800 text-slate-200 hover:text-sky-300 border-slate-700'
+                }`}
+                title={isFocusMode ? '集中モードを解除 (Esc)' : '入力集中モードに切り替え（執筆に没頭）'}
+              >
+                {isFocusMode ? (
+                  <>
+                    <Minimize2 className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                    <span>集中解除</span>
+                  </>
+                ) : (
+                  <>
+                    <Focus className="w-3.5 h-3.5 text-sky-400" />
+                    <span>集中</span>
+                  </>
+                )}
+              </button>
+
+              {/* 投稿内容クリアボタン */}
               <button
                 id="editor-clear-draft-button"
                 type="button"
                 onClick={onClearDraft}
                 disabled={!hasContent || isNeitherSelected}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#0F1424] text-xs font-medium border border-slate-700/80 transition shadow-xs ${
+                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-[#131d31] text-xs font-medium border border-slate-700 transition shadow-xs ${
                   !hasContent || isNeitherSelected
                     ? 'opacity-35 pointer-events-none cursor-not-allowed text-slate-500'
-                    : 'text-slate-200 hover:text-rose-300 hover:bg-rose-950/30 hover:border-rose-800/60 cursor-pointer'
+                    : 'text-slate-300 hover:text-rose-300 hover:bg-rose-950/30 hover:border-rose-800/60 cursor-pointer'
                 }`}
                 title="投稿内容をクリア"
               >
@@ -1145,27 +1431,368 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 <span>クリア</span>
               </button>
             </div>
-
-            {/* 文字サイズ切り替え */}
-            <div className="flex items-center bg-[#090D18] p-0.5 rounded-lg border border-slate-700/80 text-xs font-semibold shadow-xs">
-              {(['sm', 'md', 'lg'] as EditorFontSize[]).map((size) => (
-                <button
-                  key={size}
-                  id={`editor-font-size-${size}-btn`}
-                  type="button"
-                  onClick={() => handleEditorFontSizeChange(size)}
-                  className={`px-2 py-0.5 rounded text-[11px] transition cursor-pointer ${
-                    editorFontSize === size
-                      ? 'bg-[#1C2438] text-sky-200 border border-slate-600 shadow-xs font-bold'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                  title={`文字サイズ: ${EDITOR_FONT_SIZE_CONFIG[size].label}`}
-                >
-                  {EDITOR_FONT_SIZE_CONFIG[size].label}
-                </button>
-              ))}
-            </div>
           </div>
+
+          {/* クイック罫線・装飾バー（折りたたみメニュー展開時 & 集中モード解除時） */}
+          {!isFocusMode && isDecorMenuOpen && (
+            <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="p-2.5 bg-[#131d31]/95 border border-purple-500/40 rounded-xl text-xs space-y-2 shadow-md">
+                {/* 1段目: アクションボタン & カテゴリ切り替えピルタブ & 閉じるボタン */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                  {/* 左: 𝕱 パレット & 編集/追加ボタン */}
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                    {/* 「𝕱 装飾・フォント」ボタン */}
+                    <button
+                      id="open-unicode-decorator-button"
+                      type="button"
+                      onClick={() => {
+                        const textarea = textareaRef.current;
+                        if (textarea) {
+                          const start = textarea.selectionStart;
+                          const end = textarea.selectionEnd;
+                          if (start !== end) {
+                            setSelectedEditorText(currentActiveText.substring(start, end));
+                          } else {
+                            setSelectedEditorText('');
+                          }
+                        }
+                        setIsUnicodeModalOpen(true);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 hover:text-white border border-purple-500/50 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs group"
+                      title="特殊フォント（太字/筆記体/囲み文字等）＆ 飾り罫線パレットを開く"
+                    >
+                      <Type className="w-3.5 h-3.5 text-purple-300 group-hover:scale-110 transition-transform" />
+                      <span>𝕱 パレット</span>
+                    </button>
+
+                    {/* 新規登録ボタン */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !isAddingQuickDecor;
+                        setIsAddingQuickDecor(next);
+                        if (next) {
+                          setIsManagingQuickDecor(false); // 追加時は削除モードをオフ
+                        } else {
+                          setNewQuickLabel('');
+                          setNewQuickInsert('');
+                        }
+                      }}
+                      className={`px-2 py-1 rounded-lg border text-xs transition cursor-pointer flex items-center gap-1 ${
+                        isAddingQuickDecor
+                          ? 'bg-purple-600 text-white border-purple-500 shadow-xs font-bold'
+                          : 'bg-[#182234] hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700 shadow-xs'
+                      }`}
+                      title="新しい飾りをクイックバーに登録"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-purple-300" />
+                      <span className="text-[11px] font-medium">追加</span>
+                    </button>
+
+                    {/* 管理・削除モード切り替えボタン */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !isManagingQuickDecor;
+                        setIsManagingQuickDecor(next);
+                        if (next) {
+                          setIsAddingQuickDecor(false); // 削除モード時は追加フォームをオフ
+                          setNewQuickLabel('');
+                          setNewQuickInsert('');
+                        }
+                      }}
+                      className={`px-2 py-1 rounded-lg border text-xs transition cursor-pointer flex items-center gap-1 ${
+                        isManagingQuickDecor
+                          ? 'bg-amber-600/30 text-amber-200 border-amber-500/60 shadow-xs font-bold'
+                          : 'bg-[#182234] hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700 shadow-xs'
+                      }`}
+                      title={isManagingQuickDecor ? '装飾の管理を完了' : '登録した飾りを削除・管理'}
+                    >
+                      {isManagingQuickDecor ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-amber-300" />
+                          <span className="text-[11px] text-amber-200 font-bold">完了</span>
+                        </>
+                      ) : (
+                        <>
+                          <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-[11px] font-medium">編集</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* 管理モード時の初期リセットボタン */}
+                    {isManagingQuickDecor && (
+                      <button
+                        type="button"
+                        onClick={handleResetQuickDecors}
+                        className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[11px] transition cursor-pointer flex items-center gap-1"
+                        title="初期デフォルトの飾りにリセット"
+                      >
+                        <RotateCcw className="w-3 h-3 text-purple-400" />
+                        <span>初期化</span>
+                      </button>
+                    )}
+
+                    {/* 設定画面の装飾メンテナンスを開くボタン */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('crosspost_open_settings_maintenance'));
+                        window.dispatchEvent(new CustomEvent('crosspost_set_maintenance_subtab', { detail: 'quick_decors' }));
+                        if (onOpenSettings) onOpenSettings();
+                      }}
+                      className="px-2 py-1 rounded-lg bg-[#182234] hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs transition cursor-pointer flex items-center gap-1 shadow-xs"
+                      title="設定メニューで装飾バー・飾り罫線を一覧管理"
+                    >
+                      <Sliders className="w-3.5 h-3.5 text-purple-400" />
+                      <span className="text-[11px] font-medium">設定</span>
+                    </button>
+                  </div>
+
+                  {/* 右: カテゴリ切り替えピルタブ ＆ 折りたたみボタン */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 overflow-x-auto scrollbar-none py-0.5">
+                      {[
+                        { id: 'all', label: 'すべて' },
+                        { id: 'line', label: '━ 罫線' },
+                        { id: 'box', label: '【】囲み' },
+                        { id: 'number', label: '1️⃣ 数字' },
+                        { id: 'emoji', label: '😀 記号' },
+                      ].map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSelectedDecorCategory(cat.id as QuickDecorCategory)}
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition whitespace-nowrap cursor-pointer ${
+                            selectedDecorCategory === cat.id
+                              ? 'bg-[#1e293b] text-purple-300 border border-purple-500/50 shadow-2xs'
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* 折りたたみ閉じるボタン */}
+                    <button
+                      type="button"
+                      onClick={handleToggleDecorMenu}
+                      className="p-1 rounded-md text-slate-400 hover:text-purple-300 hover:bg-slate-800/80 transition cursor-pointer flex items-center gap-1 text-[11px]"
+                      title="装飾メニューを折りたたむ"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">閉じる</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2段目: フィルタリングされたクイック装飾アイテム一覧 */}
+                <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+                  {quickDecorations
+                    .filter((item) => selectedDecorCategory === 'all' || (item.category || 'emoji') === selectedDecorCategory)
+                    .map((item) => (
+                      <div key={item.id} className="relative group/item shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => !isManagingQuickDecor && handleInsertDecoratedText(item.insert)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition font-mono border shadow-2xs ${
+                            isManagingQuickDecor
+                              ? 'bg-[#1e293b] text-slate-300 border-slate-700 pr-5 cursor-default'
+                              : 'bg-[#182234] hover:bg-purple-950/60 text-slate-100 hover:text-purple-200 border-slate-700 hover:border-purple-600/80 hover:shadow-xs cursor-pointer'
+                          }`}
+                          title={item.title || item.label}
+                        >
+                          {item.label}
+                        </button>
+
+                        {/* 管理モード時の削除ボタン */}
+                        {isManagingQuickDecor && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveQuickDecor(item.id, item.label);
+                            }}
+                            className="absolute right-0.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center cursor-pointer shadow-xs transition-transform hover:scale-110"
+                            title={`「${item.label}」を削除`}
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+
+                  {quickDecorations.filter((item) => selectedDecorCategory === 'all' || (item.category || 'emoji') === selectedDecorCategory).length === 0 && (
+                    <span className="text-[11px] text-slate-500 py-0.5">
+                      このカテゴリにはまだ装飾がありません。「＋追加」から登録できます。
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 新規装飾アイテムの登録フォーム（展開時） */}
+              {isAddingQuickDecor && (
+                <form
+                  onSubmit={handleAddNewQuickDecor}
+                  className="p-3 bg-[#0f172a] border border-purple-500/50 rounded-xl space-y-2.5 animate-in fade-in slide-in-from-top-1 text-xs shadow-lg"
+                >
+                  <div className="flex items-center justify-between text-purple-300 font-bold border-b border-slate-800 pb-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <Plus className="w-3.5 h-3.5 text-purple-400" />
+                      <span>新しい飾り・定型記号をクイックバーに登録</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingQuickDecor(false)}
+                      className="text-slate-400 hover:text-slate-200 p-0.5 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* カテゴリ選択 */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-slate-300 font-medium block">
+                      登録カテゴリ:
+                    </label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { id: 'line', label: '━ 罫線・区切り' },
+                        { id: 'box', label: '【】囲み・見出し' },
+                        { id: 'number', label: '1️⃣ 数字・リスト' },
+                        { id: 'emoji', label: '😀 記号・絵文字' },
+                      ].map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setNewQuickCategory(cat.id as any)}
+                          className={`px-2 py-1 rounded-lg text-xs font-bold transition border cursor-pointer ${
+                            newQuickCategory === cat.id
+                              ? 'bg-purple-600 text-white border-purple-500 shadow-2xs'
+                              : 'bg-[#182234] text-slate-300 hover:text-white border-slate-700'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-4 space-y-1">
+                      <label className="text-[11px] text-slate-300 font-medium block">
+                        ボタン表示名（ラベル）:
+                      </label>
+                      <input
+                        type="text"
+                        value={newQuickLabel}
+                        onChange={(e) => setNewQuickLabel(e.target.value)}
+                        placeholder="例: 【 注目 】, ✦✦✦"
+                        className="w-full bg-[#182234] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500 placeholder:text-slate-500"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-8 space-y-1">
+                      <label className="text-[11px] text-slate-300 font-medium block">
+                        エディタに挿入する文字列:
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={newQuickInsert}
+                          onChange={(e) => setNewQuickInsert(e.target.value)}
+                          placeholder="例: 【 📌 注目 】\n, ✦ ────── ✦\n"
+                          className="flex-1 bg-[#182234] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500 placeholder:text-slate-500 font-mono"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!newQuickLabel.trim() || !newQuickInsert}
+                          className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-bold text-xs transition cursor-pointer shrink-0 shadow-xs flex items-center gap-1"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>登録する</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* 集中モード時の案内バナー */}
+          {isFocusMode && (
+            <div className="px-3 py-1.5 rounded-xl bg-sky-950/60 border border-sky-500/50 text-sky-200 text-xs flex items-center justify-between shadow-xs animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <Focus className="w-4 h-4 text-sky-400 animate-pulse" />
+                <span className="font-bold">🎯 入力集中モード中</span>
+                <span className="text-[11px] text-sky-300/80 hidden sm:inline">（エディタを広く表示中）</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFocusMode(false)}
+                className="text-[11px] font-bold text-sky-300 hover:text-white px-2 py-0.5 rounded-md bg-sky-900/60 hover:bg-sky-800/80 border border-sky-600/50 transition cursor-pointer flex items-center gap-1"
+              >
+                <span>解除 (Esc)</span>
+              </button>
+            </div>
+          )}
+
+          {/* 左右連動：スレッド分割ナビゲーター（複数ポスト時に即時ジャンプ & 文字数状況 & 左右連動ハイライト） */}
+          {totalThreadCount > 1 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1 px-1 bg-[#131d31]/90 rounded-xl border border-slate-700/80 text-xs shadow-xs animate-in fade-in">
+              <div className="flex items-center gap-1 text-[11px] text-slate-300 font-bold shrink-0 select-none px-1.5">
+                <Layers className="w-3.5 h-3.5 text-sky-400" />
+                <span>スレッド:</span>
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                {Array.from({ length: totalThreadCount }).map((_, idx) => {
+                  const isActive = activeThreadIndex === idx;
+                  const bskySplit = blueskySplits[idx];
+                  const threadsSplit = threadsSplits[idx];
+                  const charCount =
+                    (activeEditorTab === 'threads' ? threadsSplit : bskySplit)?.charCount ??
+                    (bskySplit || threadsSplit)?.charCount ??
+                    0;
+                  const maxLimit = activeEditorTab === 'threads' ? 500 : 300;
+                  const isOver = charCount > maxLimit;
+
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleJumpToThread(idx)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-mono transition-all duration-150 cursor-pointer shrink-0 ${
+                        isActive
+                          ? 'bg-sky-500/25 text-sky-100 border-sky-400 ring-2 ring-sky-400/40 font-bold shadow-sm'
+                          : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-500 hover:text-white'
+                      } ${isOver ? 'border-rose-500 text-rose-300 bg-rose-950/40' : ''}`}
+                      title={`${idx + 1}通目へジャンプ (現在: ${charCount}文字 / 上限${maxLimit}文字)`}
+                    >
+                      {isActive ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse shrink-0" />
+                      ) : (
+                        <span className="text-[10px] text-slate-500">#</span>
+                      )}
+                      <span>{idx + 1}通目</span>
+                      <span
+                        className={`text-[10px] font-normal ${
+                          isOver ? 'text-rose-400 font-bold' : isActive ? 'text-sky-300' : 'text-slate-400'
+                        }`}
+                      >
+                        ({charCount}字)
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="text-[10px] text-slate-400 ml-auto hidden sm:inline px-1 select-none">
+                クリックで該当ポストへ移動
+              </span>
+            </div>
+          )}
 
           {/* テキスト入力エリア */}
           <div className="relative">
@@ -1351,30 +1978,59 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                   ? '🦋 Bluesky専用の投稿文を入力してください...（ハッシュタグや300文字制限に最適化）'
                   : activeEditorTab === 'threads' && isThreadsCustomized
                   ? '🌀 Threads専用の投稿文を入力してください...（500文字制限やリンク配置に最適化）'
+                  : isFocusMode
+                  ? '🎯 集中モード中... 思考を遮られずに本文を入力してください（Escキーで解除）'
                   : 'ここに投稿内容を入力してください...（---でスレッド分割）'
               }
-              rows={4}
-              className={`w-full bg-[#080B13] border ${
-                activeEditorTab === 'bluesky' && isBlueskyCustomized
-                  ? 'border-sky-500/70 focus:border-sky-400'
+              rows={isFocusMode ? 10 : 4}
+              onClick={(e) => updateActiveThreadIndexFromCursor(e.currentTarget.selectionStart)}
+              onKeyUp={(e) => updateActiveThreadIndexFromCursor(e.currentTarget.selectionStart)}
+              onSelect={(e) => updateActiveThreadIndexFromCursor(e.currentTarget.selectionStart)}
+              className={`w-full bg-[#182234] border ${
+                isFocusMode
+                  ? 'border-sky-400/90 ring-2 ring-sky-500/30 shadow-lg shadow-sky-950/40'
+                  : activeEditorTab === 'bluesky' && isBlueskyCustomized
+                  ? 'border-sky-500/80 focus:border-sky-400'
                   : activeEditorTab === 'threads' && isThreadsCustomized
-                  ? 'border-purple-500/70 focus:border-purple-400'
-                  : 'border-slate-700/80 focus:border-sky-400'
-              } rounded-t-xl rounded-b-none border-b-0 p-3 text-slate-100 placeholder-slate-400/80 ${EDITOR_FONT_SIZE_CONFIG[editorFontSize].textClass} focus-ring-accent transition resize-y font-sans min-h-[96px] shadow-inner`}
+                  ? 'border-purple-500/80 focus:border-purple-400'
+                  : 'border-slate-700 focus:border-sky-400'
+              } rounded-t-xl rounded-b-none border-b-0 p-3.5 text-slate-50 placeholder-slate-400 font-medium ${
+                EDITOR_FONT_SIZE_CONFIG[editorFontSize].textClass
+              } focus-ring-accent transition-all resize-y font-sans ${
+                isFocusMode ? 'min-h-[220px]' : 'min-h-[96px]'
+              } shadow-inner`}
             />
 
             {/* テキストエリア直下の一体型スマートステータスバー */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-[#0E1322] border border-slate-700/80 rounded-b-xl -mt-[1px] shadow-xs">
-              {/* 左側: コンパクトインライン文字数カウンター */}
-              <CharCounter
-                text={currentActiveText}
-                postToBluesky={postToBluesky}
-                postToThreads={postToThreads}
-                blueskySplitsCount={blueskySplits.length}
-                threadsSplitsCount={threadsSplits.length}
-                autoSplit={autoSplit}
-                isCompact={true}
-              />
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-[#1a2336] border border-slate-700 rounded-b-xl -mt-[1px] shadow-xs">
+              {/* 左側: コンパクトインライン文字数カウンター & スレッド位置 */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <CharCounter
+                  text={currentActiveText}
+                  postToBluesky={postToBluesky}
+                  postToThreads={postToThreads}
+                  blueskySplitsCount={blueskySplits.length}
+                  threadsSplitsCount={threadsSplits.length}
+                  autoSplit={autoSplit}
+                  isCompact={true}
+                />
+
+                {/* 左右連動：現在編集中スレッドバッジ */}
+                {totalThreadCount > 1 && (
+                  <span className="text-[10px] text-sky-200 font-bold bg-sky-950/90 border border-sky-600/70 px-1.5 py-0.2 rounded-md flex items-center gap-1 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                    <span>#{activeThreadIndex + 1}/{totalThreadCount}通目を編集中</span>
+                  </span>
+                )}
+
+                {/* 集中モードバッジ */}
+                {isFocusMode && (
+                  <span className="text-[10px] text-sky-300 font-bold bg-sky-950/90 border border-sky-600/70 px-1.5 py-0.2 rounded-md flex items-center gap-1 shadow-2xs animate-pulse">
+                    <Focus className="w-2.5 h-2.5 text-sky-400" />
+                    <span>集中ON (Escで戻る)</span>
+                  </span>
+                )}
+              </div>
 
               {/* 右側: 保存ステータス & 個別編集バッジ */}
               <div className="flex items-center gap-2 text-[11px] text-slate-300 ml-auto font-medium">
@@ -1409,10 +2065,11 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
             </div>
           </div>
 
-          {/* ドック型サブパネルナビゲーションタブ */}
+          {/* ドック型サブパネルナビゲーションタブ（集中モード時は省スペース表示） */}
           <div className="space-y-2">
             <div className="flex items-center justify-between border-b border-slate-700/80 pb-1.5">
               <div className="flex items-center gap-1 overflow-x-auto text-xs">
+                {/* 1. メディアタブ */}
                 <button
                   type="button"
                   onClick={() => setBottomDockTab('media')}
@@ -1425,12 +2082,25 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                   <ImageIcon className="w-3.5 h-3.5 text-sky-400" />
                   <span>メディア</span>
                   {images.length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-500 text-white font-mono font-bold">
-                      {images.length}
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-500 text-white font-mono font-bold shadow-2xs">
+                      {images.length}枚
+                    </span>
+                  )}
+                  {images.length > 0 && (
+                    <span
+                      className={`text-[9px] px-1.5 py-0.2 rounded font-bold font-mono ${
+                        altFilledCount === images.length
+                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/80'
+                          : 'bg-amber-950 text-amber-300 border border-amber-700/80'
+                      }`}
+                      title={altFilledCount === images.length ? 'すべての画像にALT説明文が設定されています' : `ALT説明文未入力: ${images.length - altFilledCount}枚`}
+                    >
+                      {altFilledCount === images.length ? 'ALT済' : `ALT ${altFilledCount}/${images.length}`}
                     </span>
                   )}
                 </button>
 
+                {/* 2. タグ & トピックタブ */}
                 <button
                   type="button"
                   onClick={() => setBottomDockTab('tags')}
@@ -1442,11 +2112,22 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 >
                   <Tag className="w-3.5 h-3.5 text-purple-400" />
                   <span>タグ & トピック</span>
+                  {hashtagCount > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-600 text-white font-mono font-bold shadow-2xs">
+                      #{hashtagCount}件
+                    </span>
+                  )}
                   {threadsTopic && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                    <span
+                      className="text-[9px] px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-700 font-sans hidden sm:inline truncate max-w-[85px]"
+                      title={`Threadsトピック: #${threadsTopic}`}
+                    >
+                      #{threadsTopic}
+                    </span>
                   )}
                 </button>
 
+                {/* 3. リプライタブ */}
                 <button
                   type="button"
                   onClick={() => setBottomDockTab('reply')}
@@ -1459,10 +2140,13 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                   <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
                   <span>リプライ</span>
                   {isReplyActive && (
-                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-500 text-white font-bold animate-pulse shadow-2xs">
+                      {hasBlueskyReply && hasThreadsReply ? '両方設定' : hasBlueskyReply ? 'Bsky設定' : 'Threads設定'}
+                    </span>
                   )}
                 </button>
 
+                {/* 4. リンクOGPタブ */}
                 <button
                   type="button"
                   onClick={() => setBottomDockTab('ogp')}
@@ -1474,8 +2158,14 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 >
                   <Link2 className="w-3.5 h-3.5 text-emerald-400" />
                   <span>リンク OGP</span>
+                  {urlCount > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-600 text-white font-mono font-bold shadow-2xs">
+                      {urlCount}件
+                    </span>
+                  )}
                 </button>
 
+                {/* 5. 分割設定タブ */}
                 <button
                   type="button"
                   onClick={() => setBottomDockTab('settings')}
@@ -1487,12 +2177,96 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 >
                   <Sliders className="w-3.5 h-3.5 text-amber-400" />
                   <span>分割設定</span>
+                  {totalThreadCount > 1 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-600 text-white font-mono font-bold shadow-2xs">
+                      {totalThreadCount}通
+                    </span>
+                  )}
                 </button>
               </div>
 
               <span className="text-[10px] text-slate-400 hidden sm:inline font-medium">
-                パネル切替
+                {isFocusMode ? '🎯 集中モード中' : 'パネル切替'}
               </span>
+            </div>
+
+            {/* 添付・設定ステータスサマリーバー（どのタブを開いていても全体状況が一目でわかる） */}
+            <div className="flex items-center gap-1.5 flex-wrap px-2.5 py-1.5 bg-[#131d31]/80 rounded-xl border border-slate-700/60 text-xs shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-400 select-none mr-0.5">添付バッジ:</span>
+
+              {/* メディア状況 */}
+              <button
+                type="button"
+                onClick={() => setBottomDockTab('media')}
+                className={`px-2 py-0.5 rounded-md border text-xs flex items-center gap-1 transition cursor-pointer ${
+                  images.length > 0
+                    ? 'bg-sky-950/70 border-sky-700/70 text-sky-200 hover:bg-sky-900/60'
+                    : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+                title="メディアパネルを開く"
+              >
+                <ImageIcon className="w-3 h-3 text-sky-400" />
+                <span>{images.length > 0 ? `${images.length}枚` : 'メディア0'}</span>
+                {images.length > 0 && (
+                  <span
+                    className={`text-[9px] px-1 rounded font-bold ${
+                      altFilledCount === images.length
+                        ? 'bg-emerald-900/80 text-emerald-300'
+                        : 'bg-amber-900/80 text-amber-300'
+                    }`}
+                  >
+                    {altFilledCount === images.length ? 'ALT完了' : `ALT ${altFilledCount}/${images.length}`}
+                  </span>
+                )}
+              </button>
+
+              {/* タグ & トピック状況 */}
+              <button
+                type="button"
+                onClick={() => setBottomDockTab('tags')}
+                className={`px-2 py-0.5 rounded-md border text-xs flex items-center gap-1 transition cursor-pointer ${
+                  hashtagCount > 0 || threadsTopic
+                    ? 'bg-purple-950/70 border-purple-700/70 text-purple-200 hover:bg-purple-900/60'
+                    : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+                title="タグ・トピックパネルを開く"
+              >
+                <Tag className="w-3 h-3 text-purple-400" />
+                <span>{hashtagCount > 0 ? `#${hashtagCount}件` : 'タグ0'}</span>
+                {threadsTopic && (
+                  <span className="text-[9px] px-1 rounded bg-purple-900/80 text-purple-300 font-mono truncate max-w-[70px]">
+                    #{threadsTopic}
+                  </span>
+                )}
+              </button>
+
+              {/* リンクOGP状況 */}
+              <button
+                type="button"
+                onClick={() => setBottomDockTab('ogp')}
+                className={`px-2 py-0.5 rounded-md border text-xs flex items-center gap-1 transition cursor-pointer ${
+                  urlCount > 0
+                    ? 'bg-emerald-950/70 border-emerald-700/70 text-emerald-200 hover:bg-emerald-900/60'
+                    : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+                title="リンクOGPパネルを開く"
+              >
+                <Link2 className="w-3 h-3 text-emerald-400" />
+                <span>{urlCount > 0 ? `リンク ${urlCount}件` : 'リンク0'}</span>
+              </button>
+
+              {/* リプライ設定状況 */}
+              {isReplyActive && (
+                <button
+                  type="button"
+                  onClick={() => setBottomDockTab('reply')}
+                  className="px-2 py-0.5 rounded-md border text-xs flex items-center gap-1 bg-indigo-950/70 border-indigo-700/70 text-indigo-200 hover:bg-indigo-900/60 transition cursor-pointer"
+                  title="リプライ設定パネルを開く"
+                >
+                  <MessageSquare className="w-3 h-3 text-indigo-400" />
+                  <span>返信設定中</span>
+                </button>
+              )}
             </div>
 
             {/* ドックコンテンツエリア */}
@@ -1915,8 +2689,10 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               </div>
             )}
 
-            {/* モード1: 同時投稿 (即時実行) */}
-            {postMode === 'instant' && (
+            {/* 静的投稿アクションエリア（可視状態をフローティングバーと連動） */}
+            <div ref={submitButtonContainerRef} id="main-submission-actions-block" className="space-y-3">
+              {/* モード1: 同時投稿 (即時実行) */}
+              {postMode === 'instant' && (
               <div className="space-y-1.5 animate-in fade-in duration-150">
                 {isAdminMode && (
                   <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/50 text-amber-200 text-xs flex items-center justify-center gap-2 font-bold shadow-xs">
@@ -1930,7 +2706,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                       id="submit-crosspost-button"
                       type="button"
                       onClick={handleSafeSubmitPost}
-                      disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads) || isReplyBlocked}
+                      disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads)}
                       className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 active:bg-sky-500/35 border border-sky-400/40 hover:border-sky-400/60 disabled:opacity-40 disabled:cursor-not-allowed text-sky-100 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer shadow-sm"
                     >
                       <Sparkles className="w-4 h-4 text-sky-300/80" />
@@ -1945,7 +2721,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                     id="submit-crosspost-button"
                     type="button"
                     onClick={handleSafeSubmitPost}
-                    disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads) || isReplyBlocked}
+                    disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads)}
                     className="w-full py-2.5 sm:py-3 px-4 rounded-xl btn-accent disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer animate-in fade-in duration-150"
                   >
                     <Send className="w-3.5 h-3.5" />
@@ -2125,7 +2901,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                   id="submit-schedule-button"
                   type="button"
                   onClick={handleScheduleSubmit}
-                  disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads) || relativeJst.isPast || isReplyBlocked}
+                  disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads) || relativeJst.isPast}
                   className="w-full py-2.5 px-3 rounded-lg btn-accent disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg"
                 >
                   <Clock className="w-3.5 h-3.5" />
@@ -2141,13 +2917,14 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                 </button>
               </div>
             )}
+            </div>
           </div>
           </div>
         </div>
       </div>
 
       {/* 右側：リアルタイムプレビュー & 設定スライドイン領域 */}
-      <div id="realtime-preview-area" className="lg:col-span-6 xl:col-span-7 min-w-0 w-full relative flex flex-col h-full">
+      <div id="realtime-preview-area" className="lg:col-span-5 xl:col-span-5 2xl:col-span-6 min-w-0 w-full relative flex flex-col h-full">
         <div className="relative overflow-hidden rounded-2xl min-h-[720px] xl:min-h-[800px] flex-1 flex flex-col h-full">
           {/* リアルタイム投稿プレビュー本体 */}
           <div className={`w-full flex-1 flex flex-col transition-opacity duration-300 ${isSettingsOpen ? 'opacity-25 pointer-events-none filter blur-[0.5px]' : 'opacity-100'}`}>
@@ -2160,6 +2937,8 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               postToThreads={postToThreads}
               credentials={credentials}
               replySettings={replySettings}
+              activeSplitIndex={activeThreadIndex}
+              onSelectSplitIndex={handleJumpToThread}
             />
           </div>
 
@@ -2210,12 +2989,99 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
         onPresetsUpdated={(updated) => setCustomPresets(updated)}
       />
 
+      {/* 例文・サンプル文章挿入モーダル（固定オーバーレイ） */}
+      {showSamples && (
+        <div
+          id="samples-modal-backdrop"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowSamples(false);
+            }
+          }}
+        >
+          <div
+            ref={samplesDropdownRef}
+            className="bg-[#0f172a] border border-slate-700/90 w-full max-w-xl rounded-2xl shadow-2xl shadow-black/90 p-4 sm:p-5 z-50 space-y-3.5 max-h-[85vh] overflow-y-auto animate-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between text-sm font-bold text-slate-100 pb-2.5 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center shadow-xs">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                </div>
+                <span>サンプル文章（例文）を挿入（全{SAMPLE_TEXTS.length}件）</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSamples(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                title="閉じる (Esc)"
+                aria-label="閉じる"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              選択したサンプル文章がエディタ本文へ即座に読み込まれます（長文スレッド分割や任意区切り、トーンのテストに最適です）。
+            </p>
+
+            <div className="space-y-2 pt-0.5">
+              {SAMPLE_TEXTS.map((s, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    handleActiveTextChange(s.text);
+                    setShowSamples(false);
+                    if (onNotify) {
+                      onNotify({
+                        type: 'success',
+                        title: '例文を読み込みました',
+                        message: `「${s.label}」を本文に挿入しました。`,
+                      });
+                    }
+                  }}
+                  className="w-full text-left p-3 rounded-xl border border-slate-800 hover:border-amber-500/60 bg-slate-900/60 hover:bg-slate-800/90 transition cursor-pointer flex flex-col gap-1.5 group shadow-xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-100 group-hover:text-amber-300 transition-colors whitespace-normal break-words leading-snug">
+                      {s.label}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300">
+                        {s.charCount}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2 text-[11px] text-slate-400 group-hover:text-slate-300 whitespace-normal break-words leading-relaxed">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800/60 shrink-0 font-medium">
+                      {s.tag}
+                    </span>
+                    <span className="leading-snug">{s.summary}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 定型文・スニペット管理モーダル */}
       <SnippetModal
         isOpen={isSnippetModalOpen}
         onClose={() => setIsSnippetModalOpen(false)}
         onInsertSnippet={handleInsertSnippet}
         currentText={currentActiveText}
+      />
+
+      {/* 特殊フォント ＆ 飾り罫線パレットモーダル */}
+      <UnicodeDecoratorModal
+        isOpen={isUnicodeModalOpen}
+        onClose={() => setIsUnicodeModalOpen(false)}
+        selectedText={selectedEditorText}
+        onInsertText={handleInsertDecoratedText}
       />
 
       {/* AIアシスト・投稿リライトモーダル */}
@@ -2246,6 +3112,93 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
         }}
         onNotify={onNotify}
       />
+
+      {/* 🚀 モバイル・縦長時 フローティング固定投稿アクションバー */}
+      {!isStaticButtonVisible && (
+        <div
+          id="floating-crosspost-bar"
+          className="fixed bottom-0 left-0 right-0 z-40 bg-[#0b1220]/95 backdrop-blur-md border-t border-slate-700/80 px-3.5 py-2.5 sm:px-6 shadow-2xl transition-all duration-300 animate-in slide-in-from-bottom-4"
+        >
+          <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
+            {/* 左側: 投稿対象プラットフォーム & コンテンツサマリー */}
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-1.5 text-xs shrink-0">
+                {postToBluesky && (
+                  <span className="px-2 py-0.5 rounded-md bg-[#0085ff]/20 text-[#38bdf8] border border-[#0085ff]/40 text-[10px] font-bold flex items-center gap-1">
+                    <span>🦋</span>
+                    <span className="hidden sm:inline">Bluesky</span>
+                  </span>
+                )}
+                {postToThreads && (
+                  <span className="px-2 py-0.5 rounded-md bg-purple-950/70 text-purple-300 border border-purple-600/50 text-[10px] font-bold flex items-center gap-1">
+                    <span>🌀</span>
+                    <span className="hidden sm:inline">Threads</span>
+                  </span>
+                )}
+                {!postToBluesky && !postToThreads && (
+                  <span className="text-[11px] text-rose-400 font-medium">投稿先未選択</span>
+                )}
+              </div>
+
+              {/* 添付 & 通数ステータスサマリー */}
+              <div className="flex items-center gap-2 text-[11px] text-slate-300 truncate">
+                <span className="font-mono font-bold text-sky-400 bg-sky-950/80 px-1.5 py-0.2 rounded border border-sky-800/60">
+                  {totalThreadCount}通
+                </span>
+                {images.length > 0 && (
+                  <span className="text-slate-300 font-medium flex items-center gap-0.5">
+                    <ImageIcon className="w-3 h-3 text-sky-400" />
+                    <span>{images.length}枚</span>
+                  </span>
+                )}
+                {hashtagCount > 0 && (
+                  <span className="text-purple-300 font-medium hidden sm:flex items-center gap-0.5">
+                    <Tag className="w-3 h-3 text-purple-400" />
+                    <span>#{hashtagCount}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 右側: 投稿アクションボタン */}
+            <div className="flex items-center gap-2 shrink-0">
+              {postMode === 'scheduled' ? (
+                <button
+                  type="button"
+                  onClick={handleScheduleSubmit}
+                  disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads) || relativeJst.isPast}
+                  className="py-2 px-3.5 sm:px-4 rounded-xl btn-accent disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center gap-1.5 shadow-lg transition cursor-pointer"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>予約投稿を実行</span>
+                </button>
+              ) : isDemo ? (
+                <button
+                  id="floating-submit-crosspost-button"
+                  type="button"
+                  onClick={handleSafeSubmitPost}
+                  disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads)}
+                  className="py-2 px-3.5 sm:px-5 rounded-xl bg-sky-500/25 hover:bg-sky-500/35 active:bg-sky-500/40 border border-sky-400/60 disabled:opacity-40 disabled:cursor-not-allowed text-sky-100 font-bold text-xs sm:text-sm flex items-center gap-1.5 transition cursor-pointer shadow-lg"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-sky-300" />
+                  <span>{isAdminMode ? '🔒 管理者制限中' : 'デモ同時投稿'}</span>
+                </button>
+              ) : (
+                <button
+                  id="floating-submit-crosspost-button"
+                  type="button"
+                  onClick={handleSafeSubmitPost}
+                  disabled={isAdminMode || !hasContent || (!postToBluesky && !postToThreads)}
+                  className="py-2 px-3.5 sm:px-5 rounded-xl btn-accent disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 transition cursor-pointer shadow-lg"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{isAdminMode ? '🔒 管理者制限中' : '今すぐ同時投稿'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

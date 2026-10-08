@@ -1129,12 +1129,14 @@ export class AppMediator implements IMediatorArbitrator {
         this.credentials = restoredCreds;
         localStorage.setItem('cross_poster_creds', JSON.stringify(restoredCreds));
 
-        // バックグラウンドで完全復号化を完了して反映
-        restoreFromVaultAsync(restoredCreds, 'all').then((full) => {
-          this.credentials = { ...full, isDemoMode: false };
-          localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
-          this.notifyListeners();
-        });
+        // バックグラウンドで完全復号化およびサーバーVault同期を完了して反映
+        syncVaultWithServer()
+          .then(() => restoreFromVaultAsync(restoredCreds, 'all'))
+          .then((full) => {
+            this.credentials = { ...full, isDemoMode: false };
+            localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
+            this.notifyListeners();
+          });
 
         this.addToast({
           type: 'success',
@@ -1144,6 +1146,17 @@ export class AppMediator implements IMediatorArbitrator {
       } else {
         this.credentials = restoredCreds;
         localStorage.setItem('cross_poster_creds', JSON.stringify(restoredCreds));
+
+        // ローカルが空でもサーバー側に認証済みVaultがある場合は同期復元
+        syncVaultWithServer().then(async (syncedVault) => {
+          if (syncedVault.bluesky?.identifier || syncedVault.threads?.accessToken) {
+            const full = await restoreFromVaultAsync(this.credentials, 'all');
+            this.credentials = { ...full, isDemoMode: false };
+            localStorage.setItem('cross_poster_creds', JSON.stringify(this.credentials));
+            this.notifyListeners();
+          }
+        });
+
         this.addToast({
           type: 'info',
           title: '🚀 LIVE（本番）モードに切り替えました',

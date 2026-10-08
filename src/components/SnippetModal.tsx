@@ -19,6 +19,7 @@ import {
   deleteSnippet,
   resetSnippetsToDefault,
 } from '../utils/snippetStorage';
+import { ConfirmModal } from './ConfirmModal';
 
 interface SnippetModalProps {
   isOpen: boolean;
@@ -58,6 +59,38 @@ export const SnippetModal: React.FC<SnippetModalProps> = ({
   const [formCategory, setFormCategory] = useState<SnippetItem['category']>('custom');
   const [formIcon, setFormIcon] = useState('📑');
   const [formError, setFormError] = useState('');
+
+  // 確認モーダル状態
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    variant?: 'danger' | 'warning' | 'primary';
+    iconType?: 'alert' | 'reset' | 'trash';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const requestConfirm = (options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    variant?: 'danger' | 'warning' | 'primary';
+    iconType?: 'alert' | 'reset' | 'trash';
+    onConfirm: () => void;
+  }) => {
+    setConfirmState({
+      isOpen: true,
+      ...options,
+    });
+  };
 
   // 外部からの更新同期
   useEffect(() => {
@@ -123,17 +156,31 @@ export const SnippetModal: React.FC<SnippetModalProps> = ({
   };
 
   const handleDelete = (id: string, title: string) => {
-    if (window.confirm(`定型文「${title}」を削除してもよろしいですか？`)) {
-      const updated = deleteSnippet(id);
-      setSnippets(updated);
-    }
+    requestConfirm({
+      title: '定型文テンプレートの削除',
+      message: `定型文「${title}」を削除してもよろしいですか？`,
+      confirmLabel: '削除する',
+      iconType: 'trash',
+      variant: 'danger',
+      onConfirm: () => {
+        const updated = deleteSnippet(id);
+        setSnippets(updated);
+      },
+    });
   };
 
   const handleResetDefaults = () => {
-    if (window.confirm('定型文を初期プリセットに戻しますか？（作成した自作テンプレートもリセットされます）')) {
-      const updated = resetSnippetsToDefault();
-      setSnippets(updated);
-    }
+    requestConfirm({
+      title: '定型文の初期化',
+      message: '定型文を初期プリセットに戻しますか？\n※作成した自作テンプレートもリセットされます。',
+      confirmLabel: '初期プリセットに戻す',
+      iconType: 'reset',
+      variant: 'warning',
+      onConfirm: () => {
+        const updated = resetSnippetsToDefault();
+        setSnippets(updated);
+      },
+    });
   };
 
   const handleCopy = (snippet: SnippetItem) => {
@@ -423,6 +470,19 @@ export const SnippetModal: React.FC<SnippetModalProps> = ({
           </>
         )}
       </motion.div>
+
+      {/* アクション確認モーダル */}
+      <ConfirmModal
+        isOpen={confirmState.isOpen}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmLabel={confirmState.confirmLabel}
+        cancelLabel={confirmState.cancelLabel}
+        variant={confirmState.variant}
+        iconType={confirmState.iconType}
+        onConfirm={confirmState.onConfirm}
+        onClose={() => setConfirmState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ApiCredentials, ThemeAccentId } from '../types';
-import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3, Info, Database, ShieldAlert, KeyRound, Lock, Unlock } from 'lucide-react';
+import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3, Info, Database, ShieldAlert, KeyRound, Lock, Unlock, Smartphone } from 'lucide-react';
 import { hasSavedAccountInVault } from '../utils/accountVault';
 import { calculateTokenExpiryInfo } from '../utils/tokenExpiry';
 import { ThemeSelector } from './ThemeSelector';
 import { getModeSecurityConfig } from '../utils/modeSecurity';
-import { getAppVersion, getModeSwitchClickCount } from '../utils/adminConfig';
+import { getAppVersion, getModeSwitchClickCount, syncVersionWithServer } from '../utils/adminConfig';
 
 interface HeaderProps {
   credentials: ApiCredentials;
@@ -33,6 +33,8 @@ interface HeaderProps {
   isAdminMode?: boolean;
   onOpenAdminModal?: () => void;
   onDeactivateAdminMode?: () => void;
+  onToggleViewMode?: () => void;
+  isMobileUserAgent?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -61,9 +63,26 @@ export const Header: React.FC<HeaderProps> = ({
   isAdminMode = false,
   onOpenAdminModal,
   onDeactivateAdminMode,
+  onToggleViewMode,
+  isMobileUserAgent = false,
 }) => {
   const [showQuickLogout, setShowQuickLogout] = useState(false);
+  const [displayVersion, setDisplayVersion] = useState<string>(getAppVersion());
   const hasSaved = hasSavedAccountInVault();
+
+  useEffect(() => {
+    syncVersionWithServer().then((v) => setDisplayVersion(v));
+
+    const handleVersionChanged = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.version) {
+        setDisplayVersion(customEvent.detail.version);
+      }
+    };
+
+    window.addEventListener('crosspost_version_changed', handleVersionChanged);
+    return () => window.removeEventListener('crosspost_version_changed', handleVersionChanged);
+  }, []);
 
   // タイトル場所の左クリック3回用カウンター
   const titleClickCountRef = useRef<number>(0);
@@ -424,7 +443,7 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-full text-center text-[10px] text-slate-300 hover:text-sky-300 py-1 hover:bg-sky-950/20 rounded transition cursor-pointer flex items-center justify-center gap-1"
                   >
                     <Info className="w-2.5 h-2.5 text-sky-400" />
-                    アプリ情報 (Version {getAppVersion()})
+                    アプリ情報 (Version {displayVersion})
                   </button>
                 </div>
               )}
@@ -552,6 +571,23 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Database className="w-4 h-4 text-emerald-400" />
             <span className="hidden sm:inline">サーバー登録情報</span>
+          </button>
+        )}
+
+        {/* スマホ表示切替ボタン */}
+        {onToggleViewMode && (
+          <button
+            id="header-mobile-view-toggle-button"
+            type="button"
+            onClick={onToggleViewMode}
+            disabled={isAdminMode}
+            className={`bg-slate-900 text-slate-300 border border-slate-800 p-2 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center gap-1.5 text-xs font-medium shadow-sm ${
+              isAdminMode ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-800 hover:text-sky-300 hover:border-sky-500/50 cursor-pointer'
+            }`}
+            title="スマートフォン向けモバイルUIに切り替えます（ユーザーエージェント判別対応）"
+          >
+            <Smartphone className="w-4 h-4 text-sky-400" />
+            <span className="hidden lg:inline">スマホ表示</span>
           </button>
         )}
 

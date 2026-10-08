@@ -1,5 +1,6 @@
 import { ApiCredentials, SavedAccountVault } from '../types';
 import { encryptSecret, decryptSecret, isEncryptedString } from './cryptoStorage';
+import { getAuthHeaders } from './modeSecurity';
 
 const VAULT_STORAGE_KEY = 'cross_poster_saved_vault_v2';
 const LEGACY_VAULT_KEY = 'cross_poster_saved_vault';
@@ -190,7 +191,7 @@ export async function syncVaultToServer(vault: SavedAccountVault): Promise<boole
   try {
     const res = await fetch('/api/credentials/vault', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(vault),
     });
     const data = await res.json();
@@ -209,7 +210,9 @@ export async function syncVaultWithServer(): Promise<SavedAccountVault> {
   if (typeof window === 'undefined') return localVault;
 
   try {
-    const res = await fetch('/api/credentials/vault');
+    const res = await fetch('/api/credentials/vault', {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) return localVault;
     const data = await res.json();
     if (!data?.success || !data?.vault) return localVault;
@@ -436,7 +439,10 @@ export function deleteFromVault(platform: 'all' | 'bluesky' | 'threads'): void {
     persistEncryptedVault(vault);
 
     // サーバーファイルストレージからも削除
-    fetch(`/api/credentials/vault?platform=${platform}`, { method: 'DELETE' }).catch((err) => {
+    fetch(`/api/credentials/vault?platform=${platform}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    }).catch((err) => {
       console.warn('[accountVault] Failed to delete from server storage:', err);
     });
   } catch (e) {

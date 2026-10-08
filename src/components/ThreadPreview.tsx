@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SplitThreadItem, AttachedImage, ApiCredentials, ReplySettings } from '../types';
 import {
   MessageSquare,
@@ -37,6 +37,8 @@ interface ThreadPreviewProps {
   postToThreads: boolean;
   credentials?: ApiCredentials;
   replySettings?: ReplySettings;
+  activeSplitIndex?: number;
+  onSelectSplitIndex?: (index: number) => void;
 }
 
 type PreviewFontSize = 'sm' | 'md' | 'lg';
@@ -71,6 +73,8 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
   postToThreads,
   credentials,
   replySettings,
+  activeSplitIndex,
+  onSelectSplitIndex,
 }) => {
   const [showDiffGuide, setShowDiffGuide] = useState<boolean>(false);
 
@@ -166,6 +170,24 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
   const isStandard = connectionDegree > 25 && connectionDegree < 72;
   const isSeamless = connectionDegree >= 72;
   const connectorOpacity = Math.max(0.2, connectionDegree / 100);
+
+  // 左右連動：エディタのカーソル位置（activeSplitIndex）に合わせてプレビュー内の該当ポストを自動でスムーズスクロール
+  useEffect(() => {
+    if (activeSplitIndex !== undefined && activeSplitIndex !== null) {
+      const idx = activeSplitIndex + 1;
+      const el =
+        document.getElementById(`bsky-split-item-${idx}`) ||
+        document.getElementById(`bsky-split-card-${idx}`) ||
+        document.getElementById(`threads-split-item-${idx}`) ||
+        document.getElementById(`threads-split-card-${idx}`) ||
+        document.getElementById(`bsky-standard-item-${idx}`) ||
+        document.getElementById(`bsky-standard-card-${idx}`) ||
+        document.getElementById(`threads-standard-item-${idx}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [activeSplitIndex]);
 
   // リプライ対象の検出とプレビュー表示制御
   // - Threadsのリプライ投稿の場合はThreadsのみプレビューを表示（Blueskyは非表示）
@@ -574,6 +596,7 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                   const isLast = idx === blueskySplits.length - 1;
                   const attachImgs = split.images ?? (split.hasImages ? images.slice(0, 4) : []);
                   const isFocused = focusedSplitIndex === split.index;
+                  const isActiveEditorSplit = activeSplitIndex === idx;
 
                   {/* カード分離表示モード（スライダー 0%〜25%） */}
                   if (isSeparated && blueskySplits.length > 1) {
@@ -581,10 +604,15 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                       <div
                         key={idx}
                         id={`bsky-split-card-${split.index}`}
-                        onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
+                        onClick={() => {
+                          setFocusedSplitIndex(isFocused ? null : split.index);
+                          if (onSelectSplitIndex) onSelectSplitIndex(idx);
+                        }}
                         className={`relative group p-3.5 rounded-xl bg-[#0e1624] border transition-all duration-200 cursor-pointer ${
-                          isFocused
-                            ? 'border-[#0085ff] ring-2 ring-[#0085ff]/50 bg-[#0e192c] shadow-md shadow-[#0085ff]/10'
+                          isActiveEditorSplit
+                            ? 'border-[#0085ff] ring-2 ring-[#0085ff]/70 bg-[#0e1b33] shadow-lg shadow-[#0085ff]/15'
+                            : isFocused
+                            ? 'border-[#0085ff]/80 ring-1 ring-[#0085ff]/40 bg-[#0e192c]'
                             : 'border-[#1e2a38] hover:border-[#0085ff]/50 shadow-xs'
                         }`}
                       >
@@ -600,6 +628,11 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                             ) : (
                               <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-900 text-slate-300 border border-slate-700 font-sans">
                                 返信 #{split.index}
+                              </span>
+                            )}
+                            {isActiveEditorSplit && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-sky-500 text-white font-bold font-sans flex items-center gap-0.5 animate-pulse">
+                                ✍️ 編集中
                               </span>
                             )}
                           </div>
@@ -646,10 +679,17 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                     <div
                       key={idx}
                       id={`bsky-split-item-${split.index}`}
-                      onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
-                      className={`relative group transition-all duration-200 min-w-0 cursor-pointer ${
-                        isFocused ? 'bg-[#0085ff]/10 rounded-xl px-2.5 py-2 -mx-2.5 ring-1 ring-[#0085ff]/50' : ''
-                      } ${isSeamless && blueskySplits.length > 1 ? 'pt-1.5 pb-2' : 'pt-3 pb-3'} first:pt-0`}
+                      onClick={() => {
+                        setFocusedSplitIndex(isFocused ? null : split.index);
+                        if (onSelectSplitIndex) onSelectSplitIndex(idx);
+                      }}
+                      className={`relative group transition-all duration-200 min-w-0 cursor-pointer rounded-xl px-2.5 py-2 -mx-2.5 ${
+                        isActiveEditorSplit
+                          ? 'bg-[#0085ff]/15 ring-2 ring-[#0085ff]/80 shadow-md shadow-[#0085ff]/10'
+                          : isFocused
+                          ? 'bg-[#0085ff]/10 ring-1 ring-[#0085ff]/50'
+                          : 'hover:bg-slate-900/50'
+                      } ${isSeamless && blueskySplits.length > 1 ? 'pt-1.5 pb-2' : 'pt-3 pb-3'} first:pt-2`}
                     >
                       {/* スレッド接続ライン (Blueskyブルーの滑らかな垂直線) */}
                       {!isLast && (
@@ -837,18 +877,34 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
               ) : (
                 blueskySplits.map((split, idx) => {
                   const isFocused = focusedSplitIndex === split.index;
+                  const isActiveEditorSplit = activeSplitIndex === idx;
 
                   if (isSeparated && blueskySplits.length > 1) {
                     return (
                       <div
                         key={idx}
-                        onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
-                        className={`p-2.5 rounded-lg bg-slate-900 border transition cursor-pointer ${
-                          isFocused ? 'border-[#0085ff] ring-1 ring-[#0085ff]' : 'border-slate-800'
+                        id={`bsky-standard-card-${split.index}`}
+                        onClick={() => {
+                          setFocusedSplitIndex(isFocused ? null : split.index);
+                          if (onSelectSplitIndex) onSelectSplitIndex(idx);
+                        }}
+                        className={`p-2.5 rounded-lg transition cursor-pointer ${
+                          isActiveEditorSplit
+                            ? 'bg-[#0085ff]/15 border-[#0085ff] ring-2 ring-[#0085ff]/60 shadow-md'
+                            : isFocused
+                            ? 'bg-slate-900 border-[#0085ff] ring-1 ring-[#0085ff]'
+                            : 'bg-slate-900 border border-slate-800 hover:border-slate-700'
                         }`}
                       >
                         <div className="flex items-center justify-between text-[10px] font-mono text-sky-400 pb-1.5 mb-1.5 border-b border-slate-800">
-                          <span className="font-bold">ポスト #{split.index} / {split.total}</span>
+                          <div className="flex items-center gap-1 font-bold">
+                            <span>ポスト #{split.index} / {split.total}</span>
+                            {isActiveEditorSplit && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-sky-500 text-white font-sans animate-pulse">
+                                ✍️ 編集中
+                              </span>
+                            )}
+                          </div>
                           <span className="text-slate-400">{split.charCount}文字</span>
                         </div>
                         <div className="flex items-start gap-2">
@@ -873,9 +929,17 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                   return (
                     <div
                       key={idx}
-                      onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
-                      className={`relative flex items-start gap-2.5 py-2 border-b border-slate-800/40 last:border-b-0 cursor-pointer ${
-                        isFocused ? 'bg-sky-500/10 rounded px-1' : ''
+                      id={`bsky-standard-item-${split.index}`}
+                      onClick={() => {
+                        setFocusedSplitIndex(isFocused ? null : split.index);
+                        if (onSelectSplitIndex) onSelectSplitIndex(idx);
+                      }}
+                      className={`relative flex items-start gap-2.5 py-2 px-1.5 rounded-lg border-b border-slate-800/40 last:border-b-0 cursor-pointer transition ${
+                        isActiveEditorSplit
+                          ? 'bg-[#0085ff]/15 ring-2 ring-[#0085ff]/70 border-transparent shadow-sm'
+                          : isFocused
+                          ? 'bg-sky-500/10'
+                          : 'hover:bg-slate-800/30'
                       }`}
                     >
                       <div className="w-7 h-7 rounded-full bg-[#0085ff] flex items-center justify-center text-white text-xs font-bold shrink-0">
@@ -888,6 +952,11 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                           {blueskySplits.length > 1 && (
                             <span className="text-[10px] text-sky-400/80 font-mono ml-1">
                               (#{split.index} · {split.charCount}字)
+                            </span>
+                          )}
+                          {isActiveEditorSplit && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-sky-500 text-white font-sans font-bold ml-auto animate-pulse">
+                              ✍️ 編集中
                             </span>
                           )}
                         </div>
@@ -1012,6 +1081,7 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                   const isLast = idx === threadsSplits.length - 1;
                   const attachImgs = split.hasImages ? images : [];
                   const isFocused = focusedSplitIndex === split.index;
+                  const isActiveEditorSplit = activeSplitIndex === idx;
 
                   {/* カード分離表示モード（スライダー 0%〜25%） */}
                   if (isSeparated && threadsSplits.length > 1) {
@@ -1019,10 +1089,15 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                       <div
                         key={idx}
                         id={`threads-split-card-${split.index}`}
-                        onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
+                        onClick={() => {
+                          setFocusedSplitIndex(isFocused ? null : split.index);
+                          if (onSelectSplitIndex) onSelectSplitIndex(idx);
+                        }}
                         className={`relative group p-3.5 rounded-xl bg-neutral-900/90 border transition-all duration-200 cursor-pointer ${
-                          isFocused
-                            ? 'border-purple-500 ring-2 ring-purple-500/50 bg-neutral-900 shadow-md shadow-purple-950/30'
+                          isActiveEditorSplit
+                            ? 'border-purple-500 ring-2 ring-purple-500/70 bg-purple-950/30 shadow-lg shadow-purple-950/40'
+                            : isFocused
+                            ? 'border-purple-500/80 ring-1 ring-purple-500/40 bg-neutral-900'
                             : 'border-neutral-800 hover:border-purple-500/50 shadow-xs'
                         }`}
                       >
@@ -1038,6 +1113,11 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                             ) : (
                               <span className="text-[9px] px-1.5 py-0.2 rounded bg-neutral-950 text-neutral-300 border border-neutral-700 font-sans">
                                 返信 #{split.index}
+                              </span>
+                            )}
+                            {isActiveEditorSplit && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-600 text-white font-bold font-sans flex items-center gap-0.5 animate-pulse">
+                                ✍️ 編集中
                               </span>
                             )}
                           </div>
@@ -1082,10 +1162,17 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                     <div
                       key={idx}
                       id={`threads-split-item-${split.index}`}
-                      onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
-                      className={`relative group transition-all duration-200 min-w-0 cursor-pointer ${
-                        isFocused ? 'bg-purple-950/20 rounded-xl px-2.5 py-2 -mx-2.5 ring-1 ring-purple-500/50' : ''
-                      } ${isSeamless && threadsSplits.length > 1 ? 'pt-1.5 pb-2' : 'pt-3 pb-3'} first:pt-0`}
+                      onClick={() => {
+                        setFocusedSplitIndex(isFocused ? null : split.index);
+                        if (onSelectSplitIndex) onSelectSplitIndex(idx);
+                      }}
+                      className={`relative group transition-all duration-200 min-w-0 cursor-pointer rounded-xl px-2.5 py-2 -mx-2.5 ${
+                        isActiveEditorSplit
+                          ? 'bg-purple-950/30 ring-2 ring-purple-500/80 shadow-md shadow-purple-950/20'
+                          : isFocused
+                          ? 'bg-purple-950/20 ring-1 ring-purple-500/50'
+                          : 'hover:bg-neutral-900/50'
+                      } ${isSeamless && threadsSplits.length > 1 ? 'pt-1.5 pb-2' : 'pt-3 pb-3'} first:pt-2`}
                     >
                       {/* Threads特有の垂直コネクター線 */}
                       {!isLast && (
@@ -1277,18 +1364,34 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
               ) : (
                 threadsSplits.map((split, idx) => {
                   const isFocused = focusedSplitIndex === split.index;
+                  const isActiveEditorSplit = activeSplitIndex === idx;
 
                   if (isSeparated && threadsSplits.length > 1) {
                     return (
                       <div
                         key={idx}
-                        onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
-                        className={`p-2.5 rounded-lg bg-neutral-900 border transition cursor-pointer ${
-                          isFocused ? 'border-purple-500 ring-1 ring-purple-500' : 'border-neutral-800'
+                        id={`threads-standard-card-${split.index}`}
+                        onClick={() => {
+                          setFocusedSplitIndex(isFocused ? null : split.index);
+                          if (onSelectSplitIndex) onSelectSplitIndex(idx);
+                        }}
+                        className={`p-2.5 rounded-lg transition cursor-pointer ${
+                          isActiveEditorSplit
+                            ? 'bg-purple-950/30 border-purple-500 ring-2 ring-purple-500/60 shadow-md'
+                            : isFocused
+                            ? 'bg-neutral-900 border-purple-500 ring-1 ring-purple-500'
+                            : 'bg-neutral-900 border border-neutral-800 hover:border-neutral-700'
                         }`}
                       >
                         <div className="flex items-center justify-between text-[10px] font-mono text-purple-400 pb-1.5 mb-1.5 border-b border-neutral-800">
-                          <span className="font-bold">スレッド #{split.index} / {split.total}</span>
+                          <div className="flex items-center gap-1 font-bold">
+                            <span>スレッド #{split.index} / {split.total}</span>
+                            {isActiveEditorSplit && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-purple-600 text-white font-sans animate-pulse">
+                                ✍️ 編集中
+                              </span>
+                            )}
+                          </div>
                           <span className="text-neutral-400">{split.charCount}文字</span>
                         </div>
                         <div className="flex items-start gap-2">
@@ -1313,9 +1416,17 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                   return (
                     <div
                       key={idx}
-                      onClick={() => setFocusedSplitIndex(isFocused ? null : split.index)}
-                      className={`relative flex items-start gap-2.5 py-2 border-b border-slate-800/40 last:border-b-0 cursor-pointer ${
-                        isFocused ? 'bg-purple-950/30 rounded px-1' : ''
+                      id={`threads-standard-item-${split.index}`}
+                      onClick={() => {
+                        setFocusedSplitIndex(isFocused ? null : split.index);
+                        if (onSelectSplitIndex) onSelectSplitIndex(idx);
+                      }}
+                      className={`relative flex items-start gap-2.5 py-2 px-1.5 rounded-lg border-b border-slate-800/40 last:border-b-0 cursor-pointer transition ${
+                        isActiveEditorSplit
+                          ? 'bg-purple-950/30 ring-2 ring-purple-500/70 border-transparent shadow-sm'
+                          : isFocused
+                          ? 'bg-purple-950/20'
+                          : 'hover:bg-neutral-800/30'
                       }`}
                     >
                       <div className="relative shrink-0">
@@ -1336,6 +1447,11 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
                             {threadsSplits.length > 1 && (
                               <span className="text-[10px] text-slate-500 font-mono ml-1 shrink-0">
                                 (#{split.index} · {split.charCount}字)
+                              </span>
+                            )}
+                            {isActiveEditorSplit && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-purple-600 text-white font-sans font-bold ml-auto animate-pulse">
+                                ✍️ 編集中
                               </span>
                             )}
                           </div>

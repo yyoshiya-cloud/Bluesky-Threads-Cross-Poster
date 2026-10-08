@@ -1,6 +1,7 @@
 import { PostHistoryItem, ScheduledPostItem, SnippetItem } from '../types';
 import { formatToJstString, formatHistoryTimestampJst } from './scheduledStorage';
 import { loadSnippetsFromStorage, saveSnippetsToStorage } from './snippetStorage';
+import { APP_VERSION, APP_NAME } from '../config/appInfo';
 import {
   getSavedCustomTags,
   saveCustomTagsList,
@@ -9,6 +10,15 @@ import {
   saveCategoriesList,
 } from './hashtagSuggester';
 import { getSavedThreadsTopics, saveThreadsTopicsList } from './topicStorage';
+import {
+  QuickDecorationItem,
+  loadQuickDecorationsFromStorage,
+  saveQuickDecorationsToStorage,
+  inferCategoryFromItem,
+  DecorationItem,
+  loadDecorationTemplatesFromStorage,
+  saveDecorationTemplatesToStorage,
+} from './unicodeFontConverter';
 
 /**
  * CSVセル用エスケープ処理（カンマ、ダブルクォート、改行を含む文字列を安全にクォート）
@@ -191,10 +201,10 @@ export function exportFullBackupJson(
   const now = Date.now();
   const snippets = loadSnippetsFromStorage();
   const backup: FullBackupData = {
-    version: '1.0.0',
+    version: APP_VERSION,
     exportedAt: now,
     exportedAtJst: formatToJstString(now),
-    app: 'CrossPost Web Studio',
+    app: APP_NAME,
     history: history || [],
     scheduledPosts: scheduledPosts || [],
     snippets: snippets || [],
@@ -337,7 +347,7 @@ export function parseAndValidateBackupJson(jsonString: string): ImportBackupResu
 }
 
 /**
-  * 5. ハッシュタグ・Threadsトピック・トレンドカテゴリ・定型文のバックアップデータ構造
+  * 5. ハッシュタグ・Threadsトピック・トレンドカテゴリ・定型文・装飾バー・飾り罫線パレットのバックアップデータ構造
   */
 export interface CustomTagsAndSnippetsBackupData {
   version: string;
@@ -349,17 +359,21 @@ export interface CustomTagsAndSnippetsBackupData {
   threadsTopics: string[];
   categories: TopicCategory[];
   snippets: SnippetItem[];
+  quickDecorations: QuickDecorationItem[];
+  decorationTemplates: DecorationItem[];
   metadata?: {
     totalCustomHashtagsCount: number;
     totalThreadsTopicsCount: number;
     totalCategoriesCount: number;
     totalCategoryTagsCount: number;
     totalSnippetsCount: number;
+    totalQuickDecorationsCount?: number;
+    totalDecorationTemplatesCount?: number;
   };
 }
 
 /**
-  * 登録ハッシュタグ、Threadsトピック、トレンド・カテゴリ、定型文をまとめてJSONファイルとしてダウンロード
+  * 登録ハッシュタグ、Threadsトピック、トレンド・カテゴリ、定型文、装飾クイックバー、特殊フォント/飾り罫線パレットの全項目をまとめてJSONファイルとしてダウンロード
   */
 export function exportTagsAndSnippetsJson(): void {
   const now = Date.now();
@@ -367,25 +381,31 @@ export function exportTagsAndSnippetsJson(): void {
   const threadsTopics = getSavedThreadsTopics();
   const categories = getSavedCategories();
   const snippets = loadSnippetsFromStorage();
+  const quickDecorations = loadQuickDecorationsFromStorage();
+  const decorationTemplates = loadDecorationTemplatesFromStorage();
 
   const totalCategoryTags = categories.reduce((sum, cat) => sum + (cat.tags?.length || 0), 0);
 
   const backupData: CustomTagsAndSnippetsBackupData = {
-    version: '1.0.0',
+    version: APP_VERSION,
     exportedAt: now,
     exportedAtJst: formatToJstString(now),
-    app: 'CrossPost Web Studio',
+    app: APP_NAME,
     dataType: 'crosspost_tags_and_templates',
     customHashtags: customHashtags || [],
     threadsTopics: threadsTopics || [],
     categories: categories || [],
     snippets: snippets || [],
+    quickDecorations: quickDecorations || [],
+    decorationTemplates: decorationTemplates || [],
     metadata: {
       totalCustomHashtagsCount: customHashtags?.length || 0,
       totalThreadsTopicsCount: threadsTopics?.length || 0,
       totalCategoriesCount: categories?.length || 0,
       totalCategoryTagsCount: totalCategoryTags,
       totalSnippetsCount: snippets?.length || 0,
+      totalQuickDecorationsCount: quickDecorations?.length || 0,
+      totalDecorationTemplatesCount: decorationTemplates?.length || 0,
     },
   };
 
@@ -395,7 +415,7 @@ export function exportTagsAndSnippetsJson(): void {
 }
 
 /**
-  * 6. アップロードされたハッシュタグ・トピック・定型文JSONファイルのパース & 検証
+  * 6. アップロードされたハッシュタグ・トピック・定型文・装飾バー・飾り罫線JSONファイルのパース & 検証
   */
 export interface ParseTagsAndSnippetsResult {
   success: boolean;
@@ -403,6 +423,8 @@ export interface ParseTagsAndSnippetsResult {
   threadsTopics: string[];
   categories: TopicCategory[];
   snippets: SnippetItem[];
+  quickDecorations: QuickDecorationItem[];
+  decorationTemplates: DecorationItem[];
   error?: string;
   stats?: {
     customHashtagsCount: number;
@@ -410,6 +432,8 @@ export interface ParseTagsAndSnippetsResult {
     categoriesCount: number;
     categoryTagsCount: number;
     snippetsCount: number;
+    quickDecorationsCount: number;
+    decorationTemplatesCount: number;
     exportedAtJst?: string;
   };
 }
@@ -425,6 +449,8 @@ export function parseAndValidateTagsAndSnippetsJson(jsonString: string): ParseTa
         threadsTopics: [],
         categories: [],
         snippets: [],
+        quickDecorations: [],
+        decorationTemplates: [],
         error: 'JSONの形式が無効です。',
       };
     }
@@ -486,13 +512,63 @@ export function parseAndValidateTagsAndSnippetsJson(jsonString: string): ParseTa
         isPreset: Boolean(s.isPreset),
       }));
 
+    // 5. 装飾クイックバー項目の抽出と整形
+    const rawQuickDecor = Array.isArray(data.quickDecorations)
+      ? data.quickDecorations
+      : Array.isArray(data.quickDecor)
+      ? data.quickDecor
+      : Array.isArray(data.quickDecorationItems)
+      ? data.quickDecorationItems
+      : [];
+    const validQuickDecorations: QuickDecorationItem[] = rawQuickDecor
+      .filter((item: any) => item && typeof item === 'object' && (item.label || item.insert))
+      .map((item: any) => {
+        const label = String(item.label || item.insert || '').trim();
+        const insert = String(item.insert || item.label || '');
+        return {
+          id: String(item.id || `qd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`),
+          label,
+          insert,
+          title: item.title ? String(item.title) : undefined,
+          category: item.category || inferCategoryFromItem(label, insert),
+          createdAt: item.createdAt ? Number(item.createdAt) : undefined,
+        };
+      })
+      .filter((item) => item.label.length > 0 && item.insert.length > 0);
+
+    // 6. 特殊フォント＆飾り罫線パレット項目の抽出と整形
+    const rawDecorTemplates = Array.isArray(data.decorationTemplates)
+      ? data.decorationTemplates
+      : Array.isArray(data.decorations)
+      ? data.decorations
+      : Array.isArray(data.decorTemplates)
+      ? data.decorTemplates
+      : [];
+    const validDecorations: DecorationItem[] = rawDecorTemplates
+      .filter((item: any) => item && typeof item === 'object' && (item.name || item.content))
+      .map((item: any) => ({
+        id: String(item.id || `decor-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`),
+        name: String(item.name || '無題の装飾').trim(),
+        category: (['divider', 'box', 'headers', 'bullets', 'emoticons'].includes(item.category)
+          ? item.category
+          : 'divider') as DecorationItem['category'],
+        content: String(item.content || ''),
+        description: item.description ? String(item.description) : undefined,
+        icon: item.icon ? String(item.icon) : undefined,
+        isCustom: Boolean(item.isCustom),
+        createdAt: item.createdAt ? Number(item.createdAt) : undefined,
+      }))
+      .filter((item) => item.name.length > 0 && item.content.length > 0);
+
     const totalCategoryTags = validCategories.reduce((sum, c) => sum + c.tags.length, 0);
 
     if (
       validHashtags.length === 0 &&
       validTopics.length === 0 &&
       validCategories.length === 0 &&
-      validSnippets.length === 0
+      validSnippets.length === 0 &&
+      validQuickDecorations.length === 0 &&
+      validDecorations.length === 0
     ) {
       return {
         success: false,
@@ -500,7 +576,9 @@ export function parseAndValidateTagsAndSnippetsJson(jsonString: string): ParseTa
         threadsTopics: [],
         categories: [],
         snippets: [],
-        error: 'ファイル内に有効なハッシュタグ、トピック、カテゴリ、または定型文データが見つかりませんでした。',
+        quickDecorations: [],
+        decorationTemplates: [],
+        error: 'ファイル内に有効なハッシュタグ、トピック、カテゴリ、定型文、装飾バー、または飾り罫線データが見つかりませんでした。',
       };
     }
 
@@ -510,12 +588,16 @@ export function parseAndValidateTagsAndSnippetsJson(jsonString: string): ParseTa
       threadsTopics: validTopics,
       categories: validCategories,
       snippets: validSnippets,
+      quickDecorations: validQuickDecorations,
+      decorationTemplates: validDecorations,
       stats: {
         customHashtagsCount: validHashtags.length,
         threadsTopicsCount: validTopics.length,
         categoriesCount: validCategories.length,
         categoryTagsCount: totalCategoryTags,
         snippetsCount: validSnippets.length,
+        quickDecorationsCount: validQuickDecorations.length,
+        decorationTemplatesCount: validDecorations.length,
         exportedAtJst: data.exportedAtJst,
       },
     };
@@ -526,13 +608,15 @@ export function parseAndValidateTagsAndSnippetsJson(jsonString: string): ParseTa
       threadsTopics: [],
       categories: [],
       snippets: [],
+      quickDecorations: [],
+      decorationTemplates: [],
       error: `JSONファイルの解析に失敗しました: ${err?.message || '構文エラー'}`,
     };
   }
 }
 
 /**
-  * 7. 読み込んだハッシュタグ・トピック・カテゴリ・定型文をブラウザストレージに適用（追加マージ または 完全上書き）
+  * 7. 読み込んだハッシュタグ・トピック・カテゴリ・定型文・装飾バー・飾り罫線をブラウザストレージに適用（追加マージ または 完全上書き）
   */
 export interface ApplyTagsAndSnippetsOptions {
   mode: 'merge' | 'overwrite'; // 'merge': 既存データを残して追加, 'overwrite': ファイル内容で完全上書き
@@ -544,6 +628,8 @@ export function applyTagsAndSnippetsData(
     threadsTopics: string[];
     categories: TopicCategory[];
     snippets: SnippetItem[];
+    quickDecorations?: QuickDecorationItem[];
+    decorationTemplates?: DecorationItem[];
   },
   options: ApplyTagsAndSnippetsOptions
 ): {
@@ -551,6 +637,8 @@ export function applyTagsAndSnippetsData(
   addedTopicsCount: number;
   addedCategoriesCount: number;
   addedSnippetsCount: number;
+  addedQuickDecorationsCount: number;
+  addedDecorationTemplatesCount: number;
 } {
   const { mode } = options;
 
@@ -558,6 +646,8 @@ export function applyTagsAndSnippetsData(
   let addedTopicsCount = 0;
   let addedCategoriesCount = 0;
   let addedSnippetsCount = 0;
+  let addedQuickDecorationsCount = 0;
+  let addedDecorationTemplatesCount = 0;
 
   // 1. お気に入りハッシュタグの適用
   if (data.customHashtags && data.customHashtags.length > 0) {
@@ -655,10 +745,44 @@ export function applyTagsAndSnippetsData(
     }
   }
 
+  // 5. 装飾クイックバー項目の適用
+  if (data.quickDecorations && data.quickDecorations.length > 0) {
+    if (mode === 'overwrite') {
+      saveQuickDecorationsToStorage(data.quickDecorations);
+      addedQuickDecorationsCount = data.quickDecorations.length;
+    } else {
+      const current = loadQuickDecorationsFromStorage();
+      const existingKeySet = new Set(current.map((item) => `${item.label}:::${item.insert}`));
+      const toAdd = data.quickDecorations.filter((item) => !existingKeySet.has(`${item.label}:::${item.insert}`));
+      if (toAdd.length > 0) {
+        saveQuickDecorationsToStorage([...current, ...toAdd]);
+        addedQuickDecorationsCount = toAdd.length;
+      }
+    }
+  }
+
+  // 6. 特殊フォント＆飾り罫線パレット項目の適用
+  if (data.decorationTemplates && data.decorationTemplates.length > 0) {
+    if (mode === 'overwrite') {
+      saveDecorationTemplatesToStorage(data.decorationTemplates);
+      addedDecorationTemplatesCount = data.decorationTemplates.length;
+    } else {
+      const current = loadDecorationTemplatesFromStorage();
+      const existingKeySet = new Set(current.map((item) => `${item.name}:::${item.content}`));
+      const toAdd = data.decorationTemplates.filter((item) => !existingKeySet.has(`${item.name}:::${item.content}`));
+      if (toAdd.length > 0) {
+        saveDecorationTemplatesToStorage([...current, ...toAdd]);
+        addedDecorationTemplatesCount = toAdd.length;
+      }
+    }
+  }
+
   return {
     addedHashtagsCount,
     addedTopicsCount,
     addedCategoriesCount,
     addedSnippetsCount,
+    addedQuickDecorationsCount,
+    addedDecorationTemplatesCount,
   };
 }

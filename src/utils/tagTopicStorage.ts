@@ -5,6 +5,7 @@
 
 import { getSavedThreadsTopics } from './topicStorage';
 import { getSavedCustomTags, getSavedCategories, CUSTOM_TAGS_STORAGE_KEY, CATEGORIES_STORAGE_KEY } from './hashtagSuggester';
+import { getAuthHeaders } from './modeSecurity';
 
 const THREADS_TOPICS_KEY = 'crosspost_threads_saved_topics_v1';
 
@@ -20,7 +21,7 @@ export async function saveTagsTopicsToServerVaultAsync(): Promise<void> {
 
     await fetch('/api/tags-topics/vault', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         threadsTopics,
         customTags,
@@ -39,7 +40,9 @@ export async function saveTagsTopicsToServerVaultAsync(): Promise<void> {
 export async function syncTagsTopicsWithServerAsync(): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
-    const res = await fetch('/api/tags-topics/vault');
+    const res = await fetch('/api/tags-topics/vault', {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) return;
     const data = await res.json().catch(() => ({}));
 

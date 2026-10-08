@@ -1,11 +1,19 @@
 import { APP_VERSION as DEFAULT_APP_VERSION } from '../config/appInfo';
 import { deleteFromVault } from './accountVault';
+import { getAuthHeaders, setAuthToken } from './modeSecurity';
 
-const ADMIN_PASSWORD_KEY = 'crosspost_admin_password';
 const CUSTOM_APP_VERSION_KEY = 'crosspost_app_version';
 const MODE_SWITCH_CLICK_COUNT_KEY = 'crosspost_mode_switch_click_count';
-const DEFAULT_ADMIN_PASSWORD = 'admin';
 const DEFAULT_MODE_SWITCH_CLICK_COUNT = 3;
+
+// 古い平文パスワードがlocalStorageに残っている場合はセキュリティのため自動消去
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.removeItem('crosspost_admin_password');
+  } catch {
+    // ignore
+  }
+}
 
 /**
  * DEMO/LIVEモード切替に必要な左クリック回数を取得（初期値: 3回）
@@ -26,7 +34,7 @@ export function getModeSwitchClickCount(): number {
 }
 
 /**
- * DEMO/LIVEモード切替に必要な左クリック回数を設定・保存
+ * DEMO/LIVEモード切替に必要な左クリック回数を設定・保存（サーバー側にも同期）
  */
 export function setModeSwitchClickCount(count: number): boolean {
   try {
@@ -34,6 +42,13 @@ export function setModeSwitchClickCount(count: number): boolean {
     localStorage.setItem(MODE_SWITCH_CLICK_COUNT_KEY, validCount.toString());
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crosspost_mode_click_count_changed', { detail: { count: validCount } }));
+      fetch('/api/auth/update-click-count', {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ clickCount: validCount }),
+      }).catch((err) => {
+        console.warn('[Admin] Failed to sync clickCount to server:', err);
+      });
     }
     return true;
   } catch {
@@ -42,59 +57,135 @@ export function setModeSwitchClickCount(count: number): boolean {
 }
 
 /**
- * 現在設定されている管理者パスワードを取得（初期値: "admin"）
+ * 管理者パスワードをサーバー側で変更・保存
  */
-export function getAdminPassword(): string {
-  try {
-    const saved = localStorage.getItem(ADMIN_PASSWORD_KEY);
-    return saved || DEFAULT_ADMIN_PASSWORD;
-  } catch {
-    return DEFAULT_ADMIN_PASSWORD;
-  }
-}
-
-/**
- * 管理者パスワードを変更・保存
- */
-export function setAdminPassword(newPassword: string): boolean {
+export async function setAdminPassword(newPassword: string, currentPassword?: string): Promise<boolean> {
   try {
     if (!newPassword || newPassword.trim().length === 0) return false;
-    localStorage.setItem(ADMIN_PASSWORD_KEY, newPassword.trim());
-    return true;
+    const res = await fetch('/api/auth/update-admin-password', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        currentPassword: currentPassword?.trim() || '',
+        newPassword: newPassword.trim(),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.success) {
+      if (data.token) {
+        setAuthToken(data.token, 'admin');
+      }
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
 }
 
 /**
- * 入力された管理者パスワードを検証
+ * 入力された管理者パスワードをサーバー側で検証し、署名付き管理者トークンを取得
  */
-export function verifyAdminPassword(input: string): boolean {
-  const current = getAdminPassword();
-  return input.trim() === current;
+export async function verifyAdminPassword(input: string): Promise<boolean> {
+  const clean = input.trim();
+  if (!clean) return false;
+
+  try {
+    const res = await fetch('/api/auth/verify-admin', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ password: clean }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.success && data?.token) {
+      setAuthToken(data.token, 'admin');
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('[Admin] Failed to verify admin password on server:', err);
+    return false;
+  }
+}
+
+let currentRuntimeVersion: string | null = null;
+
+/**
+ * サーバーの package.json から最新バージョンを取得してメモリ/キャッシュを同期
+ */
+export async function syncVersionWithServer(): Promise<string> {
+  try {
+    const res = await fetch('/api/admin/version', {
+      headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (data.success && data.version) {
+      currentRuntimeVersion = data.version;
+      try {
+        localStorage.setItem(CUSTOM_APP_VERSION_KEY, data.version);
+      } catch {}
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('crosspost_version_changed', { detail: { version: data.version } }));
+      }
+      return data.version;
+    }
+  } catch (e) {
+    console.error('[Admin] Failed to sync version with server:', e);
+  }
+  return currentRuntimeVersion || DEFAULT_APP_VERSION;
 }
 
 /**
- * アプリの表示バージョンを取得（管理者による変更値があれば優先）
+ * アプリの表示バージョンを取得（package.json から同期されたリアルタイムバージョン）
  */
 export function getAppVersion(): string {
-  try {
-    const customVersion = localStorage.getItem(CUSTOM_APP_VERSION_KEY);
-    if (customVersion && customVersion.trim()) {
-      return customVersion.trim();
-    }
-  } catch {
-    // fallback
+  if (currentRuntimeVersion) {
+    return currentRuntimeVersion;
   }
-  return DEFAULT_APP_VERSION || '1.0.4';
+  try {
+    const saved = localStorage.getItem(CUSTOM_APP_VERSION_KEY);
+    if (saved && saved.trim()) {
+      return saved.trim();
+    }
+  } catch {}
+  return DEFAULT_APP_VERSION;
 }
 
 /**
- * アプリの表示バージョンを変更・保存
+ * アプリの表示バージョンを変更・保存（package.jsonの書き換え：管理者トークン必須）
  */
+export async function updatePackageJsonVersion(newVersion: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!newVersion || !newVersion.trim()) {
+      return { success: false, error: '有効なバージョン番号を入力してください。' };
+    }
+    const cleanVersion = newVersion.trim();
+    const res = await fetch('/api/admin/update-version', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ version: cleanVersion }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      currentRuntimeVersion = cleanVersion;
+      try {
+        localStorage.setItem(CUSTOM_APP_VERSION_KEY, cleanVersion);
+      } catch {}
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('crosspost_version_changed', { detail: { version: cleanVersion } }));
+      }
+      return { success: true };
+    }
+    return { success: false, error: data.error || 'package.jsonの更新に失敗しました。' };
+  } catch (err: any) {
+    return { success: false, error: err.message || '通信エラーにより更新に失敗しました。' };
+  }
+}
+
 export function setAppVersion(newVersion: string): boolean {
   try {
-    if (!newVersion || newVersion.trim().length === 0) return false;
+    if (!newVersion || !newVersion.trim()) return false;
+    currentRuntimeVersion = newVersion.trim();
     localStorage.setItem(CUSTOM_APP_VERSION_KEY, newVersion.trim());
     return true;
   } catch {

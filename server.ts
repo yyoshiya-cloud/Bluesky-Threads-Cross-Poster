@@ -3,8 +3,197 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import crypto from 'crypto';
+import net from 'net';
+import dns from 'dns';
 import multer from 'multer';
 import { GoogleGenAI, Type } from '@google/genai';
+
+/**
+ * =============================================================
+ * SSRF対策 (Server-Side Request Forgery Protection)
+ * プライベートIPアドレス、ループバック、リンクローカル（クラウドメタデータ）、
+ * 内部ホスト名へのリクエストを厳格に遮断
+ * =============================================================
+ */
+function isPrivateOrReservedIp(ip: string): boolean {
+  const cleanIp = ip.trim().toLowerCase();
+  const version = net.isIP(cleanIp);
+
+  if (version === 4) {
+    const parts = cleanIp.split('.').map((p) => parseInt(p, 10));
+    if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
+      return true;
+    }
+    const [a, b] = parts;
+    // 0.0.0.0/8 (Current network)
+    if (a === 0) return true;
+    // 10.0.0.0/8 (Private network)
+    if (a === 10) return true;
+    // 100.64.0.0/10 (Carrier-grade NAT)
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    // 127.0.0.0/8 (Loopback)
+    if (a === 127) return true;
+    // 169.254.0.0/16 (Link-local / Cloud Metadata 169.254.169.254)
+    if (a === 169 && b === 254) return true;
+    // 172.16.0.0/12 (Private network)
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    // 192.0.0.0/24, 192.0.2.0/24 (IETF / TEST-NET-1)
+    if (a === 192 && b === 0 && (parts[2] === 0 || parts[2] === 2)) return true;
+    // 192.168.0.0/16 (Private network)
+    if (a === 192 && b === 168) return true;
+    // 198.18.0.0/15 (Benchmarking)
+    if (a === 198 && (b === 18 || b === 19)) return true;
+    // 198.51.100.0/24 (TEST-NET-2), 203.0.113.0/24 (TEST-NET-3)
+    if (a === 198 && b === 51 && parts[2] === 100) return true;
+    if (a === 203 && b === 0 && parts[2] === 113) return true;
+    // 224.0.0.0/4 (Multicast) & 240.0.0.0/4 (Reserved / Broadcast)
+    if (a >= 224) return true;
+    return false;
+  }
+
+  if (version === 6) {
+    // ::1 (Loopback) or :: (Unspecified)
+    if (cleanIp === '::1' || cleanIp === '::' || cleanIp === '0:0:0:0:0:0:0:1' || cleanIp === '0:0:0:0:0:0:0:0') {
+      return true;
+    }
+    // IPv4-mapped IPv6 (::ffff:x.x.x.x)
+    if (cleanIp.startsWith('::ffff:')) {
+      const v4Part = cleanIp.slice(7);
+      if (net.isIP(v4Part) === 4) {
+        return isPrivateOrReservedIp(v4Part);
+      }
+      return true;
+    }
+    // fc00::/7 (Unique Local Address: fc00:: - fdff::)
+    if (cleanIp.startsWith('fc') || cleanIp.startsWith('fd')) return true;
+    // fe80::/10 (Link-local)
+    if (cleanIp.startsWith('fe8') || cleanIp.startsWith('fe9') || cleanIp.startsWith('fea') || cleanIp.startsWith('feb')) {
+      return true;
+    }
+    // ff00::/8 (Multicast)
+    if (cleanIp.startsWith('ff')) return true;
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * 指定されたURLが安全なパブリックWeb URLであるか検証（DNS名前解決結果のプライベートIPも遮断）
+ */
+async function validateSafeExternalUrl(rawUrl: string): Promise<{ safe: boolean; reason?: string; parsedUrl?: URL }> {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return { safe: false, reason: 'URLが指定されていません。' };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl.trim());
+  } catch {
+    return { safe: false, reason: '無効なURL形式です。' };
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { safe: false, reason: '許可されていないプロトコルです（http または https のみ対応）。' };
+  }
+
+  if (parsed.username || parsed.password) {
+    return { safe: false, reason: '認証情報を含むURLは許可されていません。' };
+  }
+
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!hostname) {
+    return { safe: false, reason: 'ホスト名が不正です。' };
+  }
+
+  // 危険な内部ホスト名・クラウドメタデータホスト名の遮断
+  const blockedHostPatterns = [
+    'localhost',
+    'metadata.google.internal',
+    'metadata',
+    'instance-data',
+    'kubernetes.default',
+  ];
+  if (
+    blockedHostPatterns.includes(hostname) ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal') ||
+    hostname.endsWith('.arpa') ||
+    hostname.endsWith('.Home') ||
+    hostname.endsWith('.lan')
+  ) {
+    return { safe: false, reason: 'ローカルホストまたは内部ネットワークへのアクセスは遮断されました（SSRF保護）。' };
+  }
+
+  // 数値表現(10進数整数や8進数・16進数IP表記: http://2130706433 等)の遮断
+  if (/^\d+$/.test(hostname) || /^0x[0-9a-f]+$/i.test(hostname)) {
+    return { safe: false, reason: '数値IP表記のホスト名は許可されていません（SSRF保護）。' };
+  }
+
+  // 直接IPアドレスが指定された場合
+  if (net.isIP(hostname) !== 0) {
+    if (isPrivateOrReservedIp(hostname)) {
+      return { safe: false, reason: 'プライベートIPまたは予約済みアドレスへのアクセスは遮断されました（SSRF保護）。' };
+    }
+    return { safe: true, parsedUrl: parsed };
+  }
+
+  // DNS解決を行ってプライベートIPへの名前解決（DNS Rebinding等）を検査
+  try {
+    const records = await dns.promises.lookup(hostname, { all: true });
+    if (!records || records.length === 0) {
+      return { safe: false, reason: 'ドメインの名前解決ができませんでした。' };
+    }
+    for (const rec of records) {
+      if (isPrivateOrReservedIp(rec.address)) {
+        return {
+          safe: false,
+          reason: '解決されたIPアドレスがプライベートネットワークまたはローカルアドレスのため遮断されました（SSRF保護）。',
+        };
+      }
+    }
+  } catch {
+    return { safe: false, reason: 'ドメインの名前解決に失敗しました。' };
+  }
+
+  return { safe: true, parsedUrl: parsed };
+}
+
+/**
+ * リダイレクト先も含めてSSRF検証を行う安全なfetchラッパー
+ */
+async function safeExternalFetch(
+  targetUrl: string,
+  options: RequestInit = {},
+  maxRedirects = 3
+): Promise<Response> {
+  let currentUrl = targetUrl;
+  for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount++) {
+    const check = await validateSafeExternalUrl(currentUrl);
+    if (!check.safe) {
+      throw new Error(check.reason || 'SSRF保護によりリクエストが遮断されました。');
+    }
+
+    const res = await fetch(currentUrl, {
+      ...options,
+      redirect: 'manual',
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (!location) {
+        return res;
+      }
+      currentUrl = new URL(location, currentUrl).toString();
+      continue;
+    }
+
+    return res;
+  }
+
+  throw new Error('リダイレクト回数が上限を超えました。');
+}
 
 let geminiClient: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI {
@@ -752,11 +941,12 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // アカウント認証情報のサーバー永続保管エンドポイント
-  // （リロード・デプロイ・別ブラウザ・別デバイス間での確実なアカウント復元）
+  // アカウント認証情報のサーバー永続保管エンドポイント &
+  // サーバー側パスワード検証・トークン認証基盤
   // -------------------------------------------------------------
   const DATA_DIR = path.resolve(process.cwd(), 'data');
   const VAULT_FILE_PATH = path.join(DATA_DIR, 'account_vault.json');
+  const SECURITY_STATE_FILE_PATH = path.join(DATA_DIR, 'security_state.json');
 
   if (!fs.existsSync(DATA_DIR)) {
     try {
@@ -766,8 +956,367 @@ async function startServer() {
     }
   }
 
-  // サーバー保管庫からの取得
-  app.get('/api/credentials/vault', (_req, res) => {
+  interface ServerSecurityState {
+    modePasswordSalt: string;
+    modePasswordHash: string;
+    adminPasswordSalt: string;
+    adminPasswordHash: string;
+    tokenSecret: string;
+    requirePassword: boolean;
+    clickCount: number;
+    updatedAt: number;
+  }
+
+  function hashPasswordPBKDF2(password: string, salt: string): string {
+    return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  }
+
+  function timingSafeCompareHex(aHex: string, bHex: string): boolean {
+    try {
+      const bufA = Buffer.from(aHex, 'hex');
+      const bufB = Buffer.from(bHex, 'hex');
+      if (bufA.length !== bufB.length || bufA.length === 0) return false;
+      return crypto.timingSafeEqual(bufA, bufB);
+    } catch {
+      return false;
+    }
+  }
+
+  function loadOrInitSecurityState(): ServerSecurityState {
+    // 環境変数から初期パスワード・シークレットを取得（未設定時のフォールバックのみ初期値を適用）
+    const envLivePass = (process.env.LIVE_MODE_PASSWORD || 'yo0117').trim();
+    const envAdminPass = (process.env.ADMIN_PASSWORD || 'admin').trim();
+    const envTokenSecret = (process.env.AUTH_TOKEN_SECRET || '').trim();
+
+    if (fs.existsSync(SECURITY_STATE_FILE_PATH)) {
+      try {
+        const raw = fs.readFileSync(SECURITY_STATE_FILE_PATH, 'utf-8');
+        const parsed = JSON.parse(raw) as Partial<ServerSecurityState>;
+        if (
+          parsed &&
+          parsed.modePasswordSalt &&
+          parsed.modePasswordHash &&
+          parsed.adminPasswordSalt &&
+          parsed.adminPasswordHash &&
+          parsed.tokenSecret
+        ) {
+          return {
+            modePasswordSalt: parsed.modePasswordSalt,
+            modePasswordHash: parsed.modePasswordHash,
+            adminPasswordSalt: parsed.adminPasswordSalt,
+            adminPasswordHash: parsed.adminPasswordHash,
+            tokenSecret: envTokenSecret || parsed.tokenSecret,
+            requirePassword: typeof parsed.requirePassword === 'boolean' ? parsed.requirePassword : true,
+            clickCount: typeof parsed.clickCount === 'number' ? parsed.clickCount : 3,
+            updatedAt: parsed.updatedAt || Date.now(),
+          };
+        }
+      } catch (e) {
+        console.warn('[Security] Failed to read security_state.json, re-initializing:', e);
+      }
+    }
+
+    const modeSalt = crypto.randomBytes(16).toString('hex');
+    const adminSalt = crypto.randomBytes(16).toString('hex');
+    const initialState: ServerSecurityState = {
+      modePasswordSalt: modeSalt,
+      modePasswordHash: hashPasswordPBKDF2(envLivePass, modeSalt),
+      adminPasswordSalt: adminSalt,
+      adminPasswordHash: hashPasswordPBKDF2(envAdminPass, adminSalt),
+      tokenSecret: envTokenSecret || crypto.randomBytes(32).toString('hex'),
+      requirePassword: true,
+      clickCount: 3,
+      updatedAt: Date.now(),
+    };
+
+    try {
+      fs.writeFileSync(SECURITY_STATE_FILE_PATH, JSON.stringify(initialState, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('[Security] Failed to persist initial security_state.json:', e);
+    }
+    return initialState;
+  }
+
+  let securityState: ServerSecurityState = loadOrInitSecurityState();
+
+  function saveSecurityState(state: ServerSecurityState): void {
+    securityState = state;
+    try {
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      fs.writeFileSync(SECURITY_STATE_FILE_PATH, JSON.stringify(state, null, 2), 'utf-8');
+    } catch (e) {
+      console.error('[Security] Failed to save security_state.json:', e);
+    }
+  }
+
+  function verifyLivePasswordServer(input: string): boolean {
+    const clean = input.trim();
+    if (!clean) return false;
+    // 環境変数 LIVE_MODE_PASSWORD が明示設定されている場合は環境変数との一致も許可
+    if (process.env.LIVE_MODE_PASSWORD && clean === process.env.LIVE_MODE_PASSWORD.trim()) {
+      return true;
+    }
+    const candidateHash = hashPasswordPBKDF2(clean, securityState.modePasswordSalt);
+    return timingSafeCompareHex(candidateHash, securityState.modePasswordHash);
+  }
+
+  function verifyAdminPasswordServer(input: string): boolean {
+    const clean = input.trim();
+    if (!clean) return false;
+    if (process.env.ADMIN_PASSWORD && clean === process.env.ADMIN_PASSWORD.trim()) {
+      return true;
+    }
+    const candidateHash = hashPasswordPBKDF2(clean, securityState.adminPasswordSalt);
+    return timingSafeCompareHex(candidateHash, securityState.adminPasswordHash);
+  }
+
+  function issueAuthToken(role: 'live' | 'admin', ttlMs = 24 * 60 * 60 * 1000): string {
+    const payload = {
+      role,
+      iat: Date.now(),
+      exp: Date.now() + ttlMs,
+      jti: crypto.randomBytes(8).toString('hex'),
+    };
+    const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
+    const sig = crypto
+      .createHmac('sha256', securityState.tokenSecret)
+      .update(payloadB64)
+      .digest('base64url');
+    return `${payloadB64}.${sig}`;
+  }
+
+  function verifyAuthToken(token?: string | null): { valid: boolean; role?: 'live' | 'admin' } {
+    if (!token || typeof token !== 'string' || !token.includes('.')) {
+      return { valid: false };
+    }
+    const [payloadB64, sig] = token.split('.');
+    if (!payloadB64 || !sig) return { valid: false };
+
+    const expectedSig = crypto
+      .createHmac('sha256', securityState.tokenSecret)
+      .update(payloadB64)
+      .digest('base64url');
+
+    try {
+      const bufA = Buffer.from(sig);
+      const bufB = Buffer.from(expectedSig);
+      if (bufA.length !== bufB.length || !crypto.timingSafeEqual(bufA, bufB)) {
+        return { valid: false };
+      }
+      const decoded = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8'));
+      if (!decoded || typeof decoded.exp !== 'number' || decoded.exp < Date.now()) {
+        return { valid: false };
+      }
+      return { valid: true, role: decoded.role };
+    } catch {
+      return { valid: false };
+    }
+  }
+
+  function extractBearerToken(req: express.Request): string | null {
+    const authHeader = req.headers.authorization;
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      return authHeader.slice(7).trim();
+    }
+    const customToken = req.headers['x-auth-token'];
+    if (customToken && typeof customToken === 'string') {
+      return customToken.trim();
+    }
+    return null;
+  }
+
+  /**
+   * 保護されたAPI（/api/credentials/vault 等）向けの認証検証ミドルウェア
+   * - 有効な Bearer トークンがある場合: 許可
+   * - パスワード保護がOFF (requirePassword === false) かつ 同一アプリからのリクエスト (X-Requested-With: CrossPostStudio) の場合: 許可
+   * - 同一アプリからのリクエストヘッダー (X-Requested-With: CrossPostStudio) がある場合: セッション復元・同期のため許可（外部からの直接ブラウザアクセスやCSRFは遮断）
+   */
+  function requireVaultOrAppAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+    const token = extractBearerToken(req);
+    const verified = verifyAuthToken(token);
+    if (verified.valid) {
+      next();
+      return;
+    }
+
+    // パスワード入力が引数やヘッダーで直接渡された場合の検証
+    const headerPassword = req.headers['x-mode-password'];
+    if (typeof headerPassword === 'string' && (verifyLivePasswordServer(headerPassword) || verifyAdminPasswordServer(headerPassword))) {
+      next();
+      return;
+    }
+
+    // アプリクライアントからの正規リクエスト (X-Requested-With: CrossPostStudio) であり、
+    // かつパスワード要求がOFFの場合、または初回起動時の暗号化Vault同期の場合は許可し、
+    // ブラウザ直接URL入力や外部サイトからの不正取得を遮断
+    const requestedWith = req.headers['x-requested-with'];
+    if (requestedWith === 'CrossPostStudio') {
+      next();
+      return;
+    }
+
+    res.status(401).json({
+      success: false,
+      error: '認証が必要です。LIVEモードパスワードまたは管理者パスワードで認証してください。',
+    });
+  }
+
+  /**
+   * 管理者専用API（/api/admin/update-version 等）向けの厳格な認証ミドルウェア
+   */
+  function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+    const token = extractBearerToken(req);
+    const verified = verifyAuthToken(token);
+    if (verified.valid && verified.role === 'admin') {
+      next();
+      return;
+    }
+
+    const bodyPass = req.body?.adminPassword || req.headers['x-admin-password'];
+    if (typeof bodyPass === 'string' && verifyAdminPasswordServer(bodyPass)) {
+      next();
+      return;
+    }
+
+    res.status(401).json({
+      success: false,
+      error: '管理者権限が必要です。管理者画面からログインしてください。',
+    });
+  }
+
+  // -------------------------------------------------------------
+  // 認証・セキュリティ設定エンドポイント (/api/auth/*)
+  // -------------------------------------------------------------
+  app.get('/api/auth/config', (_req, res) => {
+    res.json({
+      success: true,
+      requirePassword: securityState.requirePassword,
+      clickCount: securityState.clickCount,
+      updatedAt: securityState.updatedAt,
+    });
+  });
+
+  // LIVEモード切替パスワードのサーバー側検証
+  app.post('/api/auth/verify-mode', express.json(), (req, res) => {
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    if (verifyLivePasswordServer(password)) {
+      const token = issueAuthToken('live');
+      res.json({ success: true, role: 'live', token });
+      return;
+    }
+    res.status(401).json({ success: false, error: 'パスワードが正しくありません。' });
+  });
+
+  // 管理者パスワードのサーバー側検証
+  app.post('/api/auth/verify-admin', express.json(), (req, res) => {
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    if (verifyAdminPasswordServer(password)) {
+      const token = issueAuthToken('admin');
+      res.json({ success: true, role: 'admin', token });
+      return;
+    }
+    res.status(401).json({ success: false, error: '管理者パスワードが正しくありません。' });
+  });
+
+  // LIVEモードパスワードの変更
+  app.post('/api/auth/update-mode-password', express.json(), (req, res) => {
+    const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+    const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword.trim() : '';
+
+    if (!newPassword) {
+      res.status(400).json({ success: false, error: '新しいパスワードを入力してください。' });
+      return;
+    }
+
+    const token = extractBearerToken(req);
+    const verifiedToken = verifyAuthToken(token);
+    const isCurrentPassValid =
+      verifiedToken.valid ||
+      verifyLivePasswordServer(currentPassword) ||
+      verifyAdminPasswordServer(currentPassword);
+
+    if (!isCurrentPassValid) {
+      res.status(401).json({ success: false, error: '現在のパスワードが一致しないか、認証セッションが無効です。' });
+      return;
+    }
+
+    const newSalt = crypto.randomBytes(16).toString('hex');
+    const newHash = hashPasswordPBKDF2(newPassword, newSalt);
+    saveSecurityState({
+      ...securityState,
+      modePasswordSalt: newSalt,
+      modePasswordHash: newHash,
+      updatedAt: Date.now(),
+    });
+
+    const newToken = issueAuthToken('live');
+    res.json({ success: true, token: newToken });
+  });
+
+  // 管理者パスワードの変更
+  app.post('/api/auth/update-admin-password', express.json(), (req, res) => {
+    const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+    const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword.trim() : '';
+
+    if (!newPassword) {
+      res.status(400).json({ success: false, error: '新しい管理者パスワードを入力してください。' });
+      return;
+    }
+
+    const token = extractBearerToken(req);
+    const verifiedToken = verifyAuthToken(token);
+    const isAuthorized =
+      (verifiedToken.valid && verifiedToken.role === 'admin') ||
+      verifyAdminPasswordServer(currentPassword);
+
+    if (!isAuthorized) {
+      res.status(401).json({ success: false, error: '管理者認証が必要です。' });
+      return;
+    }
+
+    const newSalt = crypto.randomBytes(16).toString('hex');
+    const newHash = hashPasswordPBKDF2(newPassword, newSalt);
+    saveSecurityState({
+      ...securityState,
+      adminPasswordSalt: newSalt,
+      adminPasswordHash: newHash,
+      updatedAt: Date.now(),
+    });
+
+    const newToken = issueAuthToken('admin');
+    res.json({ success: true, token: newToken });
+  });
+
+  // パスワード保護ON/OFFの更新
+  app.post('/api/auth/update-mode-protection', requireVaultOrAppAuth, express.json(), (req, res) => {
+    const requirePassword = Boolean(req.body?.requirePassword);
+    saveSecurityState({
+      ...securityState,
+      requirePassword,
+      updatedAt: Date.now(),
+    });
+    res.json({ success: true, requirePassword });
+  });
+
+  // モード切替クリック回数の更新
+  app.post('/api/auth/update-click-count', requireVaultOrAppAuth, express.json(), (req, res) => {
+    const rawCount = Number(req.body?.clickCount);
+    if (!isNaN(rawCount) && rawCount >= 1 && rawCount <= 20) {
+      saveSecurityState({
+        ...securityState,
+        clickCount: Math.floor(rawCount),
+        updatedAt: Date.now(),
+      });
+      res.json({ success: true, clickCount: securityState.clickCount });
+      return;
+    }
+    res.status(400).json({ success: false, error: '無効なクリック回数です。' });
+  });
+
+  // サーバー保管庫からの取得 (認証保護)
+  app.get('/api/credentials/vault', requireVaultOrAppAuth, (_req, res) => {
     try {
       if (fs.existsSync(VAULT_FILE_PATH)) {
         const raw = fs.readFileSync(VAULT_FILE_PATH, 'utf-8');
@@ -782,8 +1331,8 @@ async function startServer() {
     }
   });
 
-  // サーバー保管庫への永続保存
-  app.post('/api/credentials/vault', express.json({ limit: '2mb' }), (req, res) => {
+  // サーバー保管庫への永続保存 (認証保護)
+  app.post('/api/credentials/vault', requireVaultOrAppAuth, express.json({ limit: '2mb' }), (req, res) => {
     try {
       const payload = req.body;
       if (!payload || typeof payload !== 'object') {
@@ -802,8 +1351,8 @@ async function startServer() {
     }
   });
 
-  // サーバー保管庫からの削除
-  app.delete('/api/credentials/vault', (req, res) => {
+  // サーバー保管庫からの削除 (認証保護)
+  app.delete('/api/credentials/vault', requireVaultOrAppAuth, (req, res) => {
     try {
       const platform = req.query.platform as string | undefined;
       if (fs.existsSync(VAULT_FILE_PATH)) {
@@ -833,7 +1382,7 @@ async function startServer() {
   // -------------------------------------------------------------
   const TAGS_TOPICS_FILE_PATH = path.join(DATA_DIR, 'user_tags_topics.json');
 
-  app.get('/api/tags-topics/vault', (_req, res) => {
+  app.get('/api/tags-topics/vault', requireVaultOrAppAuth, (_req, res) => {
     try {
       if (fs.existsSync(TAGS_TOPICS_FILE_PATH)) {
         const raw = fs.readFileSync(TAGS_TOPICS_FILE_PATH, 'utf-8');
@@ -848,7 +1397,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/tags-topics/vault', express.json({ limit: '2mb' }), (req, res) => {
+  app.post('/api/tags-topics/vault', requireVaultOrAppAuth, express.json({ limit: '2mb' }), (req, res) => {
     try {
       const payload = req.body;
       if (!payload || typeof payload !== 'object') {
@@ -868,7 +1417,59 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // OGP メタデータ取得エンドポイント (URLカードプレビュー用)
+  // バージョン情報取得エンドポイント (package.jsonからリアルタイム読込)
+  // -------------------------------------------------------------
+  app.get('/api/admin/version', (_req, res) => {
+    try {
+      const pkgPath = path.join(process.cwd(), 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const rawContent = fs.readFileSync(pkgPath, 'utf-8');
+        const pkgData = JSON.parse(rawContent);
+        res.json({ success: true, version: pkgData.version || '1.0.0' });
+        return;
+      }
+    } catch (err) {
+      console.error('[Admin] Error reading package.json version:', err);
+    }
+    res.json({ success: true, version: '1.0.0' });
+  });
+
+  // -------------------------------------------------------------
+  // バージョン情報更新エンドポイント (package.json書き換え - 管理者認証必須)
+  // -------------------------------------------------------------
+  app.post('/api/admin/update-version', requireAdminAuth, express.json(), (req, res) => {
+    try {
+      const { version } = req.body || {};
+      const cleanVersion = typeof version === 'string' ? version.trim() : '';
+
+      if (!cleanVersion || !/^[0-9a-zA-Z._-]+$/.test(cleanVersion)) {
+        res.status(400).json({ success: false, error: '有効なバージョン番号を入力してください。' });
+        return;
+      }
+
+      const pkgPath = path.join(process.cwd(), 'package.json');
+      if (!fs.existsSync(pkgPath)) {
+        res.status(404).json({ success: false, error: 'package.json が見つかりませんでした。' });
+        return;
+      }
+
+      const rawContent = fs.readFileSync(pkgPath, 'utf-8');
+      const pkgData = JSON.parse(rawContent);
+
+      pkgData.version = cleanVersion;
+
+      fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\n', 'utf-8');
+      console.log(`[Admin] Successfully updated package.json version to "${cleanVersion}".`);
+
+      res.json({ success: true, version: cleanVersion });
+    } catch (err: any) {
+      console.error('[Admin] Error updating package.json version:', err);
+      res.status(500).json({ success: false, error: err.message || 'package.json の書き換えに失敗しました。' });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // OGP メタデータ取得エンドポイント (URLカードプレビュー用・SSRF対策済)
   // -------------------------------------------------------------
   const ogpCache = new Map<string, { data: any; expiresAt: number }>();
 
@@ -880,6 +1481,16 @@ async function startServer() {
         return;
       }
 
+      // SSRF検証: プライベートIP・ローカルホスト・メタデータエンドポイントへのリクエストを遮断
+      const ssrfCheck = await validateSafeExternalUrl(targetUrl);
+      if (!ssrfCheck.safe) {
+        res.status(403).json({
+          success: false,
+          error: ssrfCheck.reason || '指定されたURLへのアクセスはセキュリティ保護により遮断されました。',
+        });
+        return;
+      }
+
       // キャッシュチェック (有効期限 1時間)
       const cached = ogpCache.get(targetUrl);
       if (cached && cached.expiresAt > Date.now()) {
@@ -887,17 +1498,12 @@ async function startServer() {
         return;
       }
 
-      let parsedDomain = '';
-      try {
-        parsedDomain = new URL(targetUrl).hostname;
-      } catch {
-        parsedDomain = targetUrl;
-      }
+      const parsedDomain = ssrfCheck.parsedUrl?.hostname || targetUrl;
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 6000);
 
-      const response = await fetch(targetUrl, {
+      const response = await safeExternalFetch(targetUrl, {
         method: 'GET',
         signal: controller.signal,
         headers: {
@@ -1002,7 +1608,7 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // URL 短縮プロキシ (TinyURL / is.gd)
+  // URL 短縮プロキシ (TinyURL / is.gd - SSRF検証済)
   // -------------------------------------------------------------
   app.post('/api/shorten-url', async (req, res) => {
     try {
@@ -1010,6 +1616,12 @@ async function startServer() {
       const cleanUrl = typeof url === 'string' ? url.trim() : '';
       if (!cleanUrl || !/^https?:\/\//i.test(cleanUrl)) {
         res.status(400).json({ success: false, error: '有効なURLを入力してください。' });
+        return;
+      }
+
+      const ssrfCheck = await validateSafeExternalUrl(cleanUrl);
+      if (!ssrfCheck.safe) {
+        res.status(403).json({ success: false, error: ssrfCheck.reason || '短縮対象にできないURLです。' });
         return;
       }
 
@@ -1154,6 +1766,163 @@ ${cleanText}
     }
   });
 
+// -------------------------------------------------------------
+// AI アシスト: タグ完全保護ヘルパー（タグの追加・削除は厳禁）
+// -------------------------------------------------------------
+function extractHashtags(text: string): string[] {
+  if (!text) return [];
+  const matches = text.match(/#[^\s#　]+/g) || [];
+  return Array.from(new Set(matches));
+}
+
+function preserveOriginalTags(originalText: string, aiOutputText: string): string {
+  if (!aiOutputText) return aiOutputText;
+  const originalTags = extractHashtags(originalText);
+  const outputTags = extractHashtags(aiOutputText);
+
+  let result = aiOutputText;
+
+  // 1. 元テキストに存在しないAIが追加した新規タグを排除
+  for (const tag of outputTags) {
+    if (!originalTags.includes(tag)) {
+      const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const tagRegex = new RegExp(escapedTag + '(?=[\\s\\n$]|$)', 'g');
+      result = result.replace(tagRegex, '');
+    }
+  }
+
+  // 2. 元テキストから欠落した既存タグを復元（末尾に補填）
+  const remainingOutputTags = extractHashtags(result);
+  const missingTags = originalTags.filter((tag) => !remainingOutputTags.includes(tag));
+
+  if (missingTags.length > 0) {
+    result = `${result.trim()}\n\n${missingTags.join(' ')}`;
+  }
+
+  return result.trim();
+}
+
+function preserveOriginalTagsForThread(originalText: string, posts: string[]): string[] {
+  if (!posts || posts.length === 0) return posts;
+  const originalTags = extractHashtags(originalText);
+
+  const cleanedPosts = posts.map((p) => {
+    let text = p;
+    const pTags = extractHashtags(p);
+    for (const tag of pTags) {
+      if (!originalTags.includes(tag)) {
+        const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const tagRegex = new RegExp(escapedTag + '(?=[\\s\\n$]|$)', 'g');
+        text = text.replace(tagRegex, '');
+      }
+    }
+    return text.trim();
+  });
+
+  const allPostTags = new Set(cleanedPosts.flatMap((p) => extractHashtags(p)));
+  const missingTags = originalTags.filter((tag) => !allPostTags.has(tag));
+
+  if (missingTags.length > 0) {
+    const lastIdx = cleanedPosts.length - 1;
+    cleanedPosts[lastIdx] = `${cleanedPosts[lastIdx]}\n\n${missingTags.join(' ')}`.trim();
+  }
+
+  return cleanedPosts;
+}
+
+  // -------------------------------------------------------------
+  // AI アシスト: 長文文脈スレッド自動分割 (/api/ai/thread-split)
+  // -------------------------------------------------------------
+  app.post('/api/ai/thread-split', async (req, res) => {
+    try {
+      const { text, targetPlatform = 'both', includeNumbering = true } = req.body;
+      const cleanText = typeof text === 'string' ? text.trim() : '';
+
+      if (!cleanText) {
+        res.status(400).json({ success: false, error: '分割対象のテキストが入力されていません。' });
+        return;
+      }
+
+      const platformConstraints =
+        targetPlatform === 'bluesky'
+          ? '対象プラットフォーム: Bluesky (各ポストは全角300文字以内、簡潔で知的な知見共有)'
+          : targetPlatform === 'threads'
+          ? '対象プラットフォーム: Threads (各ポストは全角500文字以内、親しみやすく読みやすいフック重視)'
+          : '対象プラットフォーム: Bluesky(300文字以内) と Threads(500文字以内) の両立。各ポストは安全のため全角280文字以内に収めてください。';
+
+      const prompt = `あなたはSNS運用のプロフェッショナルです。以下の長文テキストを、読みやすく魅力的な「ツリー形式（スレッド分割投稿）」に再構成・分割してください。
+
+【重要な制約と目的】
+1. 機械的な文字数カウントによるぶつ切り（単語の途中や句読点前での不自然な切断）は厳禁です。
+2. 意味のまとまり、段落、起承転結、文末（です・ます等）の自然な区切りを必ず維持してください。
+3. 1ポスト目には、読者の関心を惹くフック（概要・問いかけ・要点）を置き、以降のポストで詳細や結論を展開してください。
+4. ${platformConstraints}
+5. ナンバリング(${includeNumbering ? '有効: 例「(1/3)」「(2/3)」' : '不要'})：${includeNumbering ? '各ポストの末尾に (1/N) や (2/N) などの連番を付与してください。' : '連番は含めないでください。'}
+6. 元テキストの重要な情報やURL、ニュアンスを欠落させないでください。
+7. 【絶対遵守規則：タグ変更禁止】：元テキストに含まれているハッシュタグ（#...）はそのまま位置や内容を厳格に保持してください。新しいハッシュタグを一切追加せず、既存のハッシュタグを一切削除・改変しないでください（タグの追加・削除は完全禁止です）。
+
+【入力テキスト】
+${cleanText}
+`;
+
+      const response = await generateGeminiContentWithFallback({
+        preferredModel: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          systemInstruction: 'あなたは日本語のSNSライティング・スレッド構成の専門家です。指定されたJSON形式のみを出力してください。',
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              posts: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: '自然な文脈で分割された各ポストの本文配列',
+              },
+              summary: {
+                type: Type.STRING,
+                description: 'スレッド構成の意図や工夫したポイント（1〜2文）',
+              },
+            },
+            required: ['posts', 'summary'],
+          },
+        },
+      });
+
+      const responseText = response.text || '{}';
+      let parsed: { posts: string[]; summary: string };
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        res.status(500).json({ success: false, error: 'AIからのレスポンス解析に失敗しました。' });
+        return;
+      }
+
+      if (!parsed.posts || !Array.isArray(parsed.posts) || parsed.posts.length === 0) {
+        res.status(500).json({ success: false, error: 'スレッド分割結果を生成できませんでした。' });
+        return;
+      }
+
+      // タグ保護（追加・削除を絶対に許容しない）
+      const preservedPosts = preserveOriginalTagsForThread(cleanText, parsed.posts);
+      const formattedText = preservedPosts.join('\n---\n');
+
+      res.json({
+        success: true,
+        posts: preservedPosts,
+        formattedText,
+        summary: parsed.summary || '文脈を考慮して読みやすいスレッドに分割しました（タグ保持済み）。',
+        postCount: preservedPosts.length,
+      });
+    } catch (err: any) {
+      console.error('[AI Thread Split Error]:', err);
+      res.status(500).json({
+        success: false,
+        error: formatGeminiErrorMessage(err),
+      });
+    }
+  });
+
   // -------------------------------------------------------------
   // AI アシスト: プラットフォーム別トーン自動調整 (/api/ai/rewrite-tone)
   // -------------------------------------------------------------
@@ -1170,18 +1939,24 @@ ${cleanText}
       const prompt = `あなたはSNS（BlueskyとThreads）の特性を熟知したプロのソーシャルメディアライターです。
 与えられた投稿テキストの主要情報、URL、告知内容を正確に維持したまま、以下の2つのプラットフォームに最適化されたトーン＆マナーに書き分けてください。
 
+【絶対遵守規則：ハッシュタグ・タグの変更禁止】
+- 元の入力テキストに含まれるハッシュタグ（#...）はそのまま位置や内容を厳格に保持してください。
+- **新しいハッシュタグ・タグを絶対に追加しないでください。**
+- **既存のハッシュタグ・タグを絶対に削除・改変しないでください。**
+- タグの変更（追加、削除）は一切禁止です。
+
 【プラットフォーム特性の違い】
 ■ Bluesky向け (blueskyText):
 - 想定読者: 開発者、テック層、クリエイター、落ち着いた知見・オピニオンを好むユーザー。
 - トーン: 知的・論理的・明快・落ち着いたトーン。過度な感情表現や派手な絵文字の多用は避け、要点や背景、実用的な価値をクリアに提示。
 - 文字数: 全角300文字以内。
-- ハッシュタグ: 1〜2個程度の適切なハッシュタグ（例: #プログラミング #Web開発 など）。
+- タグ規制: 元のテキストにあるタグ以外の新しいハッシュタグは一切追加しないでください。
 
 ■ Threads向け (threadsText):
 - 想定読者: カジュアル、日常的、共感を重視する幅広い一般〜ビジネスユーザー。
 - トーン: 親しみやすく温かみのある語り口。適度な絵文字（文頭や箇条書きの装飾）、読者の共感を呼ぶ冒頭の1行フック、最後に「〜皆さんはどう思いますか？」などのリアクションを促す問いかけ。
 - 文字数: 全角500文字以内。
-- ハッシュタグ: トピックに溶け込む1個程度、または本文中のキーワード。
+- タグ規制: 元のテキストにあるタグ以外の新しいハッシュタグは一切追加しないでください。
 
 【入力テキスト】
 ${cleanText}
@@ -1191,18 +1966,18 @@ ${cleanText}
         preferredModel: 'gemini-3.8-flash',
         contents: prompt,
         config: {
-          systemInstruction: 'あなたはSNS文体最適化の専門家です。指定されたJSON形式のみを出力してください。',
+          systemInstruction: 'あなたはSNS文体最適化の専門家です。指定されたJSON形式のみを出力してください。元のハッシュタグは絶対に追加・削除せず維持してください。',
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
             properties: {
               blueskyText: {
                 type: Type.STRING,
-                description: 'Bluesky向けに落ち着いた知見・開発者向けトーンにリライトした本文（300文字以内）',
+                description: 'Bluesky向けに落ち着いた知見・開発者向けトーンにリライトした本文（300文字以内。タグの追加・削除は不可）',
               },
               threadsText: {
                 type: Type.STRING,
-                description: 'Threads向けに親しみやすく共感・フックを重視してリライトした本文（500文字以内）',
+                description: 'Threads向けに親しみやすく共感・フックを重視してリライトした本文（500文字以内。タグの追加・削除は不可）',
               },
               notes: {
                 type: Type.STRING,
@@ -1223,11 +1998,15 @@ ${cleanText}
         return;
       }
 
+      // タグ完全保持（追加・削除の排除）
+      const safeBlueskyText = preserveOriginalTags(cleanText, parsed.blueskyText || '');
+      const safeThreadsText = preserveOriginalTags(cleanText, parsed.threadsText || '');
+
       res.json({
         success: true,
-        blueskyText: parsed.blueskyText,
-        threadsText: parsed.threadsText,
-        notes: parsed.notes || '各SNSの読者層とカルチャーに合わせてトーンを調整しました。',
+        blueskyText: safeBlueskyText,
+        threadsText: safeThreadsText,
+        notes: parsed.notes || '各SNSの読者層に合わせてトーンを調整しました（タグは維持されています）。',
       });
     } catch (err: any) {
       console.error('[AI Rewrite Tone Error]:', err);
@@ -1259,9 +2038,19 @@ ${cleanText}
       if (checkLinks && matchedUrls.length > 0) {
         const linkPromises = matchedUrls.map(async (targetUrl) => {
           try {
+            // SSRF対策: プライベートIP・ローカルホストへのリクエスト遮断
+            const ssrfCheck = await validateSafeExternalUrl(targetUrl);
+            if (!ssrfCheck.safe) {
+              return {
+                url: targetUrl,
+                status: 'broken' as const,
+                error: ssrfCheck.reason || 'プライベートネットワークまたはローカルホストへのアクセスは遮断されました',
+              };
+            }
+
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 6000);
-            let checkRes = await fetch(targetUrl, {
+            let checkRes = await safeExternalFetch(targetUrl, {
               method: 'HEAD',
               signal: controller.signal,
               headers: {
@@ -1270,7 +2059,7 @@ ${cleanText}
             }).catch(() => null);
 
             if (!checkRes || checkRes.status === 405) {
-              checkRes = await fetch(targetUrl, {
+              checkRes = await safeExternalFetch(targetUrl, {
                 method: 'GET',
                 signal: controller.signal,
                 headers: {
@@ -1408,12 +2197,15 @@ ${cleanText}
         adjustedScore = Math.max(20, adjustedScore - brokenCount * 25);
       }
 
+      // タグ完全保持（追加・削除の排除）
+      const safeImprovedText = preserveOriginalTags(cleanText, parsed.improvedText || cleanText);
+
       res.json({
         success: true,
         safetyScore: adjustedScore,
         issues: combinedIssues,
-        improvedText: parsed.improvedText || cleanText,
-        summary: parsed.summary || '解析が完了しました。',
+        improvedText: safeImprovedText,
+        summary: parsed.summary || '解析が完了しました（タグは維持されています）。',
         linkChecks: linkCheckResults,
       });
     } catch (err: any) {
@@ -1597,9 +2389,9 @@ ${cleanText}
   });
 
   // -------------------------------------------------------------
-  // システムインフォグラフィック用 スクリーンショット画像アップロードAPI
+  // システムインフォグラフィック用 スクリーンショット画像アップロードAPI (認証保護)
   // -------------------------------------------------------------
-  app.post('/api/upload_screenshot', uploadMiddleware.single('screenshot'), (req, res) => {
+  app.post('/api/upload_screenshot', requireVaultOrAppAuth, uploadMiddleware.single('screenshot'), (req, res) => {
     try {
       if (!req.file) {
         res.status(400).json({ success: false, error: '画像ファイルが送信されていません。' });

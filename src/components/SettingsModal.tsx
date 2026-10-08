@@ -70,6 +70,9 @@ interface SettingsModalProps {
   onOpenCommErrors?: () => void;
   onOpenServerVault?: () => void;
   onOpenAdminModal?: () => void;
+  isAdminMode?: boolean;
+  onNotify?: (toast: { type: 'success' | 'error' | 'warning' | 'info'; title: string; message: string }) => void;
+  isModal?: boolean;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -85,6 +88,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onOpenCommErrors,
   onOpenServerVault,
   onOpenAdminModal,
+  isAdminMode = false,
+  isModal = false,
 }) => {
   const [form, setForm] = useState<ApiCredentials>({ ...credentials });
   const [vault, setVault] = useState<SavedAccountVault>(() => getSavedAccountVault());
@@ -97,6 +102,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isCommLogModalOpen, setIsCommLogModalOpen] = useState(false);
   const [platformTab, setPlatformTab] = useState<'bluesky' | 'threads' | 'appearance' | 'maintenance' | 'security'>('bluesky');
   const [showAdvancedPds, setShowAdvancedPds] = useState(false);
+
+  useEffect(() => {
+    const handleOpenMaintenance = () => {
+      setPlatformTab('maintenance');
+    };
+    window.addEventListener('crosspost_open_settings_maintenance', handleOpenMaintenance);
+    return () => window.removeEventListener('crosspost_open_settings_maintenance', handleOpenMaintenance);
+  }, []);
 
   // デモモード判定（プロップス・認証情報ステート・フォーム入力値から総合判定）
   const isDemoValuesInForm = Boolean(
@@ -467,21 +480,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const isBlueskyLoggedIn = Boolean(form.blueskyConnected || (form.blueskyIdentifier && form.blueskyAppPassword));
   const isThreadsLoggedIn = Boolean(form.threadsConnected || form.threadsAccessToken);
 
-  return (
-    <aside
-      id="settings-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Bluesky & Threads 設定メニュー"
-      style={{
-        transform: isOpen ? 'translateX(0%)' : 'translateX(100%)',
-        transition: 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
-        willChange: 'transform',
-      }}
-      className={`absolute inset-x-0 top-0 z-30 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col max-h-full ${
-        isOpen ? 'pointer-events-auto' : 'pointer-events-none'
-      }`}
-    >
+  const innerContent = (
+    <>
       {/* モーダルヘッダー */}
       <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-950/80 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -501,8 +501,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {/* サーバー登録情報・移行（ダウンロード/アップロード）ボタン */}
-            {onOpenServerVault && (
+            {/* サーバー登録情報・移行（ダウンロード/アップロード）ボタン (モバイルモーダル時は非表示) */}
+            {!isModal && onOpenServerVault && (
               <button
                 type="button"
                 onClick={() => {
@@ -625,9 +625,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 ? 'border-sky-400 text-sky-300 bg-sky-500/10 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
+            title="ハッシュタグ・Threadsトピック・トレンドカテゴリ・定型文・装飾バー・飾り罫線パレットの管理とJSON一括バックアップ"
           >
             <Hash className="w-3.5 h-3.5 text-sky-400" />
-            <span>ハッシュタグ・トピック</span>
+            <span>ハッシュタグ・トピック・装飾</span>
           </button>
 
           {!isDemoMode && (
@@ -1551,12 +1552,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         return;
                       }
 
-                      await updateModePassword(secNewPassword);
+                      const updatedOk = await updateModePassword(secNewPassword, secCurrentPassword);
+                      if (!updatedOk) {
+                        setSecMessage({ text: 'サーバー側でのパスワード更新に失敗しました。', type: 'error' });
+                        return;
+                      }
                       setSecConfig(getModeSecurityConfig());
                       setSecCurrentPassword('');
                       setSecNewPassword('');
                       setSecConfirmPassword('');
-                      setSecMessage({ text: '🎉 パスワードを正常に変更しました！', type: 'success' });
+                      setSecMessage({ text: '🎉 サーバー側の認証パスワードを正常に変更しました！', type: 'success' });
                     }}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow flex items-center gap-1.5 ${
                       secCurrentPassword.trim() && secNewPassword.trim() && secConfirmPassword.trim()
@@ -1584,7 +1589,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             ) : platformTab === 'maintenance' ? (
               <div className="text-xs text-slate-400 flex items-center gap-2">
                 <Hash className="w-3.5 h-3.5 text-sky-400" />
-                <span>ハッシュタグやトピックの変更はエディタに自動同期されます</span>
+                <span>ハッシュタグ・トピック・定型文・装飾バー・飾り罫線パレットの変更はエディタに自動同期されます</span>
               </div>
             ) : (
               <div className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
@@ -1637,6 +1642,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           isOpen={isCommLogModalOpen}
           onClose={() => setIsCommLogModalOpen(false)}
         />
-      </aside>
+    </>
+  );
+
+  if (isModal) {
+    if (!isOpen) return null;
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          id="settings-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Bluesky & Threads 設定メニュー"
+          className="bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col w-full max-w-4xl max-h-[90vh] overflow-hidden text-slate-200 relative animate-in zoom-in-95 duration-150"
+        >
+          {innerContent}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <aside
+      id="settings-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bluesky & Threads 設定メニュー"
+      style={{
+        transform: isOpen ? 'translateX(0%)' : 'translateX(100%)',
+        transition: 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
+        willChange: 'transform',
+      }}
+      className={`absolute inset-x-0 top-0 z-30 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col max-h-full ${
+        isOpen ? 'pointer-events-auto' : 'pointer-events-none'
+      }`}
+    >
+      {innerContent}
+    </aside>
   );
 };

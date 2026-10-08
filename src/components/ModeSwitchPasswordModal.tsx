@@ -14,6 +14,7 @@ import {
 import {
   verifyAdminPassword,
 } from '../utils/adminConfig';
+import { useMouseBoundaryLock } from '../hooks/useMouseBoundaryLock';
 
 interface ModeSwitchPasswordModalProps {
   isOpen: boolean;
@@ -35,6 +36,9 @@ export const ModeSwitchPasswordModal: React.FC<ModeSwitchPasswordModalProps> = (
   const [errorMessage, setErrorMessage] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // モーダルオープン時のマウスカーソルウインドウ外逸脱防止ロック
+  useMouseBoundaryLock(isOpen);
 
   useEffect(() => {
     if (isOpen) {
@@ -61,8 +65,9 @@ export const ModeSwitchPasswordModal: React.FC<ModeSwitchPasswordModalProps> = (
 
     setIsVerifying(true);
     try {
-      // 1. 管理者パスワードの検証（初期値: admin）
-      if (verifyAdminPassword(trimmedPassword)) {
+      // 1. 管理者パスワードのサーバー側検証
+      const isValidAdminPass = await verifyAdminPassword(trimmedPassword);
+      if (isValidAdminPass) {
         if (onActivateAdminMode) {
           onActivateAdminMode();
         }
@@ -70,7 +75,7 @@ export const ModeSwitchPasswordModal: React.FC<ModeSwitchPasswordModalProps> = (
         return;
       }
 
-      // 2. LIVE/DEMO モード切替用パスワードの検証
+      // 2. LIVE/DEMO モード切替用パスワードのサーバー側検証
       const isValidModePass = await verifyModePassword(trimmedPassword);
       if (isValidModePass) {
         onConfirmSwitch();
@@ -90,28 +95,25 @@ export const ModeSwitchPasswordModal: React.FC<ModeSwitchPasswordModalProps> = (
     <div
       id="mode-password-modal-backdrop"
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
       <div
         id="mode-password-modal"
-        className="w-full max-w-md bg-[#121316] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden text-slate-200"
+        className="w-full max-w-[485px] bg-[#121316] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden text-slate-200"
       >
         {/* ヘッダー */}
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-900/50">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
               <Shield className="w-4 h-4" />
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                LIVE（本番）モード切替の認証
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2 whitespace-nowrap">
+                <span>LIVE（本番）モード切替の認証</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
                   LIVE（本番）へ
                 </span>
               </h2>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[10.5px] sm:text-[11px] text-slate-400 whitespace-nowrap">
                 実アカウントへの投稿を有効化するためにパスワード認証を行います
               </p>
             </div>
@@ -120,7 +122,7 @@ export const ModeSwitchPasswordModal: React.FC<ModeSwitchPasswordModalProps> = (
             id="mode-password-modal-close"
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer shrink-0"
             title="閉じる"
           >
             <CloseIcon className="w-4 h-4" />
@@ -137,8 +139,11 @@ export const ModeSwitchPasswordModal: React.FC<ModeSwitchPasswordModalProps> = (
                 <span>✨</span>
                 <span>切替時にDEMOモードの古いキャッシュ・残留ステート（予約・履歴・通信ログ・リプライ設定）は自動クリーンアップされます。</span>
               </div>
-              <div className="mt-1 text-[10.5px] text-slate-400 font-normal">
-                ※ LIVE（本番）モードからDEMOモードへの切替時はパスワード認証は不要です。
+              <div className="mt-1 text-[10.5px] text-slate-400 font-normal flex items-center justify-between gap-2">
+                <span>※ LIVE（本番）モードからDEMOモードへの切替時はパスワード認証は不要です。</span>
+                <span className="text-[10px] text-sky-400 bg-sky-950/60 border border-sky-800/60 px-2 py-0.5 rounded-full font-medium shrink-0 flex items-center gap-1">
+                  🔒 カーソル枠内固定
+                </span>
               </div>
             </div>
           </div>

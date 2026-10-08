@@ -198,9 +198,6 @@ export const AiAssistModal: React.FC<AiAssistModalProps> = ({
     <div
       id="ai-assist-modal"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
       <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
         {/* モーダルヘッダー */}
@@ -210,14 +207,17 @@ export const AiAssistModal: React.FC<AiAssistModalProps> = ({
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 flex-wrap">
                 <span>AIアシスト & 投稿リライト</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold">
                   Gemini 3.8 Flash
                 </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1">
+                  🏷️ タグ固定保護（追加・削除不可）
+                </span>
               </h2>
               <p className="text-xs text-slate-400">
-                文脈スレッド分割・プラットフォーム別トーン自動調整・セーフティチェック
+                文脈スレッド分割・プラットフォーム別トーン自動調整・セーフティチェック（既存タグを100%維持）
               </p>
             </div>
           </div>
