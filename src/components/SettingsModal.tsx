@@ -556,27 +556,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* プラットフォーム切り替えタブ */}
-        <div className="flex border-b border-slate-800 bg-slate-950/40 px-5 sm:px-6 pt-2 shrink-0 overflow-x-auto">
+        {/* プラットフォーム切り替えタブ (横スクロール無しで全タブを表示) */}
+        <div className="flex flex-wrap border-b border-slate-800 bg-slate-950/40 px-3 sm:px-4 pt-2 shrink-0 gap-x-0.5 gap-y-1">
           <button
             type="button"
             onClick={() => setPlatformTab('bluesky')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
+            className={`flex-1 min-w-fit flex items-center justify-center gap-1.5 px-2.5 py-2 text-[11px] sm:text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
               platformTab === 'bluesky'
                 ? 'border-[#0085ff] text-[#0085ff] bg-[#0085ff]/5 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span className="w-4 h-4 rounded-full bg-[#0085ff]/20 flex items-center justify-center text-[10px] text-[#0085ff]">
+            <span className="w-4 h-4 rounded-full bg-[#0085ff]/20 flex items-center justify-center text-[10px] text-[#0085ff] shrink-0">
               🦋
             </span>
             <span>Bluesky</span>
             {isBlueskyLoggedIn ? (
-              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
                 連携中
               </span>
             ) : (
-              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400 shrink-0">
                 未連携
               </span>
             )}
@@ -585,20 +585,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="button"
             onClick={() => setPlatformTab('threads')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
+            className={`flex-1 min-w-fit flex items-center justify-center gap-1.5 px-2.5 py-2 text-[11px] sm:text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
               platformTab === 'threads'
                 ? 'border-purple-500 text-purple-400 bg-purple-500/5 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>🌀</span>
+            <span className="shrink-0">🌀</span>
             <span>Threads</span>
             {isThreadsLoggedIn ? (
-              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
                 連携中
               </span>
             ) : (
-              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400 shrink-0">
                 未連携
               </span>
             )}
@@ -607,42 +607,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="button"
             onClick={() => setPlatformTab('appearance')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
+            className={`flex-1 min-w-fit flex items-center justify-center gap-1.5 px-2.5 py-2 text-[11px] sm:text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
               platformTab === 'appearance'
                 ? 'border-accent-primary text-accent-light bg-accent-subtle rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Palette className="w-3.5 h-3.5 text-accent-light" />
+            <Palette className="w-3.5 h-3.5 text-accent-light shrink-0" />
             <span>テーマ・外観</span>
           </button>
 
           <button
             type="button"
             onClick={() => setPlatformTab('maintenance')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
+            className={`flex-1 min-w-fit flex items-center justify-center gap-1.5 px-2.5 py-2 text-[11px] sm:text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
               platformTab === 'maintenance'
                 ? 'border-sky-400 text-sky-300 bg-sky-500/10 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
             title="ハッシュタグ・Threadsトピック・トレンドカテゴリ・定型文・装飾バー・飾り罫線パレットの管理とJSON一括バックアップ"
           >
-            <Hash className="w-3.5 h-3.5 text-sky-400" />
-            <span>ハッシュタグ・トピック・装飾</span>
+            <Hash className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+            <span>タグ・トピック・装飾</span>
           </button>
 
           {!isDemoMode && (
             <button
               type="button"
               onClick={() => setPlatformTab('security')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
+              className={`flex-1 min-w-fit flex items-center justify-center gap-1.5 px-2.5 py-2 text-[11px] sm:text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
                 platformTab === 'security'
                   ? 'border-emerald-500 text-emerald-400 bg-emerald-500/10 rounded-t-lg'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
+              title="モード切替セキュリティ設定（パスワード・保護オプション）"
             >
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              <span>モード切替セキュリティ</span>
+              <Shield className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>セキュリティ</span>
             </button>
           )}
         </div>

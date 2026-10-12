@@ -60,7 +60,13 @@ import {
   applyTagsAndSnippetsData,
   ParseTagsAndSnippetsResult,
 } from '../utils/exportImportHelper';
-import { getSavedSnippets } from '../utils/snippetStorage';
+import {
+  getSavedSnippets,
+  saveSnippet,
+  deleteSnippet,
+  resetSnippetsToDefault,
+} from '../utils/snippetStorage';
+import { SnippetItem } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import {
   loadQuickDecorationsFromStorage,
@@ -88,10 +94,16 @@ interface TagTopicMaintenanceProps {
 // カテゴリ作成時のクイック選択用絵文字
 const EMOJI_PRESETS = ['🏷️', '🌐', '💻', '🤖', '☕', '📷', '📈', '🎨', '🎵', '🐱', '🍣', '🍜', '🍚', '✈️', '🎮', '📚', '⚾', '💡', '🔥', '🌸'];
 
-export type MaintenanceSubTab = 'hashtags' | 'categories' | 'threads_topics' | 'quick_decors' | 'decor_templates';
+export type MaintenanceSubTab =
+  | 'hashtags'
+  | 'categories'
+  | 'threads_topics'
+  | 'snippets'
+  | 'quick_decors'
+  | 'decor_templates';
 
 export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNotify, isDemoMode = false }) => {
-  // サブタブ: 'hashtags' (お気に入り) | 'categories' (トレンド・カテゴリ一覧) | 'threads_topics' (Threads専用) | 'quick_decors' (装飾バー) | 'decor_templates' (飾り罫線パレット)
+  // サブタブ: 'hashtags' (お気に入り) | 'categories' (トレンド・カテゴリ一覧) | 'threads_topics' (Threads専用) | 'snippets' (定型文) | 'quick_decors' (装飾バー) | 'decor_templates' (飾り罫線パレット)
   const [activeSubTab, setActiveSubTab] = useState<MaintenanceSubTab>('hashtags');
 
   // --- お気に入りハッシュタグ状態 ---
@@ -152,6 +164,21 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
   const [editDtName, setEditDtName] = useState('');
   const [editDtCategory, setEditDtCategory] = useState<DecorationItem['category']>('divider');
   const [editDtContent, setEditDtContent] = useState('');
+
+  // --- 定型文（スニペット）状態 ---
+  const [snippets, setSnippets] = useState<SnippetItem[]>(() => getSavedSnippets());
+  const [snippetSearch, setSnippetSearch] = useState('');
+  const [snippetCategoryFilter, setSnippetCategoryFilter] = useState<'all' | SnippetItem['category']>('all');
+  const [isAddingSnippet, setIsAddingSnippet] = useState(false);
+  const [newSnipTitle, setNewSnipTitle] = useState('');
+  const [newSnipContent, setNewSnipContent] = useState('');
+  const [newSnipCategory, setNewSnipCategory] = useState<SnippetItem['category']>('custom');
+  const [newSnipIcon, setNewSnipIcon] = useState('📑');
+  const [editingSnippet, setEditingSnippet] = useState<SnippetItem | null>(null);
+  const [editSnipTitle, setEditSnipTitle] = useState('');
+  const [editSnipContent, setEditSnipContent] = useState('');
+  const [editSnipCategory, setEditSnipCategory] = useState<SnippetItem['category']>('custom');
+  const [editSnipIcon, setEditSnipIcon] = useState('📑');
 
   // --- 定型文・装飾バー・飾り罫線パレット件数（同期表示用） ---
   const [snippetsCount, setSnippetsCount] = useState<number>(() => getSavedSnippets().length);
@@ -269,7 +296,9 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
       const updatedCats = getSavedCategories();
       setCategories(updatedCats);
       setThreadsTopics(getSavedThreadsTopics());
-      setSnippetsCount(getSavedSnippets().length);
+      const latestSnippets = getSavedSnippets();
+      setSnippets(latestSnippets);
+      setSnippetsCount(latestSnippets.length);
       setQuickDecorCount(loadQuickDecorationsFromStorage().length);
       setDecorTemplatesCount(loadDecorationTemplatesFromStorage().length);
 
@@ -318,7 +347,9 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
       setThreadsTopics(getSavedThreadsTopics());
     };
     const handleSnippetsUpdated = () => {
-      setSnippetsCount(getSavedSnippets().length);
+      const latest = getSavedSnippets();
+      setSnippets(latest);
+      setSnippetsCount(latest.length);
     };
     const handleDecorationsUpdated = () => {
       const qd = loadQuickDecorationsFromStorage();
@@ -870,6 +901,97 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
     showNotification('クリップボードにコピーしました。');
   };
 
+  // 定型文フィルタリング
+  const filteredSnippets = useMemo(() => {
+    return snippets.filter((item) => {
+      const matchCat = snippetCategoryFilter === 'all' || item.category === snippetCategoryFilter;
+      if (!matchCat) return false;
+      if (!snippetSearch.trim()) return true;
+      const q = snippetSearch.trim().toLowerCase();
+      return (
+        item.title.toLowerCase().includes(q) ||
+        item.content.toLowerCase().includes(q) ||
+        (item.categoryName && item.categoryName.toLowerCase().includes(q))
+      );
+    });
+  }, [snippets, snippetCategoryFilter, snippetSearch]);
+
+  // 定型文の新規追加
+  const handleAddNewSnippet = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSnipTitle.trim() || !newSnipContent.trim()) {
+      showNotification('タイトルと定型文本文を入力してください。');
+      return;
+    }
+    const updated = saveSnippet({
+      title: newSnipTitle.trim(),
+      content: newSnipContent,
+      category: newSnipCategory,
+      icon: newSnipIcon.trim() || '📑',
+    });
+    setSnippets(updated);
+    setSnippetsCount(updated.length);
+    setNewSnipTitle('');
+    setNewSnipContent('');
+    setNewSnipCategory('custom');
+    setNewSnipIcon('📑');
+    setIsAddingSnippet(false);
+    showNotification(`定型文「${newSnipTitle.trim()}」を登録しました。`);
+  };
+
+  // 定型文の編集保存
+  const handleSaveEditSnippet = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSnippet || !editSnipTitle.trim() || !editSnipContent.trim()) return;
+    const updated = saveSnippet(
+      {
+        title: editSnipTitle.trim(),
+        content: editSnipContent,
+        category: editSnipCategory,
+        icon: editSnipIcon.trim() || '📑',
+      },
+      editingSnippet.id
+    );
+    setSnippets(updated);
+    setSnippetsCount(updated.length);
+    setEditingSnippet(null);
+    showNotification(`定型文「${editSnipTitle.trim()}」の変更を保存しました。`);
+  };
+
+  // 定型文の削除
+  const handleDeleteSnippetItem = (item: SnippetItem) => {
+    requestConfirm({
+      title: '定型文の削除',
+      message: `定型文「${item.title}」を削除してもよろしいですか？`,
+      confirmLabel: '削除する',
+      iconType: 'trash',
+      variant: 'danger',
+      onConfirm: () => {
+        const updated = deleteSnippet(item.id);
+        setSnippets(updated);
+        setSnippetsCount(updated.length);
+        showNotification(`定型文「${item.title}」を削除しました。`);
+      },
+    });
+  };
+
+  // 定型文の初期プリセットリセット
+  const handleResetSnippetsList = () => {
+    requestConfirm({
+      title: '定型文の初期化',
+      message: '定型文を初期プリセット（5件）に戻しますか？\n※追加・編集した定型文はリセットされます。',
+      confirmLabel: '初期プリセットに戻す',
+      iconType: 'reset',
+      variant: 'warning',
+      onConfirm: () => {
+        const updated = resetSnippetsToDefault();
+        setSnippets(updated);
+        setSnippetsCount(updated.length);
+        showNotification('定型文を初期プリセットに戻しました。');
+      },
+    });
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
       {/* 隠しファイル入力要素 */}
@@ -923,86 +1045,130 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
         )}
       </div>
 
-      {/* 収録データ（全6種）のリアルタイムステータスパネル */}
-      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-2">
-        <div className="flex items-center justify-between text-[11px] text-slate-400">
+      {/* 収録データ（全6種）のリアルタイムステータス＆カテゴリー切替パネル（カード型ボタンに一本化） */}
+      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-2.5">
+        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
           <span className="font-bold text-slate-300 flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-sky-400" />
+            <Layers className="w-3.5 h-3.5 text-sky-400 shrink-0" />
             <span>メンテナンス対象データ一覧（エディタ・JSON完全同期）</span>
           </span>
-          <span className="text-[10px] text-slate-500">
-            全6カテゴリー収録
+          <span className="text-[10px] text-slate-500 whitespace-nowrap shrink-0">
+            クリックで管理項目を切替
           </span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
           <button
             type="button"
             onClick={() => setActiveSubTab('hashtags')}
-            className={`p-2 rounded-lg border flex items-center justify-between transition cursor-pointer text-left ${
+            className={`px-3 py-2.5 rounded-lg border flex items-center justify-between gap-2 transition cursor-pointer text-left ${
               activeSubTab === 'hashtags'
-                ? 'bg-sky-950/40 border-sky-500/60 shadow-xs'
-                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                ? 'bg-sky-950/50 border-sky-500/70 text-sky-200 shadow-xs'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
             }`}
             title="お気に入りタグ管理に切り替え"
           >
-            <span className="text-slate-400 text-[11px] flex items-center gap-1">🏷️ お気に入りタグ</span>
-            <span className="font-mono font-bold text-sky-300">{customTags.length}件</span>
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="shrink-0">🏷️</span>
+              <span className="text-[11px] font-bold truncate">お気に入りタグ</span>
+            </span>
+            <span className="font-mono font-bold text-sky-300 text-[11px] px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/30 whitespace-nowrap shrink-0">
+              {customTags.length}件
+            </span>
           </button>
+
           <button
             type="button"
             onClick={() => setActiveSubTab('categories')}
-            className={`p-2 rounded-lg border flex items-center justify-between transition cursor-pointer text-left ${
+            className={`px-3 py-2.5 rounded-lg border flex items-center justify-between gap-2 transition cursor-pointer text-left ${
               activeSubTab === 'categories'
-                ? 'bg-amber-950/40 border-amber-500/60 shadow-xs'
-                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                ? 'bg-amber-950/50 border-amber-500/70 text-amber-200 shadow-xs'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
             }`}
             title="トレンド・カテゴリ管理に切り替え"
           >
-            <span className="text-slate-400 text-[11px] flex items-center gap-1">📂 カテゴリ一覧</span>
-            <span className="font-mono font-bold text-amber-300">{categories.length}件</span>
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="shrink-0">📂</span>
+              <span className="text-[11px] font-bold truncate">カテゴリ一覧</span>
+            </span>
+            <span className="font-mono font-bold text-amber-300 text-[11px] px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/30 whitespace-nowrap shrink-0">
+              {categories.length}件
+            </span>
           </button>
+
           <button
             type="button"
             onClick={() => setActiveSubTab('threads_topics')}
-            className={`p-2 rounded-lg border flex items-center justify-between transition cursor-pointer text-left ${
+            className={`px-3 py-2.5 rounded-lg border flex items-center justify-between gap-2 transition cursor-pointer text-left ${
               activeSubTab === 'threads_topics'
-                ? 'bg-purple-950/40 border-purple-500/60 shadow-xs'
-                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                ? 'bg-purple-950/50 border-purple-500/70 text-purple-200 shadow-xs'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
             }`}
             title="Threadsトピック管理に切り替え"
           >
-            <span className="text-slate-400 text-[11px] flex items-center gap-1">💬 Threadsトピック</span>
-            <span className="font-mono font-bold text-purple-300">{threadsTopics.length}件</span>
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="shrink-0">💬</span>
+              <span className="text-[11px] font-bold truncate">Threadsトピック</span>
+            </span>
+            <span className="font-mono font-bold text-purple-300 text-[11px] px-1.5 py-0.5 rounded bg-purple-950/80 border border-purple-500/30 whitespace-nowrap shrink-0">
+              {threadsTopics.length}件
+            </span>
           </button>
-          <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-            <span className="text-slate-400 text-[11px] flex items-center gap-1">📋 定型文</span>
-            <span className="font-mono font-bold text-emerald-300">{snippetsCount}件</span>
-          </div>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('snippets')}
+            className={`px-3 py-2.5 rounded-lg border flex items-center justify-between gap-2 transition cursor-pointer text-left ${
+              activeSubTab === 'snippets'
+                ? 'bg-emerald-950/50 border-emerald-500/70 text-emerald-200 shadow-xs'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
+            }`}
+            title="定型文・テンプレート管理に切り替え"
+          >
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="shrink-0">📋</span>
+              <span className="text-[11px] font-bold truncate">定型文</span>
+            </span>
+            <span className="font-mono font-bold text-emerald-300 text-[11px] px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/30 whitespace-nowrap shrink-0">
+              {snippetsCount}件
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveSubTab('quick_decors')}
-            className={`p-2 rounded-lg border flex items-center justify-between transition cursor-pointer text-left ${
+            className={`px-3 py-2.5 rounded-lg border flex items-center justify-between gap-2 transition cursor-pointer text-left ${
               activeSubTab === 'quick_decors'
-                ? 'bg-pink-950/40 border-pink-500/60 shadow-xs'
-                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                ? 'bg-pink-950/50 border-pink-500/70 text-pink-200 shadow-xs'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
             }`}
             title="装飾バー管理に切り替え"
           >
-            <span className="text-slate-400 text-[11px] flex items-center gap-1">🎨 装飾バー</span>
-            <span className="font-mono font-bold text-pink-300">{quickDecorCount}件</span>
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="shrink-0">🎨</span>
+              <span className="text-[11px] font-bold truncate">装飾バー</span>
+            </span>
+            <span className="font-mono font-bold text-pink-300 text-[11px] px-1.5 py-0.5 rounded bg-pink-950/80 border border-pink-500/30 whitespace-nowrap shrink-0">
+              {quickDecorCount}件
+            </span>
           </button>
+
           <button
             type="button"
             onClick={() => setActiveSubTab('decor_templates')}
-            className={`p-2 rounded-lg border flex items-center justify-between transition cursor-pointer text-left ${
+            className={`px-3 py-2.5 rounded-lg border flex items-center justify-between gap-2 transition cursor-pointer text-left ${
               activeSubTab === 'decor_templates'
-                ? 'bg-indigo-950/40 border-indigo-500/60 shadow-xs'
-                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                ? 'bg-indigo-950/50 border-indigo-500/70 text-indigo-200 shadow-xs'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
             }`}
             title="飾り罫線パレット管理に切り替え"
           >
-            <span className="text-slate-400 text-[11px] flex items-center gap-1">🕱 飾り罫線パレット</span>
-            <span className="font-mono font-bold text-indigo-300">{decorTemplatesCount}件</span>
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="shrink-0">🕱</span>
+              <span className="text-[11px] font-bold truncate">飾り罫線パレット</span>
+            </span>
+            <span className="font-mono font-bold text-indigo-300 text-[11px] px-1.5 py-0.5 rounded bg-indigo-950/80 border border-indigo-500/30 whitespace-nowrap shrink-0">
+              {decorTemplatesCount}件
+            </span>
           </button>
         </div>
       </div>
@@ -1023,89 +1189,6 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
           </button>
         </div>
       )}
-
-      {/* サブタブ切り替え（セグメントコントロール） */}
-      <div className="p-1 rounded-xl bg-slate-950 border border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1">
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('hashtags')}
-          className={`py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            activeSubTab === 'hashtags'
-              ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-          }`}
-        >
-          <Hash className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-          <span>お気に入りタグ</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-mono shrink-0">
-            {customTags.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('categories')}
-          className={`py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            activeSubTab === 'categories'
-              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-          }`}
-        >
-          <TrendingUp className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span>トレンド・カテゴリ</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-mono shrink-0">
-            {categories.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('threads_topics')}
-          className={`py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            activeSubTab === 'threads_topics'
-              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-xs'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-          }`}
-        >
-          <span className="text-xs shrink-0">🌀</span>
-          <span>Threadsトピック</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-mono shrink-0">
-            {threadsTopics.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('quick_decors')}
-          className={`py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            activeSubTab === 'quick_decors'
-              ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40 shadow-xs'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-          }`}
-        >
-          <Palette className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-          <span>🎨 装飾バー</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-mono shrink-0">
-            {quickDecors.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('decor_templates')}
-          className={`py-2 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            activeSubTab === 'decor_templates'
-              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-xs'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-          <span>🕱 飾り罫線パレット</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-mono shrink-0">
-            {decorTemplates.length}
-          </span>
-        </button>
-      </div>
 
       {/* === タブ1: お気に入りハッシュタグ管理 === */}
       {activeSubTab === 'hashtags' && (
@@ -2620,6 +2703,364 @@ export const TagTopicMaintenance: React.FC<TagTopicMaintenanceProps> = ({ onNoti
               >
                 <RotateCcw className="w-3.5 h-3.5 text-indigo-400" />
                 <span>初期デフォルトに戻す (24種類)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === タブ6: 定型文（スニペット）管理 === */}
+      {activeSubTab === 'snippets' && (
+        <div className="space-y-5">
+          {/* 説明カード */}
+          <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs text-slate-300 flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <FileText className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-slate-200">
+                  定型文・テンプレート管理
+                </p>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  投稿エディタの「定型文」ボタンからワンクリックで呼び出せるテンプレートです。よく使う挨拶、告知文、署名・フッターなどを登録・編集できます。
+                </p>
+              </div>
+            </div>
+            {!isAddingSnippet && !editingSnippet && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingSnippet(true);
+                  setNewSnipTitle('');
+                  setNewSnipContent('');
+                  setNewSnipCategory('custom');
+                  setNewSnipIcon('📑');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>新規追加</span>
+              </button>
+            )}
+          </div>
+
+          {/* 新規作成フォーム */}
+          {isAddingSnippet && (
+            <form
+              onSubmit={handleAddNewSnippet}
+              className="p-4 rounded-xl bg-slate-950/80 border border-emerald-500/40 space-y-3"
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>新規の定型文テンプレートを作成</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingSnippet(false)}
+                  className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer"
+                >
+                  キャンセル
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                <div className="sm:col-span-1">
+                  <label className="block text-[11px] text-slate-400 mb-1">アイコン</label>
+                  <input
+                    type="text"
+                    value={newSnipIcon}
+                    onChange={(e) => setNewSnipIcon(e.target.value)}
+                    maxLength={4}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-center text-sm text-slate-100 focus:outline-hidden focus:border-emerald-400"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] text-slate-400 mb-1">タイトル</label>
+                  <input
+                    type="text"
+                    value={newSnipTitle}
+                    onChange={(e) => setNewSnipTitle(e.target.value)}
+                    placeholder="例: 朝の挨拶、ブログ告知、定番フッター"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden focus:border-emerald-400"
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <label className="block text-[11px] text-slate-400 mb-1">カテゴリ</label>
+                  <select
+                    value={newSnipCategory}
+                    onChange={(e) => setNewSnipCategory(e.target.value as SnippetItem['category'])}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-hidden focus:border-emerald-400"
+                  >
+                    <option value="greeting">挨拶・日常</option>
+                    <option value="announcement">告知・案内</option>
+                    <option value="blog">記事更新</option>
+                    <option value="dev">開発・技術</option>
+                    <option value="signature">署名・フッター</option>
+                    <option value="custom">カスタム</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] text-slate-400">テンプレート本文</label>
+                  <span className="text-[10px] text-slate-500 font-mono">{newSnipContent.length}文字</span>
+                </div>
+                <textarea
+                  value={newSnipContent}
+                  onChange={(e) => setNewSnipContent(e.target.value)}
+                  rows={4}
+                  placeholder="よく使う投稿文、リンク、ハッシュタグなどを入力してください..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden focus:border-emerald-400 font-mono leading-relaxed"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingSnippet(false)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>登録する</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* 編集フォーム */}
+          {editingSnippet && (
+            <form
+              onSubmit={handleSaveEditSnippet}
+              className="p-4 rounded-xl bg-slate-950/80 border border-amber-500/40 space-y-3"
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>定型文「{editingSnippet.title}」を編集</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setEditingSnippet(null)}
+                  className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer"
+                >
+                  キャンセル
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                <div className="sm:col-span-1">
+                  <label className="block text-[11px] text-slate-400 mb-1">アイコン</label>
+                  <input
+                    type="text"
+                    value={editSnipIcon}
+                    onChange={(e) => setEditSnipIcon(e.target.value)}
+                    maxLength={4}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-center text-sm text-slate-100 focus:outline-hidden focus:border-amber-400"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] text-slate-400 mb-1">タイトル</label>
+                  <input
+                    type="text"
+                    value={editSnipTitle}
+                    onChange={(e) => setEditSnipTitle(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-hidden focus:border-amber-400"
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <label className="block text-[11px] text-slate-400 mb-1">カテゴリ</label>
+                  <select
+                    value={editSnipCategory}
+                    onChange={(e) => setEditSnipCategory(e.target.value as SnippetItem['category'])}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-hidden focus:border-amber-400"
+                  >
+                    <option value="greeting">挨拶・日常</option>
+                    <option value="announcement">告知・案内</option>
+                    <option value="blog">記事更新</option>
+                    <option value="dev">開発・技術</option>
+                    <option value="signature">署名・フッター</option>
+                    <option value="custom">カスタム</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] text-slate-400">テンプレート本文</label>
+                  <span className="text-[10px] text-slate-500 font-mono">{editSnipContent.length}文字</span>
+                </div>
+                <textarea
+                  value={editSnipContent}
+                  onChange={(e) => setEditSnipContent(e.target.value)}
+                  rows={4}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 focus:outline-hidden focus:border-amber-400 font-mono leading-relaxed"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingSnippet(null)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>変更を保存</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* フィルター＆検索 */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { id: 'all', label: 'すべて' },
+                  { id: 'greeting', label: '☀️ 挨拶' },
+                  { id: 'announcement', label: '📢 告知' },
+                  { id: 'blog', label: '📝 記事' },
+                  { id: 'dev', label: '☕ 開発' },
+                  { id: 'signature', label: '✒️ 署名' },
+                  { id: 'custom', label: '💡 自作' },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSnippetCategoryFilter(cat.id as any)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                      snippetCategoryFilter === cat.id
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-full sm:w-48">
+                <Search className="w-3 h-3 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={snippetSearch}
+                  onChange={(e) => setSnippetSearch(e.target.value)}
+                  placeholder="定型文を検索..."
+                  className="w-full bg-slate-900/90 border border-slate-800 rounded-lg pl-7 pr-6 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-hidden focus:border-emerald-400 transition"
+                />
+                {snippetSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setSnippetSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 定型文一覧 */}
+            <div className="grid grid-cols-1 gap-2.5">
+              {filteredSnippets.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-500 bg-slate-950/40 rounded-xl border border-slate-800/80">
+                  {snippetSearch ? '検索に一致する定型文はありません' : '登録されている定型文がありません'}
+                </div>
+              ) : (
+                filteredSnippets.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 transition flex flex-col gap-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-base px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 shrink-0">
+                          {item.icon || '📑'}
+                        </span>
+                        <span className="text-xs font-bold text-slate-200 truncate">
+                          {item.title}
+                        </span>
+                        {item.isPreset && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700 whitespace-nowrap shrink-0">
+                            プリセット
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-mono whitespace-nowrap shrink-0">
+                        {item.content.length}文字
+                      </span>
+                    </div>
+
+                    <pre className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[11px] whitespace-pre-wrap break-all leading-relaxed max-h-24 overflow-y-auto">
+                      {item.content}
+                    </pre>
+
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/70">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(item.content, item.id)}
+                        className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedItem === item.id ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-[11px] text-emerald-400">コピー済</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span className="text-[11px]">本文コピー</span>
+                          </>
+                        )}
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingSnippet(item);
+                            setEditSnipTitle(item.title);
+                            setEditSnipContent(item.content);
+                            setEditSnipCategory(item.category);
+                            setEditSnipIcon(item.icon || '📑');
+                            setIsAddingSnippet(false);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-sky-300 hover:text-sky-200 border border-sky-500/40 text-xs font-medium transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                          <span>編集</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSnippetItem(item)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-rose-950/70 text-rose-300 hover:text-rose-200 border border-rose-500/40 text-xs font-medium transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>削除</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* 初期化リセットボタン */}
+            <div className="pt-2 flex flex-wrap items-center justify-start gap-2 border-t border-slate-800/80">
+              <button
+                type="button"
+                onClick={handleResetSnippetsList}
+                className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs border border-slate-800 transition flex items-center gap-1.5 cursor-pointer"
+                title="初期プリセット（5件）に戻します"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                <span>初期プリセットに戻す (5件)</span>
               </button>
             </div>
           </div>
