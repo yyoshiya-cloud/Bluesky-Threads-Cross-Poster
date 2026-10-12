@@ -27,6 +27,9 @@ import {
   updateScheduledPost,
   deleteScheduledPost,
   addScheduledPost,
+  getJstDateKey,
+  getJstTimeString,
+  getJstNowInfo,
 } from '../utils/scheduledStorage';
 import {
   getPlatformCategory,
@@ -46,63 +49,6 @@ interface ScheduledCalendarViewProps {
   isDemoMode?: boolean;
 }
 
-/**
- * タイムスタンプをJSTの年月日キー (YYYY-MM-DD) に変換
- */
-function getJstDateKey(timestamp: number): string {
-  const formatter = new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const parts = formatter.formatToParts(new Date(timestamp));
-  let y = '', m = '', d = '';
-  for (const p of parts) {
-    if (p.type === 'year') y = p.value;
-    if (p.type === 'month') m = p.value;
-    if (p.type === 'day') d = p.value;
-  }
-  return `${y}-${m}-${d}`;
-}
-
-/**
- * タイムスタンプをJSTの時分文字列 (HH:mm) に変換
- */
-function getJstTimeString(timestamp: number): string {
-  const formatter = new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-  return formatter.format(new Date(timestamp));
-}
-
-/**
- * 現在のJSTの年月を取得
- */
-function getCurrentJstYearMonth(): { year: number; month: number; todayKey: string } {
-  const now = new Date();
-  const formatter = new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: 'numeric',
-    day: '2-digit',
-  });
-  const parts = formatter.formatToParts(now);
-  let year = now.getFullYear();
-  let month = now.getMonth() + 1;
-  let day = '01';
-  for (const p of parts) {
-    if (p.type === 'year') year = parseInt(p.value, 10);
-    if (p.type === 'month') month = parseInt(p.value, 10);
-    if (p.type === 'day') day = p.value;
-  }
-  const mStr = month < 10 ? `0${month}` : `${month}`;
-  return { year, month, todayKey: `${year}-${mStr}-${day}` };
-}
-
 export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
   scheduledPosts,
   onRefreshScheduledPosts,
@@ -113,7 +59,7 @@ export const ScheduledCalendarView: React.FC<ScheduledCalendarViewProps> = ({
   onSwitchToWeekView,
   isDemoMode,
 }) => {
-  const { year: currentYear, month: currentMonth, todayKey } = useMemo(() => getCurrentJstYearMonth(), []);
+  const { year: currentYear, month: currentMonth, todayKey } = useMemo(() => getJstNowInfo(), []);
 
   // 表示中の年月
   const [viewYear, setViewYear] = useState<number>(currentYear);

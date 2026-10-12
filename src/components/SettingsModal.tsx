@@ -1600,39 +1600,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
 
             <div className="flex items-center gap-2.5 ml-auto">
-              {/* アカウント設定保存ボタン */}
-              <button
-                id="save-settings-button"
-                type="button"
-                onClick={handleSave}
-                disabled={isEffectiveDemoMode || (!isEffectiveDemoMode && isAllLoggedOut)}
-                className={`px-5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md ${
-                  isEffectiveDemoMode || (!isEffectiveDemoMode && isAllLoggedOut)
-                    ? 'bg-slate-800 text-slate-500 border border-slate-700/60 cursor-not-allowed shadow-none opacity-60'
-                    : isSaveSuccess
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30 cursor-pointer'
-                    : 'btn-accent text-white cursor-pointer shadow-accent/25'
-                }`}
-                title={
-                  isEffectiveDemoMode
-                    ? 'DEMOモード中はアカウント設定の保存は保護のため無効化されています'
-                    : isAllLoggedOut
-                    ? 'LIVEモードでBluesky・Threadsが未ログイン状態のため、アカウント設定の保存は無効化されています'
-                    : 'アカウント設定を端末およびサーバーに確実に保存'
-                }
-              >
-                {isSaveSuccess ? (
-                  <>
-                    <CheckCircle className="w-4 h-4 text-emerald-100" />
-                    <span>設定を保存しました！</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>アカウント設定を確実に保存</span>
-                  </>
-                )}
-              </button>
+              {(platformTab === 'bluesky' || platformTab === 'threads') ? (
+                /* アカウント設定保存ボタン */
+                <button
+                  id="save-settings-button"
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isEffectiveDemoMode || (!isEffectiveDemoMode && isAllLoggedOut)}
+                  className={`px-5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md ${
+                    isEffectiveDemoMode || (!isEffectiveDemoMode && isAllLoggedOut)
+                      ? 'bg-slate-800 text-slate-500 border border-slate-700/60 cursor-not-allowed shadow-none opacity-60'
+                      : isSaveSuccess
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30 cursor-pointer'
+                      : 'btn-accent text-white cursor-pointer shadow-accent/25'
+                  }`}
+                  title={
+                    isEffectiveDemoMode
+                      ? 'DEMOモード中はアカウント設定の保存は保護のため無効化されています'
+                      : isAllLoggedOut
+                      ? 'LIVEモードでBluesky・Threadsが未ログイン状態のため、アカウント設定の保存は無効化されています'
+                      : 'アカウント設定を端末およびサーバーに確実に保存'
+                  }
+                >
+                  {isSaveSuccess ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 text-emerald-100" />
+                      <span>設定を保存しました！</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>アカウント設定を確実に保存</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition cursor-pointer"
+                >
+                  設定を閉じる
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1678,7 +1688,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         transition: 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
         willChange: 'transform',
       }}
-      className={`absolute inset-x-0 top-0 z-30 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col max-h-full ${
+      className={`absolute inset-0 z-30 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col overflow-hidden ${
         isOpen ? 'pointer-events-auto' : 'pointer-events-none'
       }`}
     >

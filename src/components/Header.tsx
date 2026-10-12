@@ -536,22 +536,30 @@ export const Header: React.FC<HeaderProps> = ({
           />
         </div>
 
-        {/* 設定ボタン (設定画面が開いていない時のみ表示) */}
-        {!isSettingsOpen && (
-          <button
-            id="header-settings-button"
-            type="button"
-            onClick={onToggleSettings || onOpenSettings}
-            disabled={isAdminMode}
-            className={`bg-accent-subtle text-accent-light border border-accent p-2 sm:px-3.5 sm:py-1.5 rounded-lg transition flex items-center gap-1.5 text-xs font-bold shadow-sm ${
-              isAdminMode ? 'opacity-40 cursor-not-allowed' : 'hover:brightness-110 cursor-pointer'
-            }`}
-            title={isAdminMode ? '管理者モード起動中のため操作不可' : 'API・アカウント認証設定 & テーマ変更'}
-          >
-            <Settings className="w-4 h-4" />
-            <span className="hidden sm:inline">設定</span>
-          </button>
-        )}
+        {/* 設定ボタン (開閉トグル対応・開いている時はアクティブ表示) */}
+        <button
+          id="header-settings-button"
+          type="button"
+          onClick={onToggleSettings || onOpenSettings}
+          disabled={isAdminMode}
+          className={`p-2 sm:px-3.5 sm:py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-bold shadow-sm ${
+            isAdminMode
+              ? 'opacity-40 cursor-not-allowed bg-accent-subtle text-accent-light border-accent'
+              : isSettingsOpen
+              ? 'btn-accent text-white border-accent shadow-accent/30 cursor-pointer ring-2 ring-accent/40'
+              : 'bg-accent-subtle text-accent-light border-accent hover:brightness-110 cursor-pointer'
+          }`}
+          title={
+            isAdminMode
+              ? '管理者モード起動中のため操作不可'
+              : isSettingsOpen
+              ? '設定メニューを閉じる'
+              : 'API・アカウント認証設定 & テーマ変更'
+          }
+        >
+          <Settings className={`w-4 h-4 transition-transform duration-200 ${isSettingsOpen ? 'rotate-90' : ''}`} />
+          <span className="hidden sm:inline">{isSettingsOpen ? '設定を閉じる' : '設定'}</span>
+        </button>
 
         {/* LIVEモード限定: サーバー登録情報一覧ボタン（設定の右に配置） */}
         {!isDemoMode && (onOpenServerVault || onToggleServerVault) && (
@@ -567,10 +575,16 @@ export const Header: React.FC<HeaderProps> = ({
                   ? 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-900/30 cursor-pointer'
                   : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 border-emerald-500/40 hover:border-emerald-500/60 cursor-pointer'
             }`}
-            title={isAdminMode ? '管理者モード起動中のため操作不可' : 'LIVEモードでサーバー（/data/account_vault.json）に登録されているBluesky・Threadsのアカウント情報を一覧で確認'}
+            title={
+              isAdminMode
+                ? '管理者モード起動中のため操作不可'
+                : isServerVaultOpen
+                ? 'サーバー登録情報一覧を閉じる'
+                : 'LIVEモードでサーバー（/data/account_vault.json）に登録されているBluesky・Threadsのアカウント情報を一覧で確認'
+            }
           >
             <Database className="w-4 h-4 text-emerald-400" />
-            <span className="hidden sm:inline">サーバー登録情報</span>
+            <span className="hidden sm:inline">{isServerVaultOpen ? '登録情報を閉じる' : 'サーバー登録情報'}</span>
           </button>
         )}
 
@@ -587,41 +601,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="スマートフォン向けモバイルUIに切り替えます（ユーザーエージェント判別対応）"
           >
             <Smartphone className="w-4 h-4 text-sky-400" />
-            <span className="hidden lg:inline">スマホ表示</span>
-          </button>
-        )}
-
-        {/* アプリ説明ウインド表示ボタン */}
-        {onOpenAboutApp && (
-          <button
-            id="header-about-app-button"
-            type="button"
-            onClick={onOpenAboutApp}
-            disabled={isAdminMode}
-            className={`bg-slate-900 text-slate-300 border border-slate-800 p-2 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center gap-1.5 text-xs font-medium shadow-sm ${
-              isAdminMode ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-800 hover:text-sky-300 hover:border-sky-500/50 cursor-pointer'
-            }`}
-            title={isAdminMode ? '管理者モード起動中のため操作不可' : 'CrossPost Web Studio アプリ情報・制作者プロフィールを表示'}
-          >
-            <Info className="w-4 h-4 text-sky-400" />
-            <span className="hidden lg:inline">アプリ情報</span>
-          </button>
-        )}
-
-        {/* アプリ終了ボタン */}
-        {onOpenQuitConfirm && (
-          <button
-            id="header-quit-button"
-            type="button"
-            onClick={onOpenQuitConfirm}
-            disabled={isAdminMode}
-            className={`bg-slate-900 text-slate-400 border border-slate-800 p-2 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center gap-1.5 text-xs font-medium shadow-sm ${
-              isAdminMode ? 'opacity-40 cursor-not-allowed' : 'hover:bg-rose-950/40 hover:text-rose-300 hover:border-rose-900/60 cursor-pointer'
-            }`}
-            title={isAdminMode ? '管理者モード起動中のため操作不可' : 'アプリケーションを終了 (Ctrl+Q / Cmd+Q)'}
-          >
-            <Power className="w-4 h-4 text-rose-400/80" />
-            <span className="hidden lg:inline">終了</span>
+            <span className="hidden xl:inline">スマホ表示</span>
           </button>
         )}
       </div>

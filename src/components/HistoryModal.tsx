@@ -20,46 +20,10 @@ import {
   AlertTriangle,
   MessageSquare,
 } from 'lucide-react';
-import { formatToJstString } from '../utils/scheduledStorage';
+import { formatToJstString, formatHistoryTimestampJst } from '../utils/scheduledStorage';
 import { getPostMediaCounts } from '../utils/mediaValidation';
 import { exportHistoryToCsv } from '../utils/exportImportHelper';
 import { calculateEngagementComparison } from '../utils/engagementApi';
-
-/**
- * 過去の様々な形式（ISO文字列、タイムスタンプ数値、日付文字列など）の履歴日時を
- * 統一された日本時間 (JST: UTC+9) 表記に変換
- */
-function formatHistoryTimestampJst(raw: string | number | undefined): string {
-  if (!raw) return '';
-  const str = String(raw).trim();
-
-  // すでに "JST" または "JST-9" が含まれている場合はそのまま返す
-  if (str.endsWith('JST') || str.endsWith('JST-9')) return str;
-
-  // 数値タイムスタンプ（ミリ秒）の場合
-  const num = Number(str);
-  if (!isNaN(num) && num > 100000000000) {
-    return formatToJstString(num, true);
-  }
-
-  // 日付オブジェクトとしてパース可能か試行
-  const parsedDate = new Date(str);
-  if (!isNaN(parsedDate.getTime())) {
-    return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }).format(parsedDate) + ' JST';
-  }
-
-  // 既にフォーマットされた文字列の場合は JST を付与
-  return `${str} JST`;
-}
 
 interface HistoryModalProps {
   isOpen: boolean;

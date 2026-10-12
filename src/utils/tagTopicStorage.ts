@@ -3,11 +3,9 @@
  * （リロード・デプロイ時も保存されたカスタムタグ・トピックを完全維持）
  */
 
-import { getSavedThreadsTopics } from './topicStorage';
+import { getSavedThreadsTopics, THREADS_TOPICS_STORAGE_KEY as THREADS_TOPICS_KEY } from './topicStorage';
 import { getSavedCustomTags, getSavedCategories, CUSTOM_TAGS_STORAGE_KEY, CATEGORIES_STORAGE_KEY } from './hashtagSuggester';
 import { getAuthHeaders } from './modeSecurity';
-
-const THREADS_TOPICS_KEY = 'crosspost_threads_saved_topics_v1';
 
 /**
  * 現在のハッシュタグ・トピック情報をサーバーファイル（data/user_tags_topics.json）へ永続保存

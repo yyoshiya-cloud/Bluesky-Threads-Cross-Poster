@@ -22,6 +22,9 @@ import {
   parseJstDatetimeLocal,
   updateScheduledPost,
   deleteScheduledPost,
+  getJstDateKey,
+  getJstTimeString,
+  getJstNowInfo,
 } from '../utils/scheduledStorage';
 import {
   getPlatformCategory,
@@ -39,63 +42,6 @@ interface ScheduledWeekViewProps {
   onCloseModal: () => void;
   onSwitchToMonthView?: () => void;
   isDemoMode?: boolean;
-}
-
-/**
- * タイムスタンプをJSTの年月日キー (YYYY-MM-DD) に変換
- */
-function getJstDateKey(timestamp: number): string {
-  const formatter = new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const parts = formatter.formatToParts(new Date(timestamp));
-  let y = '', m = '', d = '';
-  for (const p of parts) {
-    if (p.type === 'year') y = p.value;
-    if (p.type === 'month') m = p.value;
-    if (p.type === 'day') d = p.value;
-  }
-  return `${y}-${m}-${d}`;
-}
-
-/**
- * タイムスタンプをJSTの時分文字列 (HH:mm) に変換
- */
-function getJstTimeString(timestamp: number): string {
-  const formatter = new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-  return formatter.format(new Date(timestamp));
-}
-
-/**
- * JSTでの現在の年月日と曜日 (0:日..6:土)
- */
-function getJstNowInfo(): { year: number; month: number; day: number; dayOfWeek: number; todayKey: string } {
-  const formatter = new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-  });
-  const parts = formatter.formatToParts(new Date());
-  let year = 2026, month = 1, day = 1;
-  for (const p of parts) {
-    if (p.type === 'year') year = parseInt(p.value, 10);
-    if (p.type === 'month') month = parseInt(p.value, 10);
-    if (p.type === 'day') day = parseInt(p.value, 10);
-  }
-  const jstNoon = new Date(Date.UTC(year, month - 1, day, 3, 0, 0));
-  const dayOfWeek = jstNoon.getUTCDay();
-  const mStr = month < 10 ? `0${month}` : `${month}`;
-  const dStr = day < 10 ? `0${day}` : `${day}`;
-  return { year, month, day, dayOfWeek, todayKey: `${year}-${mStr}-${dStr}` };
 }
 
 interface WeekDayInfo {

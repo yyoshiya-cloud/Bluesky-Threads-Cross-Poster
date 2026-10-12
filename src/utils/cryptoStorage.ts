@@ -63,7 +63,7 @@ async function getCryptoKey(): Promise<CryptoKey | null> {
 }
 
 // ArrayBuffer -> Base64
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
+export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
   for (let i = 0; i < bytes.byteLength; i++) {
@@ -73,7 +73,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 // Base64 -> Uint8Array
-function base64ToUint8Array(base64: string): Uint8Array {
+export function base64ToUint8Array(base64: string): Uint8Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {

@@ -1,5 +1,6 @@
 import { PostHistoryItem, ScheduledPostItem, SnippetItem } from '../types';
 import { formatToJstString, formatHistoryTimestampJst } from './scheduledStorage';
+import { downloadTextFile } from './commErrorLogger';
 import { loadSnippetsFromStorage, saveSnippetsToStorage } from './snippetStorage';
 import { APP_VERSION, APP_NAME } from '../config/appInfo';
 import {
@@ -30,18 +31,10 @@ function escapeCsvCell(val: any): string {
 }
 
 /**
- * 文字列をUTF-8 BOM付きBlobとしてブラウザダウンロード実行
+ * 文字列をUTF-8 BOM付きBlobとしてブラウザダウンロード実行（commErrorLoggerと共通化）
  */
 export function downloadFile(content: string, filename: string, mimeType = 'text/csv;charset=utf-8;') {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  downloadTextFile(content, filename, mimeType);
 }
 
 /**

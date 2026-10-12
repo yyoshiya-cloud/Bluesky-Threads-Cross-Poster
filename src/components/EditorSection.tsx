@@ -11,6 +11,7 @@ import { SettingsModal } from './SettingsModal';
 import { ServerVaultViewerModal } from './ServerVaultViewerModal';
 import { QuickPresetSettingsModal } from './QuickPresetSettingsModal';
 import { SnippetModal } from './SnippetModal';
+import { SampleTextsModal } from './SampleTextsModal';
 import { OgpPreviewSection } from './OgpPreviewSection';
 import { AiAssistModal, AiAssistTab } from './AiAssistModal';
 import { ReplySettingsSection } from './ReplySettingsSection';
@@ -213,29 +214,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
   onOpenAdminModal,
 }) => {
   const [showSamples, setShowSamples] = useState(false);
-  const samplesDropdownRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // 例文ドロップダウンの外側クリック / Escキー検知
-  useEffect(() => {
-    if (!showSamples) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (samplesDropdownRef.current && !samplesDropdownRef.current.contains(e.target as Node)) {
-        setShowSamples(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowSamples(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [showSamples]);
 
   // エディタタブ状態: 'common' (共通ベース) | 'bluesky' (Bluesky個別) | 'threads' (Threads個別)
   const [activeEditorTab, setActiveEditorTab] = useState<'common' | 'bluesky' | 'threads'>('common');
@@ -2190,85 +2169,6 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
               </span>
             </div>
 
-            {/* 添付・設定ステータスサマリーバー（どのタブを開いていても全体状況が一目でわかる） */}
-            <div className="flex items-center gap-1.5 flex-wrap px-2.5 py-1.5 bg-[#131d31]/80 rounded-xl border border-slate-700/60 text-xs shadow-2xs">
-              <span className="text-[10px] font-bold text-slate-400 select-none mr-0.5">添付バッジ:</span>
-
-              {/* メディア状況 */}
-              <button
-                type="button"
-                onClick={() => setBottomDockTab('media')}
-                className={`px-2 py-0.5 rounded-md border text-xs flex items-center gap-1 transition cursor-pointer ${
-                  images.length > 0
-                    ? 'bg-sky-950/70 border-sky-700/70 text-sky-200 hover:bg-sky-900/60'
-                    : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-                title="メディアパネルを開く"
-              >
-                <ImageIcon className="w-3 h-3 text-sky-400" />
-                <span>{images.length > 0 ? `${images.length}枚` : 'メディア0'}</span>
-                {images.length > 0 && (
-                  <span
-                    className={`text-[9px] px-1 rounded font-bold ${
-                      altFilledCount === images.length
-                        ? 'bg-emerald-900/80 text-emerald-300'
-                        : 'bg-amber-900/80 text-amber-300'
-                    }`}
-                  >
-                    {altFilledCount === images.length ? 'ALT完了' : `ALT ${altFilledCount}/${images.length}`}
-                  </span>
-                )}
-              </button>
-
-              {/* タグ & トピック状況 */}
-              <button
-                type="button"
-                onClick={() => setBottomDockTab('tags')}
-                className={`px-2 py-0.5 rounded-md border text-xs flex items-center gap-1 transition cursor-pointer ${
-                  hashtagCount > 0 || threadsTopic
-                    ? 'bg-purple-950/70 border-purple-700/70 text-purple-200 hover:bg-purple-900/60'
-                    : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-                title="タグ・トピックパネルを開く"
-              >
-                <Tag className="w-3 h-3 text-purple-400" />
-                <span>{hashtagCount > 0 ? `#${hashtagCount}件` : 'タグ0'}</span>
-                {threadsTopic && (
-                  <span className="text-[9px] px-1 rounded bg-purple-900/80 text-purple-300 font-mono truncate max-w-[70px]">
-                    #{threadsTopic}
-                  </span>
-                )}
-              </button>
-
-              {/* リンクOGP状況 */}
-              <button
-                type="button"
-                onClick={() => setBottomDockTab('ogp')}
-                className={`px-2 py-0.5 rounded-md border text-xs flex items-center gap-1 transition cursor-pointer ${
-                  urlCount > 0
-                    ? 'bg-emerald-950/70 border-emerald-700/70 text-emerald-200 hover:bg-emerald-900/60'
-                    : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-                title="リンクOGPパネルを開く"
-              >
-                <Link2 className="w-3 h-3 text-emerald-400" />
-                <span>{urlCount > 0 ? `リンク ${urlCount}件` : 'リンク0'}</span>
-              </button>
-
-              {/* リプライ設定状況 */}
-              {isReplyActive && (
-                <button
-                  type="button"
-                  onClick={() => setBottomDockTab('reply')}
-                  className="px-2 py-0.5 rounded-md border text-xs flex items-center gap-1 bg-indigo-950/70 border-indigo-700/70 text-indigo-200 hover:bg-indigo-900/60 transition cursor-pointer"
-                  title="リプライ設定パネルを開く"
-                >
-                  <MessageSquare className="w-3 h-3 text-indigo-400" />
-                  <span>返信設定中</span>
-                </button>
-              )}
-            </div>
-
             {/* ドックコンテンツエリア */}
             <div className="pt-1">
               {bottomDockTab === 'media' && (
@@ -2755,59 +2655,6 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                   </div>
                 </div>
 
-                {/* 🎯 予約投稿区分（同時投稿 / Blueskyのみ / Threadsのみ） */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span className="font-semibold text-slate-300">🎯 投稿する区分:</span>
-                    <span className="text-[9px] text-slate-500">
-                      {PLATFORM_CATEGORY_CONFIG[currentPlatformCategory].description}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPlatformCategory('both')}
-                      className={`px-2 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                        currentPlatformCategory === 'both'
-                          ? 'btn-accent text-white shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                      }`}
-                      title="BlueskyとThreadsの両方に予約投稿します"
-                    >
-                      <span>🚀</span>
-                      <span>同時投稿</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPlatformCategory('bluesky')}
-                      className={`px-2 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                        currentPlatformCategory === 'bluesky'
-                          ? 'bg-[#0085ff] text-white shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                      }`}
-                      title="Blueskyのみに予約投稿します"
-                    >
-                      <span>🦋</span>
-                      <span>Bluesky</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPlatformCategory('threads')}
-                      className={`px-2 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                        currentPlatformCategory === 'threads'
-                          ? 'bg-purple-700 text-white shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                      }`}
-                      title="Threadsのみに予約投稿します"
-                    >
-                      <span>🌀</span>
-                      <span>Threads</span>
-                    </button>
-                  </div>
-                </div>
-
                 {/* 日時ピッカー & プレビュー */}
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5">
@@ -2989,84 +2836,13 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
         onPresetsUpdated={(updated) => setCustomPresets(updated)}
       />
 
-      {/* 例文・サンプル文章挿入モーダル（固定オーバーレイ） */}
-      {showSamples && (
-        <div
-          id="samples-modal-backdrop"
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowSamples(false);
-            }
-          }}
-        >
-          <div
-            ref={samplesDropdownRef}
-            className="bg-[#0f172a] border border-slate-700/90 w-full max-w-xl rounded-2xl shadow-2xl shadow-black/90 p-4 sm:p-5 z-50 space-y-3.5 max-h-[85vh] overflow-y-auto animate-in zoom-in-95 duration-150"
-          >
-            <div className="flex items-center justify-between text-sm font-bold text-slate-100 pb-2.5 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center shadow-xs">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                </div>
-                <span>サンプル文章（例文）を挿入（全{SAMPLE_TEXTS.length}件）</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowSamples(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
-                title="閉じる (Esc)"
-                aria-label="閉じる"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-400 leading-relaxed">
-              選択したサンプル文章がエディタ本文へ即座に読み込まれます（長文スレッド分割や任意区切り、トーンのテストに最適です）。
-            </p>
-
-            <div className="space-y-2 pt-0.5">
-              {SAMPLE_TEXTS.map((s, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    handleActiveTextChange(s.text);
-                    setShowSamples(false);
-                    if (onNotify) {
-                      onNotify({
-                        type: 'success',
-                        title: '例文を読み込みました',
-                        message: `「${s.label}」を本文に挿入しました。`,
-                      });
-                    }
-                  }}
-                  className="w-full text-left p-3 rounded-xl border border-slate-800 hover:border-amber-500/60 bg-slate-900/60 hover:bg-slate-800/90 transition cursor-pointer flex flex-col gap-1.5 group shadow-xs"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-xs font-bold text-slate-100 group-hover:text-amber-300 transition-colors whitespace-normal break-words leading-snug">
-                      {s.label}
-                    </span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300">
-                        {s.charCount}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2 text-[11px] text-slate-400 group-hover:text-slate-300 whitespace-normal break-words leading-relaxed">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800/60 shrink-0 font-medium">
-                      {s.tag}
-                    </span>
-                    <span className="leading-snug">{s.summary}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 例文・サンプル文章挿入モーダル（デスクトップ・モバイル共通コンポーネント） */}
+      <SampleTextsModal
+        isOpen={showSamples}
+        onClose={() => setShowSamples(false)}
+        onSelectSample={(sampleText) => handleActiveTextChange(sampleText)}
+        onNotify={onNotify}
+      />
 
       {/* 定型文・スニペット管理モーダル */}
       <SnippetModal

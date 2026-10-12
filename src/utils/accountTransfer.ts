@@ -15,32 +15,17 @@
 
 import { SavedAccountVault, ApiCredentials, SavedBlueskyAccount, SavedThreadsAccount } from '../types';
 import { getSavedAccountVault, saveCredentialsToVault, syncVaultToServer, restoreFromVaultAsync } from './accountVault';
-import { isEncryptedString, decryptSecret } from './cryptoStorage';
+import {
+  isEncryptedString,
+  decryptSecret,
+  arrayBufferToBase64 as bufferToBase64,
+  base64ToUint8Array as base64ToBuffer,
+} from './cryptoStorage';
 
 // ポータブル暗号化の共通マスターソルト & シード
 const PORTABLE_MASTER_SALT = 'crosspost_cross_device_transfer_master_salt_v1';
 const PORTABLE_MASTER_PASSPHRASE = 'crosspost_standard_portable_aes256_key_secure_transfer';
 const PORTABLE_ENCRYPTED_PREFIX = 'enc:aes-256-gcm:portable:v1:';
-
-// ArrayBuffer -> Base64
-function bufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-// Base64 -> Uint8Array
-function base64ToBuffer(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
 
 /**
  * 任意のパスフレーズ（または標準ポータブルシード）から 256-bit AES-GCM CryptoKey を派生

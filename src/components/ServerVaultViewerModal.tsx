@@ -956,7 +956,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
         transition: 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
         willChange: 'transform',
       }}
-      className={`absolute inset-x-0 top-0 z-30 bg-[#0B0F19] border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden text-slate-200 ${
+      className={`absolute inset-0 z-30 bg-[#0B0F19] border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-200 ${
         isOpen ? 'pointer-events-auto' : 'pointer-events-none'
       }`}
     >

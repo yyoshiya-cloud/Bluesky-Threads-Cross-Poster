@@ -5,6 +5,7 @@
  */
 
 import { getBrowserDetails, getBrowserSummaryString } from './browserDetector';
+import { getJstDateKey as getJstDateKeyFromTimestamp } from './scheduledStorage';
 
 export type CommLogLevel = 'error' | 'success' | 'info' | 'warning';
 
@@ -503,35 +504,16 @@ export function downloadTextFile(
 export function getJstDateKey(timestamp: number | Date = Date.now()): string {
   const d = typeof timestamp === 'number' ? new Date(timestamp) : timestamp;
   if (isNaN(d.getTime())) return 'unknown-date';
-  const formatter = new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const parts = formatter.formatToParts(d);
-  const y = parts.find((p) => p.type === 'year')?.value || '2026';
-  const m = parts.find((p) => p.type === 'month')?.value || '01';
-  const day = parts.find((p) => p.type === 'day')?.value || '01';
-  return `${y}-${m}-${day}`;
+  return getJstDateKeyFromTimestamp(d.getTime());
 }
 
 /**
  * タイムスタンプ(ms)から JST基準の人間向け日付表示 ("2026年09月17日") を取得
  */
 export function getJstDateLabel(timestamp: number | Date = Date.now()): string {
-  const d = typeof timestamp === 'number' ? new Date(timestamp) : timestamp;
-  if (isNaN(d.getTime())) return '日時不明';
-  const formatter = new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const parts = formatter.formatToParts(d);
-  const y = parts.find((p) => p.type === 'year')?.value || '2026';
-  const m = parts.find((p) => p.type === 'month')?.value || '01';
-  const day = parts.find((p) => p.type === 'day')?.value || '01';
+  const key = getJstDateKey(timestamp);
+  if (key === 'unknown-date') return '日時不明';
+  const [y, m, day] = key.split('-');
   return `${y}年${m}月${day}日`;
 }
 

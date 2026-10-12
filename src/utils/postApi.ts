@@ -1,5 +1,6 @@
 import { ApiCredentials, AttachedImage, ReplyTargetInfo } from '../types';
 import { recordCommError, recordCommSuccess, recordCommInfo } from './commErrorLogger';
+import { getPostMediaCounts } from './mediaValidation';
 
 export interface PostResult {
   success: boolean;
@@ -649,24 +650,8 @@ export function formatMediaSummary(images?: AttachedImage[]): string {
   if (!images || images.length === 0) {
     return '添付メディア: なし (動画: 0件, 画像: 0件)';
   }
-  let videoCount = 0;
-  let imageCount = 0;
-  for (const item of images) {
-    const ext = (item.name || '').split('.').pop()?.toLowerCase() || '';
-    const isVideo =
-      item.mediaType === 'video' ||
-      Boolean(item.mimeType?.startsWith('video/')) ||
-      ['mp4', 'mov', 'webm', 'm4v'].includes(ext) ||
-      (typeof item.dataUrl === 'string' && item.dataUrl.startsWith('data:video/'));
-    if (isVideo) {
-      videoCount++;
-    } else {
-      imageCount++;
-    }
-  }
-
-  const total = images.length;
-  return `添付メディア: ${total}件 (動画: ${videoCount}件, 画像: ${imageCount}件)`;
+  const { videoCount, imageCount, totalCount } = getPostMediaCounts({ attachedImages: images });
+  return `添付メディア: ${totalCount}件 (動画: ${videoCount}件, 画像: ${imageCount}件)`;
 }
 
 /**

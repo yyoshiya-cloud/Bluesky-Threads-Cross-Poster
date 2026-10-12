@@ -15,7 +15,8 @@ export const DEFAULT_THREADS_TOPICS = [
   'ライフハック',
 ];
 
-const STORAGE_KEY = 'crosspost_threads_saved_topics_v1';
+export const THREADS_TOPICS_STORAGE_KEY = 'crosspost_threads_saved_topics_v1';
+const STORAGE_KEY = THREADS_TOPICS_STORAGE_KEY;
 
 /**
  * 保存されたトピック候補を取得（初期値がない場合はデフォルトを設定）
