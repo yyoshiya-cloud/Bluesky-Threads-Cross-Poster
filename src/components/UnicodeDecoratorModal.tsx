@@ -1176,7 +1176,7 @@ export const UnicodeDecoratorModal: React.FC<UnicodeDecoratorModalProps> = ({
                         title="新しい装飾をクイックバーに登録"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>{isAddingNewQuick ? '閉じる' : '新規追加'}</span>
+                        <span>{isAddingNewQuick ? 'キャンセル' : '新規追加'}</span>
                       </button>
 
                       <button
@@ -1470,14 +1470,6 @@ export const UnicodeDecoratorModal: React.FC<UnicodeDecoratorModalProps> = ({
           <div className="text-[11px] text-slate-500 flex items-center gap-1">
             <span>💡 日本語文章の一部を英字太字や囲み枠で装飾すると視認性が大幅にアップします</span>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer"
-          >
-            閉じる
-          </button>
         </div>
 
       </div>

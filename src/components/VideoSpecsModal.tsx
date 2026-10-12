@@ -238,17 +238,6 @@ export const VideoSpecsModal: React.FC<VideoSpecsModalProps> = ({
             </ul>
           </div>
         </div>
-
-        {/* モーダルフッター */}
-        <div className="px-5 py-3 border-t border-slate-800 bg-slate-950/60 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer"
-          >
-            閉じる
-          </button>
-        </div>
       </div>
     </div>
   );

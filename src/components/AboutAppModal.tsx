@@ -203,7 +203,7 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
           </div>
         </div>
 
-        {/* フッターエリア (制作者リンク & 閉じるボタン) */}
+        {/* フッターエリア (制作者リンク) */}
         <div className="px-4 sm:px-5 py-3 border-t border-slate-800/80 bg-slate-950/70 flex flex-wrap items-center justify-between gap-2.5">
           {/* 制作者・公式アカウントリンク */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -232,14 +232,6 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
               <ExternalLink className="w-3 h-3 text-purple-400/70 group-hover:text-purple-300" />
             </a>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
-          >
-            閉じる
-          </button>
         </div>
       </div>
     </div>

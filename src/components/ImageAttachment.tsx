@@ -1505,8 +1505,8 @@ export const ImageAttachment: React.FC<ImageAttachmentProps> = ({
                 />
               ) : null}
             </div>
-            <div className="px-4 py-2.5 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
-              {previewingVideoItem ? (
+            {previewingVideoItem && (
+              <div className="px-4 py-2.5 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
                 <button
                   id="delete-previewing-video-btn"
                   type="button"
@@ -1519,20 +1519,8 @@ export const ImageAttachment: React.FC<ImageAttachmentProps> = ({
                   <Trash2 className="w-3.5 h-3.5 text-rose-400" />
                   <span>この動画を削除</span>
                 </button>
-              ) : (
-                <div />
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setPreviewingVideoUrl(null);
-                  setPreviewingVideoItem(null);
-                }}
-                className="px-3.5 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition cursor-pointer"
-              >
-                閉じる
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1872,17 +1860,6 @@ export const ImageAttachment: React.FC<ImageAttachmentProps> = ({
                   <p className="text-slate-400">• 画像との混在可</p>
                 </div>
               </div>
-            </div>
-
-            <div className="flex justify-end pt-1">
-              <button
-                id="dismiss-attachment-error-button"
-                type="button"
-                onClick={() => setAttachmentErrorModal(null)}
-                className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition cursor-pointer"
-              >
-                確認して閉じる
-              </button>
             </div>
           </div>
         </div>

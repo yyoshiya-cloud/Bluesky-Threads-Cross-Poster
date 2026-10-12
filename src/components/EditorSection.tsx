@@ -1560,7 +1560,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                       ))}
                     </div>
 
-                    {/* 折りたたみ閉じるボタン */}
+                    {/* 折りたたみボタン */}
                     <button
                       type="button"
                       onClick={handleToggleDecorMenu}
@@ -1568,7 +1568,6 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
                       title="装飾メニューを折りたたむ"
                     >
                       <ChevronUp className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">閉じる</span>
                     </button>
                   </div>
                 </div>

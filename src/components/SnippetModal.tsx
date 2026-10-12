@@ -460,12 +460,6 @@ export const SnippetModal: React.FC<SnippetModalProps> = ({
                 <RotateCcw className="w-3 h-3" />
                 初期プリセットに戻す
               </button>
-              <button
-                onClick={onClose}
-                className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
-              >
-                閉じる
-              </button>
             </div>
           </>
         )}

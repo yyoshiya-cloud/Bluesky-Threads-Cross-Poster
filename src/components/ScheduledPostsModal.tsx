@@ -876,14 +876,6 @@ export const ScheduledPostsModal: React.FC<ScheduledPostsModalProps> = ({
           <span className="text-xs text-slate-500">
             ※ アプリのタブが開いている間にバックグラウンドで指定の日本時間に自動投稿されます。
           </span>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
-          >
-            閉じる
-          </button>
         </div>
       </div>
     </div>

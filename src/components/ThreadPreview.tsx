@@ -26,6 +26,7 @@ import {
   ArrowDownCircle,
   ChevronDown,
   ChevronUp,
+  X,
 } from 'lucide-react';
 
 interface ThreadPreviewProps {
@@ -1610,9 +1611,11 @@ export const ThreadPreview: React.FC<ThreadPreviewProps> = ({
             <button
               type="button"
               onClick={() => setShowDiffGuide(false)}
-              className="text-slate-500 hover:text-white text-xs cursor-pointer"
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              title="閉じる"
+              aria-label="閉じる"
             >
-              ✕ 閉じる
+              <X className="w-4 h-4" />
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px] pt-1">

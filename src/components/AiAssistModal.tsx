@@ -873,14 +873,6 @@ export const AiAssistModal: React.FC<AiAssistModalProps> = ({
         {/* モーダルフッター */}
         <div className="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400">
           <span>Powered by Gemini 3.8 Flash API</span>
-          <button
-            id="close-ai-modal-bottom-button"
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition cursor-pointer"
-          >
-            閉じる
-          </button>
         </div>
       </div>
     </div>

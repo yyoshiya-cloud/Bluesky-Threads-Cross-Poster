@@ -116,13 +116,6 @@ export const SampleTextsModal: React.FC<SampleTextsModalProps> = ({
           <span className="text-[11px] text-slate-400">
             💡 読み込んだ後で自由に変更・編集していただけます
           </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer"
-          >
-            閉じる
-          </button>
         </div>
       </div>
     </div>

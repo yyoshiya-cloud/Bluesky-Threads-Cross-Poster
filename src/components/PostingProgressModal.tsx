@@ -6,6 +6,7 @@ import {
   Share2,
   Sparkles,
   XCircle,
+  X,
   AlertTriangle,
   ExternalLink,
   Settings,
@@ -404,6 +405,13 @@ export const PostingProgressModal: React.FC<PostingProgressModalProps> = ({
         detail: '以降のAPIリクエストおよびメディアアップロードを停止しました',
       },
     ]);
+  };
+
+  const handleCloseModal = () => {
+    if (isPosting) {
+      handleCancelPosting();
+    }
+    onClose();
   };
 
   const startPosting = async () => {
@@ -914,46 +922,59 @@ export const PostingProgressModal: React.FC<PostingProgressModalProps> = ({
         id="posting-progress-modal"
         className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-5 my-auto max-h-[92vh] overflow-y-auto"
       >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-sky-950 flex items-center justify-center text-[#0085ff] border border-[#0085ff]/30 shrink-0">
-            {isCancelled ? (
-              <Ban className="w-5 h-5 text-rose-400" />
-            ) : isFinished && !hasError ? (
-              <Sparkles className="w-5 h-5 text-amber-400" />
-            ) : hasError ? (
-              <XCircle className="w-5 h-5 text-rose-400" />
-            ) : (
-              <Share2 className="w-5 h-5 animate-pulse" />
-            )}
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-slate-100">
-              {isCancelled
-                ? '⛔ 投稿処理をユーザー操作により中止しました'
-                : isFinished
-                ? hasError
-                  ? '⚠️ 投稿処理でエラーが発生しました'
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-sky-950 flex items-center justify-center text-[#0085ff] border border-[#0085ff]/30 shrink-0">
+              {isCancelled ? (
+                <Ban className="w-5 h-5 text-rose-400" />
+              ) : isFinished && !hasError ? (
+                <Sparkles className="w-5 h-5 text-amber-400" />
+              ) : hasError ? (
+                <XCircle className="w-5 h-5 text-rose-400" />
+              ) : (
+                <Share2 className="w-5 h-5 animate-pulse" />
+              )}
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-100">
+                {isCancelled
+                  ? '⛔ 投稿処理をユーザー操作により中止しました'
+                  : isFinished
+                  ? hasError
+                    ? '⚠️ 投稿処理でエラーが発生しました'
+                    : hasVideo
+                      ? '🎉 Bluesky & Threads への動画投稿が完了しました！'
+                      : '🎉 Bluesky & Threads への投稿が完了しました！'
                   : hasVideo
-                    ? '🎉 Bluesky & Threads への動画投稿が完了しました！'
-                    : '🎉 Bluesky & Threads への投稿が完了しました！'
-                : hasVideo
-                  ? '📹 動画アップロード & SNS同時投稿中...'
-                  : '🚀 Bluesky & Threads に同時投稿中...'}
-            </h3>
-            <p className="text-xs text-slate-400">
-              {isCancelled
-                ? '送信処理およびAPI通信を即座に停止しました。再試行または内容を再編集できます。'
-                : isFinished
-                ? hasError
-                  ? '失敗した処理段階と詳細な原因を自動診断しました。下記をご確認ください。'
+                    ? '📹 動画アップロード & SNS同時投稿中...'
+                    : '🚀 Bluesky & Threads に同時投稿中...'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {isCancelled
+                  ? '送信処理およびAPI通信を即座に停止しました。再試行または内容を再編集できます。'
+                  : isFinished
+                  ? hasError
+                    ? '失敗した処理段階と詳細な原因を自動診断しました。下記をご確認ください。'
+                    : hasVideo
+                      ? 'スレッドおよび動画が各プラットフォームで正常に公開されました。'
+                      : 'スレッドと添付メディアが正常に送信されました。'
                   : hasVideo
-                    ? 'スレッドおよび動画が各プラットフォームで正常に公開されました。'
-                    : 'スレッドと添付メディアが正常に送信されました。'
-                : hasVideo
-                  ? '動画のストリーム送信および各SNSサーバーでの公式トランスコード処理を実行しています'
-                  : '各SNSのAPIサーバーと直接通信し、投稿を実行しています'}
-            </p>
+                    ? '動画のストリーム送信および各SNSサーバーでの公式トランスコード処理を実行しています'
+                    : '各SNSのAPIサーバーと直接通信し、投稿を実行しています'}
+              </p>
+            </div>
           </div>
+
+          <button
+            id="close-posting-progress-modal-button"
+            type="button"
+            onClick={handleCloseModal}
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition cursor-pointer flex items-center justify-center shrink-0"
+            title="閉じる (Esc)"
+            aria-label="閉じる"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* 投稿パイプライン段階ステッパー (Pipeline Stage Stepper) */}
@@ -1375,13 +1396,6 @@ export const PostingProgressModal: React.FC<PostingProgressModalProps> = ({
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>再試行</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition cursor-pointer"
-                  >
-                    閉じる
                   </button>
                 </div>
               </>

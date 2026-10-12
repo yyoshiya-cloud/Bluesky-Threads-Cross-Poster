@@ -689,13 +689,6 @@ export const CommErrorModal: React.FC<CommErrorModalProps> = ({
               <Download className="w-3.5 h-3.5" />
               <span>1日分保存 (.log)</span>
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer font-medium"
-            >
-              閉じる
-            </button>
           </div>
         </div>
         {/* 削除確認ダイアログ */}
