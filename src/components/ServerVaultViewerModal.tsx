@@ -887,39 +887,6 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
             </div>
           </div>
         </div>
-
-        {/* フッターエリア */}
-        <div className="px-5 py-3 border-t border-slate-800/80 bg-slate-950/80 flex items-center justify-between gap-3 shrink-0">
-          <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">LIVEモードではすべての投稿が上記のアカウントへ直接送信されます</span>
-            <span className="sm:hidden">LIVEモード運用中</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {onOpenSettings && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenSettings();
-                }}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span>アカウント設定を開く</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-1.5 rounded-lg bg-[#0085ff] hover:bg-blue-600 text-white text-xs font-bold transition cursor-pointer shadow-md shadow-blue-600/20"
-            >
-              閉じる
-            </button>
-          </div>
-        </div>
     </>
   );
 
