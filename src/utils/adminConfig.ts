@@ -1,8 +1,13 @@
-import { APP_VERSION as DEFAULT_APP_VERSION } from '../config/appInfo';
+import {
+  APP_VERSION as DEFAULT_APP_VERSION,
+  APP_BUILD_DATE as DEFAULT_APP_BUILD_DATE,
+  APP_VERSION_INFO,
+} from '../config/appInfo';
 import { deleteFromVault } from './accountVault';
 import { getAuthHeaders, setAuthToken } from './modeSecurity';
 
 const CUSTOM_APP_VERSION_KEY = 'crosspost_app_version';
+const CUSTOM_APP_LAST_UPDATED_KEY = 'crosspost_app_last_updated';
 const MODE_SWITCH_CLICK_COUNT_KEY = 'crosspost_mode_switch_click_count';
 const DEFAULT_MODE_SWITCH_CLICK_COUNT = 3;
 
@@ -108,10 +113,11 @@ export async function verifyAdminPassword(input: string): Promise<boolean> {
   }
 }
 
-let currentRuntimeVersion: string | null = null;
+let currentRuntimeVersion: string | null = DEFAULT_APP_VERSION;
+let currentRuntimeLastUpdated: string | null = DEFAULT_APP_BUILD_DATE;
 
 /**
- * サーバーの package.json から最新バージョンを取得してメモリ/キャッシュを同期
+ * サーバーのアプリ情報（バージョン・最終更新日/デプロイ日）とメモリ/アプリ内データを同期
  */
 export async function syncVersionWithServer(): Promise<string> {
   try {
@@ -121,11 +127,27 @@ export async function syncVersionWithServer(): Promise<string> {
     const data = await res.json();
     if (data.success && data.version) {
       currentRuntimeVersion = data.version;
+      APP_VERSION_INFO.version = data.version;
+      if (data.lastUpdatedDate) {
+        currentRuntimeLastUpdated = data.lastUpdatedDate;
+        APP_VERSION_INFO.deployedDate = data.lastUpdatedDate;
+        APP_VERSION_INFO.releaseDate = data.lastUpdatedDate;
+      }
       try {
         localStorage.setItem(CUSTOM_APP_VERSION_KEY, data.version);
+        if (data.lastUpdatedDate) {
+          localStorage.setItem(CUSTOM_APP_LAST_UPDATED_KEY, data.lastUpdatedDate);
+        }
       } catch {}
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('crosspost_version_changed', { detail: { version: data.version } }));
+        window.dispatchEvent(
+          new CustomEvent('crosspost_version_changed', {
+            detail: {
+              version: data.version,
+              lastUpdatedDate: currentRuntimeLastUpdated || DEFAULT_APP_BUILD_DATE,
+            },
+          })
+        );
       }
       return data.version;
     }
@@ -136,7 +158,7 @@ export async function syncVersionWithServer(): Promise<string> {
 }
 
 /**
- * アプリの表示バージョンを取得（package.json から同期されたリアルタイムバージョン）
+ * アプリ内に保持された表示バージョンを取得
  */
 export function getAppVersion(): string {
   if (currentRuntimeVersion) {
@@ -148,11 +170,21 @@ export function getAppVersion(): string {
       return saved.trim();
     }
   } catch {}
-  return DEFAULT_APP_VERSION;
+  return APP_VERSION_INFO.version || DEFAULT_APP_VERSION;
 }
 
 /**
- * アプリの表示バージョンを変更・保存（package.jsonの書き換え：管理者トークン必須）
+ * アプリ内に保持された最終更新日（デプロイ日）を取得
+ */
+export function getAppLastUpdatedDate(): string {
+  if (currentRuntimeLastUpdated) {
+    return currentRuntimeLastUpdated;
+  }
+  return APP_VERSION_INFO.deployedDate || DEFAULT_APP_BUILD_DATE;
+}
+
+/**
+ * アプリの表示バージョンを変更・保存（package.jsonおよびアプリ内データの書き換え：管理者トークン必須）
  */
 export async function updatePackageJsonVersion(newVersion: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -168,11 +200,27 @@ export async function updatePackageJsonVersion(newVersion: string): Promise<{ su
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) {
       currentRuntimeVersion = cleanVersion;
+      APP_VERSION_INFO.version = cleanVersion;
+      if (data.lastUpdatedDate) {
+        currentRuntimeLastUpdated = data.lastUpdatedDate;
+        APP_VERSION_INFO.deployedDate = data.lastUpdatedDate;
+        APP_VERSION_INFO.releaseDate = data.lastUpdatedDate;
+      }
       try {
         localStorage.setItem(CUSTOM_APP_VERSION_KEY, cleanVersion);
+        if (data.lastUpdatedDate) {
+          localStorage.setItem(CUSTOM_APP_LAST_UPDATED_KEY, data.lastUpdatedDate);
+        }
       } catch {}
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('crosspost_version_changed', { detail: { version: cleanVersion } }));
+        window.dispatchEvent(
+          new CustomEvent('crosspost_version_changed', {
+            detail: {
+              version: cleanVersion,
+              lastUpdatedDate: currentRuntimeLastUpdated || DEFAULT_APP_BUILD_DATE,
+            },
+          })
+        );
       }
       return { success: true };
     }

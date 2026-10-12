@@ -165,10 +165,20 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (isSettingsOpen || isServerVaultOpen) {
+      setShowQuickLogout(false);
+    }
+  }, [isSettingsOpen, isServerVaultOpen]);
+
   const isBlueskyLoggedIn = Boolean(
     credentials.blueskyConnected || (credentials.blueskyIdentifier && credentials.blueskyAppPassword)
   );
   const isThreadsLoggedIn = Boolean(credentials.threadsConnected || credentials.threadsAccessToken);
+  const isPanelLocked = Boolean(isSettingsOpen || isServerVaultOpen);
+  const panelLockReason = isSettingsOpen
+    ? '設定画面を開いているため操作不可'
+    : 'サーバー登録情報画面を開いているため操作不可';
 
   return (
     <div className="flex flex-col w-full shrink-0">
@@ -202,12 +212,19 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      <header className="bg-[#0E1320]/95 backdrop-blur-md border-b border-slate-700/80 sticky top-0 z-30 px-3 sm:px-5 lg:px-6 h-13 flex items-center justify-between gap-3 shrink-0 shadow-sm">
+      <header className="bg-[#0E1320]/95 backdrop-blur-md border-b border-slate-700/80 sticky top-0 z-30 px-3 sm:px-4 lg:px-5 min-h-13 py-1.5 flex items-center justify-between gap-2 shrink-0 shadow-sm">
       {/* ロゴ & タイトル（左クリック3回でモード切替） */}
       <div
         id="app-logo-button"
-        onClick={handleTitleClick}
-        className="flex items-center gap-2.5 select-none cursor-pointer group py-1 px-1.5 -ml-1.5 rounded-xl hover:bg-slate-800/60 transition relative"
+        onClick={(e) => {
+          if (isPanelLocked) return;
+          handleTitleClick(e);
+        }}
+        className={`flex items-center gap-2 select-none py-1 px-1.5 -ml-1.5 rounded-xl transition relative shrink-0 ${
+          isPanelLocked
+            ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none'
+            : 'cursor-pointer group hover:bg-slate-800/60'
+        }`}
       >
         <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden shadow-md shadow-blue-950/40 border border-slate-600/70 flex items-center justify-center bg-slate-900 shrink-0 group-hover:scale-105 group-hover:border-accent transition duration-200">
           <img
@@ -218,23 +235,25 @@ export const Header: React.FC<HeaderProps> = ({
           />
         </div>
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xs sm:text-sm font-bold text-slate-100 tracking-tight group-hover:text-white transition">
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-xs sm:text-sm font-bold text-slate-100 tracking-tight group-hover:text-white transition whitespace-nowrap">
               CrossPost Web Studio
             </h1>
-            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider badge-accent">
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider badge-accent hidden 2xl:inline whitespace-nowrap">
               BLUESKY & THREADS
             </span>
 
             {isDemoMode ? (
               <button
                 type="button"
+                disabled={isPanelLocked}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (isPanelLocked) return;
                   triggerModeSwitch();
                 }}
-                title="クリックしてLIVE（本番）モードに切り替え"
-                className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/40 flex items-center gap-1 shadow-sm hover:bg-sky-500/30 hover:text-white transition cursor-pointer"
+                title={isPanelLocked ? panelLockReason : 'クリックしてLIVE（本番）モードに切り替え'}
+                className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/40 flex items-center gap-1 shadow-sm hover:bg-sky-500/30 hover:text-white transition cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
               >
                 <Sparkles className="w-2.5 h-2.5 text-sky-300" />
                 <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
@@ -243,61 +262,76 @@ export const Header: React.FC<HeaderProps> = ({
             ) : (
               <button
                 type="button"
+                disabled={isPanelLocked}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (isPanelLocked) return;
                   triggerModeSwitch();
                 }}
-                title="クリックして安全なDEMOモードに切り替え"
-                className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-sm hover:bg-emerald-500/30 hover:text-white transition cursor-pointer"
+                title={isPanelLocked ? panelLockReason : 'クリックして安全なDEMOモードに切り替え'}
+                className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-sm hover:bg-emerald-500/30 hover:text-white transition cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 LIVE MODE
               </button>
             )}
           </div>
-          <p className="text-[10px] text-slate-400 hidden md:block group-hover:text-slate-300 transition">
+          <p className="text-[10px] text-slate-400 hidden xl:block group-hover:text-slate-300 transition whitespace-nowrap">
             Bluesky & Threads 同時投稿・長文自動分割・画像添付マネージャー
           </p>
         </div>
       </div>
 
       {/* ナビゲーション & アクション */}
-      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-1.5">
         {/* 認証ステータスインジケータ */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <div
             id="header-account-status-pill"
-            onClick={() => setShowQuickLogout(!showQuickLogout)}
-            className="cursor-pointer bg-[#0A0F1D] hover:bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/80 flex items-center gap-2.5 transition text-xs select-none shadow-xs"
-            title="クリックしてアカウント接続状態を表示"
+            onClick={() => {
+              if (isAdminMode || isPanelLocked) return;
+              setShowQuickLogout(!showQuickLogout);
+            }}
+            className={`bg-[#0A0F1D] px-2.5 py-1.5 rounded-lg border border-slate-700/80 flex items-center gap-2 transition text-xs select-none shadow-xs ${
+              isAdminMode || isPanelLocked
+                ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none'
+                : 'cursor-pointer hover:bg-slate-800/80'
+            }`}
+            title={
+              isAdminMode
+                ? '管理者モード起動中のため操作不可'
+                : isPanelLocked
+                ? panelLockReason
+                : 'クリックしてアカウント接続状態を表示'
+            }
           >
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <span className="text-[11px]">🦋</span>
               {isBlueskyLoggedIn ? (
                 <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
               ) : (
                 <span className="w-2 h-2 rounded-full bg-slate-500" />
               )}
-              <span className="text-[10px] text-slate-300 font-medium hidden md:inline truncate max-w-[120px]">
+              <span className="text-[10px] text-slate-300 font-medium hidden md:inline truncate max-w-[105px]">
                 {isBlueskyLoggedIn ? (credentials.blueskyHandle || 'Bluesky連携中') : '未連携'}
               </span>
             </div>
             <div className="h-3 w-[1px] bg-slate-700" />
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <span className="text-[11px]">🌀</span>
               {isThreadsLoggedIn ? (
                 <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
               ) : (
                 <span className="w-2 h-2 rounded-full bg-slate-500" />
               )}
-              <span className="text-[10px] text-slate-300 font-medium hidden md:inline truncate max-w-[120px]">
+              <span className="text-[10px] text-slate-300 font-medium hidden md:inline truncate max-w-[105px]">
                 {isThreadsLoggedIn ? (credentials.threadsUsername || 'Threads連携中') : '未連携'}
               </span>
             </div>
           </div>
 
           {/* アカウント状態 & クイックログアウト ポップアップ */}
-          {showQuickLogout && (
+          {showQuickLogout && !isPanelLocked && (
             <div className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-3 z-40 space-y-2.5 animate-in fade-in zoom-in-95 duration-100">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs font-semibold text-slate-200">
                 <span>連携アカウント情報</span>
@@ -457,13 +491,21 @@ export const Header: React.FC<HeaderProps> = ({
             id="header-analytics-button"
             type="button"
             onClick={onOpenAnalytics}
-            disabled={isAdminMode}
-            className={`relative bg-gradient-to-r from-blue-600/10 to-purple-600/10 text-sky-300 p-2 sm:px-3 sm:py-1.5 rounded-lg border border-sky-500/30 transition flex items-center gap-1.5 text-xs font-semibold shadow-xs ${
-              isAdminMode ? 'opacity-40 cursor-not-allowed' : 'hover:from-blue-600/20 hover:to-purple-600/20 hover:text-sky-200 hover:border-sky-500/50 cursor-pointer'
+            disabled={isAdminMode || isPanelLocked}
+            className={`relative bg-gradient-to-r from-blue-600/10 to-purple-600/10 text-sky-300 px-2.5 py-1.5 rounded-lg border border-sky-500/30 transition flex items-center gap-1.5 text-xs font-semibold shadow-xs whitespace-nowrap shrink-0 ${
+              isAdminMode || isPanelLocked
+                ? 'opacity-40 grayscale cursor-not-allowed'
+                : 'hover:from-blue-600/20 hover:to-purple-600/20 hover:text-sky-200 hover:border-sky-500/50 cursor-pointer'
             }`}
-            title={isAdminMode ? '管理者モード起動中のため操作不可' : 'Bluesky & Threads のエンゲージメント分析・リアクション比較・データエクスポート'}
+            title={
+              isAdminMode
+                ? '管理者モード起動中のため操作不可'
+                : isPanelLocked
+                ? panelLockReason
+                : 'Bluesky & Threads のエンゲージメント分析・リアクション比較・データエクスポート'
+            }
           >
-            <BarChart3 className="w-4 h-4 text-sky-400" />
+            <BarChart3 className="w-4 h-4 text-sky-400 shrink-0" />
             <span className="hidden sm:inline">分析・データ</span>
           </button>
         )}
@@ -474,14 +516,22 @@ export const Header: React.FC<HeaderProps> = ({
             id="header-user-guide-button"
             type="button"
             onClick={onOpenUserGuide}
-            disabled={isAdminMode}
-            className={`relative bg-slate-900 text-slate-300 p-2 sm:px-3 sm:py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium ${
-              isAdminMode ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-800 hover:text-white cursor-pointer'
+            disabled={isAdminMode || isPanelLocked}
+            className={`relative bg-slate-900 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+              isAdminMode || isPanelLocked
+                ? 'opacity-40 grayscale cursor-not-allowed'
+                : 'hover:bg-slate-800 hover:text-white cursor-pointer'
             }`}
-            title={isAdminMode ? '管理者モード起動中のため操作不可' : 'アプリの使い方と機能一覧ガイドを表示'}
+            title={
+              isAdminMode
+                ? '管理者モード起動中のため操作不可'
+                : isPanelLocked
+                ? panelLockReason
+                : 'アプリの使い方と機能一覧ガイドを表示'
+            }
           >
-            <BookOpen className="w-4 h-4 text-accent-light" />
-            <span className="hidden md:inline">使い方</span>
+            <BookOpen className="w-4 h-4 text-accent-light shrink-0" />
+            <span className="hidden sm:inline">使い方</span>
           </button>
         )}
 
@@ -491,13 +541,21 @@ export const Header: React.FC<HeaderProps> = ({
             id="header-scheduled-posts-button"
             type="button"
             onClick={onOpenScheduledPosts}
-            disabled={isAdminMode}
-            className={`relative bg-slate-900 text-slate-300 p-2 sm:px-3 sm:py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium ${
-              isAdminMode ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-800 hover:text-white cursor-pointer'
+            disabled={isAdminMode || isPanelLocked}
+            className={`relative bg-slate-900 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+              isAdminMode || isPanelLocked
+                ? 'opacity-40 grayscale cursor-not-allowed'
+                : 'hover:bg-slate-800 hover:text-white cursor-pointer'
             }`}
-            title={isAdminMode ? '管理者モード起動中のため操作不可' : 'カレンダー形式で予約済みの投稿を表示・編集・管理'}
+            title={
+              isAdminMode
+                ? '管理者モード起動中のため操作不可'
+                : isPanelLocked
+                ? panelLockReason
+                : 'カレンダー形式で予約済みの投稿を表示・編集・管理'
+            }
           >
-            <Clock className="w-4 h-4 text-accent-light" />
+            <Clock className="w-4 h-4 text-accent-light shrink-0" />
             <span className="hidden sm:inline">予約カレンダー</span>
             {scheduledPostsCount > 0 && (
               <span className="badge-accent text-[10px] font-bold px-1.5 py-0.2 rounded-full shadow-sm">
@@ -512,13 +570,21 @@ export const Header: React.FC<HeaderProps> = ({
           id="header-history-button"
           type="button"
           onClick={onOpenHistory}
-          disabled={isAdminMode}
-          className={`relative bg-slate-900 text-slate-300 p-2 sm:px-3 sm:py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium ${
-            isAdminMode ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-800 hover:text-white cursor-pointer'
+          disabled={isAdminMode || isPanelLocked}
+          className={`relative bg-slate-900 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+            isAdminMode || isPanelLocked
+              ? 'opacity-40 grayscale cursor-not-allowed'
+              : 'hover:bg-slate-800 hover:text-white cursor-pointer'
           }`}
-          title={isAdminMode ? '管理者モード起動中のため操作不可' : '投稿履歴を表示'}
+          title={
+            isAdminMode
+              ? '管理者モード起動中のため操作不可'
+              : isPanelLocked
+              ? panelLockReason
+              : '投稿履歴を表示'
+          }
         >
-          <History className="w-4 h-4" />
+          <History className="w-4 h-4 shrink-0" />
           <span className="hidden sm:inline">履歴</span>
           {historyCount > 0 && (
             <span className="bg-accent-primary text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full shadow-sm">
@@ -527,24 +593,23 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </button>
 
-        {/* テーマカラー切り替え */}
-        <div className={isAdminMode ? 'opacity-40 pointer-events-none' : ''}>
-          <ThemeSelector
-            currentTheme={currentTheme}
-            onSelectTheme={onSelectTheme}
-            variant="header-dropdown"
-          />
-        </div>
+        {/* カラー切り替え */}
+        <ThemeSelector
+          currentTheme={currentTheme}
+          onSelectTheme={onSelectTheme}
+          variant="header-dropdown"
+          disabled={isAdminMode || isPanelLocked}
+        />
 
-        {/* 設定ボタン (開閉トグル対応・開いている時はアクティブ表示) */}
+        {/* 設定ボタン (開閉トグル対応・開いている時はアクティブ表示、サーバー登録情報オープン時はグレーアウト) */}
         <button
           id="header-settings-button"
           type="button"
           onClick={onToggleSettings || onOpenSettings}
-          disabled={isAdminMode}
-          className={`p-2 sm:px-3.5 sm:py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-bold shadow-sm ${
-            isAdminMode
-              ? 'opacity-40 cursor-not-allowed bg-accent-subtle text-accent-light border-accent'
+          disabled={isAdminMode || isServerVaultOpen}
+          className={`px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-bold shadow-sm whitespace-nowrap shrink-0 ${
+            isAdminMode || isServerVaultOpen
+              ? 'opacity-40 grayscale cursor-not-allowed bg-accent-subtle text-accent-light border-accent'
               : isSettingsOpen
               ? 'btn-accent text-white border-accent shadow-accent/30 cursor-pointer ring-2 ring-accent/40'
               : 'bg-accent-subtle text-accent-light border-accent hover:brightness-110 cursor-pointer'
@@ -552,12 +617,14 @@ export const Header: React.FC<HeaderProps> = ({
           title={
             isAdminMode
               ? '管理者モード起動中のため操作不可'
+              : isServerVaultOpen
+              ? 'サーバー登録情報画面を開いているため操作不可'
               : isSettingsOpen
               ? '設定メニューを閉じる'
               : 'API・アカウント認証設定 & テーマ変更'
           }
         >
-          <Settings className={`w-4 h-4 transition-transform duration-200 ${isSettingsOpen ? 'rotate-90' : ''}`} />
+          <Settings className={`w-4 h-4 shrink-0 transition-transform duration-200 ${isSettingsOpen ? 'rotate-90' : ''}`} />
           <span className="hidden sm:inline">{isSettingsOpen ? '設定を閉じる' : '設定'}</span>
         </button>
 
@@ -567,24 +634,51 @@ export const Header: React.FC<HeaderProps> = ({
             id="header-server-vault-button"
             type="button"
             onClick={onToggleServerVault || onOpenServerVault}
-            disabled={isAdminMode}
-            className={`relative p-2 sm:px-3 sm:py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-semibold shadow-xs ${
-              isAdminMode
-                ? 'opacity-40 cursor-not-allowed bg-emerald-950/40 text-emerald-300 border-emerald-500/40'
+            disabled={isAdminMode || isSettingsOpen}
+            className={`relative px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-semibold shadow-xs whitespace-nowrap shrink-0 ${
+              isAdminMode || isSettingsOpen
+                ? 'opacity-40 grayscale cursor-not-allowed bg-emerald-950/40 text-emerald-300 border-emerald-500/40'
                 : isServerVaultOpen
-                  ? 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-900/30 cursor-pointer'
+                  ? 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-900/30 cursor-pointer ring-2 ring-emerald-400/40'
                   : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 border-emerald-500/40 hover:border-emerald-500/60 cursor-pointer'
             }`}
             title={
               isAdminMode
                 ? '管理者モード起動中のため操作不可'
+                : isSettingsOpen
+                ? '設定画面を開いているため操作不可'
                 : isServerVaultOpen
                 ? 'サーバー登録情報一覧を閉じる'
                 : 'LIVEモードでサーバー（/data/account_vault.json）に登録されているBluesky・Threadsのアカウント情報を一覧で確認'
             }
           >
-            <Database className="w-4 h-4 text-emerald-400" />
+            <Database className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="hidden sm:inline">{isServerVaultOpen ? '登録情報を閉じる' : 'サーバー登録情報'}</span>
+          </button>
+        )}
+
+        {/* アプリ情報ボタン */}
+        {onOpenAboutApp && (
+          <button
+            id="header-about-app-button"
+            type="button"
+            onClick={onOpenAboutApp}
+            disabled={isAdminMode || isPanelLocked}
+            className={`relative bg-slate-900 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+              isAdminMode || isPanelLocked
+                ? 'opacity-40 grayscale cursor-not-allowed'
+                : 'hover:bg-slate-800 hover:text-sky-300 hover:border-sky-500/50 cursor-pointer'
+            }`}
+            title={
+              isAdminMode
+                ? '管理者モード起動中のため操作不可'
+                : isPanelLocked
+                ? panelLockReason
+                : `アプリ情報 (Version ${displayVersion})`
+            }
+          >
+            <Info className="w-4 h-4 text-sky-400 shrink-0" />
+            <span className="hidden sm:inline">アプリ情報</span>
           </button>
         )}
 
@@ -594,14 +688,20 @@ export const Header: React.FC<HeaderProps> = ({
             id="header-mobile-view-toggle-button"
             type="button"
             onClick={onToggleViewMode}
-            disabled={isAdminMode}
-            className={`bg-slate-900 text-slate-300 border border-slate-800 p-2 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center gap-1.5 text-xs font-medium shadow-sm ${
-              isAdminMode ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-800 hover:text-sky-300 hover:border-sky-500/50 cursor-pointer'
+            disabled={isAdminMode || isPanelLocked}
+            className={`bg-slate-900 text-slate-300 border border-slate-800 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1.5 text-xs font-medium shadow-sm whitespace-nowrap shrink-0 ${
+              isAdminMode || isPanelLocked
+                ? 'opacity-40 grayscale cursor-not-allowed'
+                : 'hover:bg-slate-800 hover:text-sky-300 hover:border-sky-500/50 cursor-pointer'
             }`}
-            title="スマートフォン向けモバイルUIに切り替えます（ユーザーエージェント判別対応）"
+            title={
+              isPanelLocked
+                ? panelLockReason
+                : 'スマートフォン向けモバイルUIに切り替えます（ユーザーエージェント判別対応）'
+            }
           >
-            <Smartphone className="w-4 h-4 text-sky-400" />
-            <span className="hidden xl:inline">スマホ表示</span>
+            <Smartphone className="w-4 h-4 text-sky-400 shrink-0" />
+            <span className="hidden sm:inline">スマホ表示</span>
           </button>
         )}
       </div>

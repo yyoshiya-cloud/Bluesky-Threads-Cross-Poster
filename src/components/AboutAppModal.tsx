@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, ExternalLink, Sparkles, Send, MessageSquareQuote, Image as ImageIcon, CalendarClock, Eye, BarChart2 } from 'lucide-react';
-import { APP_NAME, formatAppBuildDate } from '../config/appInfo';
-import { getAppVersion, syncVersionWithServer } from '../utils/adminConfig';
+import { APP_NAME, APP_VERSION_INFO, formatAppBuildDate } from '../config/appInfo';
+import { getAppVersion, getAppLastUpdatedDate, syncVersionWithServer } from '../utils/adminConfig';
 
 interface AboutAppModalProps {
   isOpen: boolean;
@@ -12,18 +12,28 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const [currentVersion, setCurrentVersion] = useState<string>(getAppVersion());
+  const [currentVersion, setCurrentVersion] = useState<string>(() => APP_VERSION_INFO.version || getAppVersion());
+  const [lastUpdatedDate, setLastUpdatedDate] = useState<string>(() => APP_VERSION_INFO.deployedDate || getAppLastUpdatedDate());
 
-  // 最新バージョン同期 ＆ Escapeキーで閉じる
+  // 最新バージョン・デプロイ日同期 ＆ Escapeキーで閉じる
   useEffect(() => {
     if (!isOpen) return;
 
-    syncVersionWithServer().then((v) => setCurrentVersion(v));
+    setCurrentVersion(getAppVersion());
+    setLastUpdatedDate(getAppLastUpdatedDate());
+
+    syncVersionWithServer().then((v) => {
+      setCurrentVersion(v);
+      setLastUpdatedDate(getAppLastUpdatedDate());
+    });
 
     const handleVersionChanged = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail?.version) {
         setCurrentVersion(customEvent.detail.version);
+      }
+      if (customEvent.detail?.lastUpdatedDate) {
+        setLastUpdatedDate(customEvent.detail.lastUpdatedDate);
       }
     };
 
@@ -83,14 +93,14 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
                 </span>
                 <span
                   className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-700/60"
-                  title="Publish/デプロイまたはGitコミットにより自動更新されます"
+                  title="デプロイ（Publish）した日付がアプリ内データとして表示されます"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  最終更新日: {formatAppBuildDate()}
+                  最終更新日: {formatAppBuildDate(lastUpdatedDate)}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5 truncate sm:whitespace-normal">
-                Bluesky & Threads 同時・分割配信マルチプラットフォームスタジオ
+                {APP_VERSION_INFO.description}
               </p>
             </div>
           </div>

@@ -375,7 +375,11 @@ export const MobileAppLayout: React.FC<MobileAppLayoutProps> = ({
       )}
 
       {/* 2. モバイル用コンパクトヘッダー */}
-      <header className="sticky top-0 z-40 bg-[#0C101A]/95 backdrop-blur-md border-b border-slate-800 px-3 py-2 flex items-center justify-between gap-2 shadow-sm">
+      <header
+        className={`sticky top-0 z-40 bg-[#0C101A]/95 backdrop-blur-md border-b border-slate-800 px-3 py-2 flex items-center justify-between gap-2 shadow-sm transition-all duration-200 ${
+          viewModel.modals.settings || viewModel.modals.serverVault ? 'opacity-40 grayscale pointer-events-none select-none' : ''
+        }`}
+      >
         {/* 左: ロゴ・タイトル & モードバッジ */}
         <div className="flex items-center gap-2 select-none">
           <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700/80 overflow-hidden flex items-center justify-center shrink-0 shadow-xs">
@@ -449,7 +453,11 @@ export const MobileAppLayout: React.FC<MobileAppLayoutProps> = ({
       </header>
 
       {/* 3. モバイル メインセグメントナビゲーション */}
-      <nav className="bg-[#0B0F19]/95 backdrop-blur-md border-b border-slate-800/80 px-2 py-1.5 sticky top-[45px] z-30 flex items-center justify-between gap-1 text-xs">
+      <nav
+        className={`bg-[#0B0F19]/95 backdrop-blur-md border-b border-slate-800/80 px-2 py-1.5 sticky top-[45px] z-30 flex items-center justify-between gap-1 text-xs transition-all duration-200 ${
+          viewModel.modals.settings || viewModel.modals.serverVault ? 'opacity-40 grayscale pointer-events-none select-none' : ''
+        }`}
+      >
         <button
           type="button"
           onClick={() => setActiveTab('editor')}
@@ -514,7 +522,11 @@ export const MobileAppLayout: React.FC<MobileAppLayoutProps> = ({
       </nav>
 
       {/* 4. メインコンテンツ領域 */}
-      <main className="flex-1 p-3 max-w-lg w-full mx-auto space-y-3">
+      <main
+        className={`flex-1 p-3 max-w-lg w-full mx-auto space-y-3 transition-all duration-200 ${
+          viewModel.modals.settings || viewModel.modals.serverVault ? 'opacity-40 grayscale pointer-events-none select-none' : ''
+        }`}
+      >
         {/* ==================== TAB 1: エディタ ==================== */}
         {activeTab === 'editor' && (
           <div className="space-y-3 animate-in fade-in duration-150">
@@ -1362,7 +1374,11 @@ export const MobileAppLayout: React.FC<MobileAppLayoutProps> = ({
 
       {/* 5. モバイル固定ボトム投稿アクションバー (エディタ・プレビュー表示時のみ表示) */}
       {showBottomActionBar && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#0C101A]/95 backdrop-blur-md border-t border-slate-800/90 px-3 py-2.5 flex items-center justify-between gap-2.5 max-w-lg mx-auto shadow-2xl safe-area-bottom">
+        <div
+          className={`fixed bottom-0 left-0 right-0 z-40 bg-[#0C101A]/95 backdrop-blur-md border-t border-slate-800/90 px-3 py-2.5 flex items-center justify-between gap-2.5 max-w-lg mx-auto shadow-2xl safe-area-bottom transition-all duration-200 ${
+            viewModel.modals.settings || viewModel.modals.serverVault ? 'opacity-40 grayscale pointer-events-none select-none' : ''
+          }`}
+        >
           {/* 左: 投稿先クイックバッジ */}
           <div className="flex items-center gap-1 shrink-0">
             <button

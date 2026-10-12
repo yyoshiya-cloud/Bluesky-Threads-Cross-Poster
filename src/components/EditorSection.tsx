@@ -899,8 +899,14 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
 
   return (
     <div id="editor-section-container" className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start lg:items-stretch pb-16 lg:pb-0">
-      {/* 左側：エディタ & 設定（アイコン表示のため幅を確保） */}
-      <div className="lg:col-span-7 xl:col-span-7 2xl:col-span-6 space-y-3 min-w-0 w-full flex flex-col">
+      {/* 左側：エディタ & 設定（アイコン表示のため幅を確保・設定画面またはサーバー登録情報オープン時はグレーアウト） */}
+      <div
+        className={`lg:col-span-7 xl:col-span-7 2xl:col-span-6 space-y-3 min-w-0 w-full flex flex-col transition-all duration-200 ${
+          isSettingsOpen || isServerVaultOpen
+            ? 'opacity-40 grayscale pointer-events-none select-none cursor-not-allowed'
+            : ''
+        }`}
+      >
         <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-3 shadow-xl">
           {/* 上部バー：投稿先トグル & サンプル挿入 */}
           {/* 一体化上部バー：投稿先トグル & エディタ分岐タブ & 例文・クリア */}
@@ -2774,7 +2780,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
       <div id="realtime-preview-area" className="lg:col-span-5 xl:col-span-5 2xl:col-span-6 min-w-0 w-full relative flex flex-col h-full">
         <div className="relative overflow-hidden rounded-2xl min-h-[720px] xl:min-h-[800px] flex-1 flex flex-col h-full">
           {/* リアルタイム投稿プレビュー本体 */}
-          <div className={`w-full flex-1 flex flex-col transition-opacity duration-300 ${isSettingsOpen ? 'opacity-25 pointer-events-none filter blur-[0.5px]' : 'opacity-100'}`}>
+          <div className={`w-full flex-1 flex flex-col transition-opacity duration-300 ${isSettingsOpen || isServerVaultOpen ? 'opacity-25 pointer-events-none filter blur-[0.5px]' : 'opacity-100'}`}>
             <ThreadPreview
               blueskySplits={blueskySplits}
               threadsSplits={threadsSplits}
@@ -2893,7 +2899,9 @@ export const EditorSection: React.FC<EditorSectionProps> = ({
       {!isStaticButtonVisible && (
         <div
           id="floating-crosspost-bar"
-          className="fixed bottom-0 left-0 right-0 z-40 bg-[#0b1220]/95 backdrop-blur-md border-t border-slate-700/80 px-3.5 py-2.5 sm:px-6 shadow-2xl transition-all duration-300 animate-in slide-in-from-bottom-4"
+          className={`fixed bottom-0 left-0 right-0 z-40 bg-[#0b1220]/95 backdrop-blur-md border-t border-slate-700/80 px-3.5 py-2.5 sm:px-6 shadow-2xl transition-all duration-300 animate-in slide-in-from-bottom-4 ${
+            isSettingsOpen || isServerVaultOpen ? 'opacity-40 grayscale pointer-events-none select-none cursor-not-allowed' : ''
+          }`}
         >
           <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
             {/* 左側: 投稿対象プラットフォーム & コンテンツサマリー */}

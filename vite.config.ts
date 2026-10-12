@@ -6,13 +6,19 @@ import { execSync } from 'child_process';
 import { defineConfig, Plugin } from 'vite';
 import pkg from './package.json';
 
-// Git最新コミット日時 または ビルド実行日時 (Publish時)
+// ビルド・デプロイ実行日 (JST: YYYY-MM-DD)
 const getBuildDateTime = () => {
   try {
-    const gitDate = execSync('git log -1 --format=%cI', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-    if (gitDate) return gitDate;
-  } catch {}
-  return new Date().toISOString();
+    const jstFormatter = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    return jstFormatter.format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
 };
 
 // LINT.IfChange(aistudio_media_plugin)

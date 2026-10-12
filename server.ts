@@ -1417,21 +1417,55 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // バージョン情報取得エンドポイント (package.jsonからリアルタイム読込)
+  // バージョン情報・最終更新日（デプロイ日）取得エンドポイント
   // -------------------------------------------------------------
+  const SERVER_DEPLOYED_AT = new Date();
+  const formatDateJstYmd = (d: Date): string => {
+    try {
+      return new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(d);
+    } catch {
+      return d.toISOString().slice(0, 10);
+    }
+  };
+
+  const getServerDeployDateJst = (): string => {
+    try {
+      const distIndex = path.join(process.cwd(), 'dist', 'index.html');
+      if (fs.existsSync(distIndex)) {
+        const stat = fs.statSync(distIndex);
+        return formatDateJstYmd(stat.mtime);
+      }
+    } catch {}
+    return formatDateJstYmd(SERVER_DEPLOYED_AT);
+  };
+
   app.get('/api/admin/version', (_req, res) => {
+    const deployedDate = getServerDeployDateJst();
     try {
       const pkgPath = path.join(process.cwd(), 'package.json');
       if (fs.existsSync(pkgPath)) {
         const rawContent = fs.readFileSync(pkgPath, 'utf-8');
         const pkgData = JSON.parse(rawContent);
-        res.json({ success: true, version: pkgData.version || '1.0.0' });
+        res.json({
+          success: true,
+          version: pkgData.version || '1.1.0',
+          lastUpdatedDate: deployedDate,
+        });
         return;
       }
     } catch (err) {
       console.error('[Admin] Error reading package.json version:', err);
     }
-    res.json({ success: true, version: '1.0.0' });
+    res.json({
+      success: true,
+      version: '1.1.0',
+      lastUpdatedDate: deployedDate,
+    });
   });
 
   // -------------------------------------------------------------
@@ -1461,7 +1495,11 @@ async function startServer() {
       fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\n', 'utf-8');
       console.log(`[Admin] Successfully updated package.json version to "${cleanVersion}".`);
 
-      res.json({ success: true, version: cleanVersion });
+      res.json({
+        success: true,
+        version: cleanVersion,
+        lastUpdatedDate: getServerDeployDateJst(),
+      });
     } catch (err: any) {
       console.error('[Admin] Error updating package.json version:', err);
       res.status(500).json({ success: false, error: err.message || 'package.json の書き換えに失敗しました。' });

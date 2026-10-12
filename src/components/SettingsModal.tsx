@@ -1600,9 +1600,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            <div className="flex items-center gap-2.5 ml-auto">
-              {(platformTab === 'bluesky' || platformTab === 'threads') ? (
-                /* アカウント設定保存ボタン */
+            {(platformTab === 'bluesky' || platformTab === 'threads') && (
+              <div className="flex items-center gap-2.5 ml-auto">
+                {/* アカウント設定保存ボタン */}
                 <button
                   id="save-settings-button"
                   type="button"
@@ -1635,16 +1635,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </>
                   )}
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition cursor-pointer"
-                >
-                  設定を閉じる
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
