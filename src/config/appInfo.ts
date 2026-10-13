@@ -1,14 +1,18 @@
 import packageJson from '../../package.json';
 
-declare const __APP_VERSION__: string | undefined;
-declare const __APP_BUILD_DATE__: string | undefined;
+declare global {
+  interface Window {
+    __APP_VERSION__?: string;
+    __APP_BUILD_DATE__?: string;
+  }
+}
 
 /**
  * -------------------------------------------------------------
  * アプリケーション基本情報・バージョン＆最終更新日（デプロイ日）定義
  * -------------------------------------------------------------
- * アプリ情報画面に表示されるバージョン情報と最終更新日（デプロイ日）のデータを
- * アプリ内に一元保持します。
+ * index.html への動的注入スクリプト (window.__APP_VERSION__) を最優先で読み込み、
+ * 変更されたバージョンを確実に保持・表示します。
  */
 
 export interface AppVersionDetail {
@@ -41,15 +45,57 @@ export function getCurrentJstDateString(date: Date = new Date()): string {
   }
 }
 
-const rawVersion =
-  (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) ||
-  packageJson.version ||
-  '1.1.0';
+/**
+ * index.html への動的注入方式で渡されたバージョンを取得
+ */
+function resolveInitialVersion(): string {
+  // 1. index.html への動的注入値 (window.__APP_VERSION__) を最優先
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.__APP_VERSION__ === 'string' &&
+    window.__APP_VERSION__.trim()
+  ) {
+    return window.__APP_VERSION__.trim();
+  }
+  // 2. localStorage に保存されたバージョン
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('crosspost_app_version');
+      if (saved && saved.trim()) {
+        return saved.trim();
+      }
+    } catch {}
+  }
+  // 3. package.json またはフォールバック
+  return packageJson.version || '1.0.5';
+}
 
-// デプロイ日（ビルド時に注入された日付、またはデプロイ当日 2026-10-12）
-const rawDeployDate =
-  (typeof __APP_BUILD_DATE__ !== 'undefined' && __APP_BUILD_DATE__) ||
-  '2026-10-12';
+/**
+ * index.html への動的注入方式で渡されたデプロイ日を取得
+ */
+function resolveInitialDeployDate(): string {
+  // 1. index.html への動的注入値 (window.__APP_BUILD_DATE__) を最優先
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.__APP_BUILD_DATE__ === 'string' &&
+    window.__APP_BUILD_DATE__.trim()
+  ) {
+    return window.__APP_BUILD_DATE__.trim();
+  }
+  // 2. localStorage に保存された最終更新日
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('crosspost_app_last_updated');
+      if (saved && saved.trim()) {
+        return saved.trim();
+      }
+    } catch {}
+  }
+  return '2026-10-12';
+}
+
+const rawVersion = resolveInitialVersion();
+const rawDeployDate = resolveInitialDeployDate();
 
 const [majorStr = '1', minorStr = '1', patchStr = '0'] = rawVersion.split('.');
 const major = parseInt(majorStr, 10) || 1;

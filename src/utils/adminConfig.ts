@@ -128,10 +128,16 @@ export async function syncVersionWithServer(): Promise<string> {
     if (data.success && data.version) {
       currentRuntimeVersion = data.version;
       APP_VERSION_INFO.version = data.version;
+      if (typeof window !== 'undefined') {
+        window.__APP_VERSION__ = data.version;
+      }
       if (data.lastUpdatedDate) {
         currentRuntimeLastUpdated = data.lastUpdatedDate;
         APP_VERSION_INFO.deployedDate = data.lastUpdatedDate;
         APP_VERSION_INFO.releaseDate = data.lastUpdatedDate;
+        if (typeof window !== 'undefined') {
+          window.__APP_BUILD_DATE__ = data.lastUpdatedDate;
+        }
       }
       try {
         localStorage.setItem(CUSTOM_APP_VERSION_KEY, data.version);
@@ -158,9 +164,17 @@ export async function syncVersionWithServer(): Promise<string> {
 }
 
 /**
- * アプリ内に保持された表示バージョンを取得
+ * アプリ内に保持された表示バージョンを取得（index.htmlへの動的注入値を最優先）
  */
 export function getAppVersion(): string {
+  // 1. index.html への動的注入スクリプト (window.__APP_VERSION__) を最優先で取得
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.__APP_VERSION__ === 'string' &&
+    window.__APP_VERSION__.trim()
+  ) {
+    return window.__APP_VERSION__.trim();
+  }
   if (currentRuntimeVersion) {
     return currentRuntimeVersion;
   }
@@ -174,9 +188,16 @@ export function getAppVersion(): string {
 }
 
 /**
- * アプリ内に保持された最終更新日（デプロイ日）を取得
+ * アプリ内に保持された最終更新日（デプロイ日）を取得（index.htmlへの動的注入値を最優先）
  */
 export function getAppLastUpdatedDate(): string {
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.__APP_BUILD_DATE__ === 'string' &&
+    window.__APP_BUILD_DATE__.trim()
+  ) {
+    return window.__APP_BUILD_DATE__.trim();
+  }
   if (currentRuntimeLastUpdated) {
     return currentRuntimeLastUpdated;
   }
@@ -184,33 +205,33 @@ export function getAppLastUpdatedDate(): string {
 }
 
 /**
- * アプリの表示バージョンを変更・保存（package.json / version.json / appInfo.ts の同期書き換え：管理者トークン必須）
+ * アプリの表示バージョンを変更・保存（package.jsonおよびindex.html動的注入の書き換え：管理者トークン必須）
  */
-export async function updatePackageJsonVersion(
-  newVersion: string,
-  options?: { autoBuild?: boolean }
-): Promise<{ success: boolean; error?: string; buildSuccess?: boolean; buildOutput?: string }> {
+export async function updatePackageJsonVersion(newVersion: string): Promise<{ success: boolean; error?: string }> {
   try {
     if (!newVersion || !newVersion.trim()) {
       return { success: false, error: '有効なバージョン番号を入力してください。' };
     }
-    const cleanVersion = newVersion.trim().replace(/^v/i, '');
+    const cleanVersion = newVersion.trim();
     const res = await fetch('/api/admin/update-version', {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        version: cleanVersion,
-        autoBuild: options?.autoBuild ?? false,
-      }),
+      body: JSON.stringify({ version: cleanVersion }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) {
       currentRuntimeVersion = cleanVersion;
       APP_VERSION_INFO.version = cleanVersion;
+      if (typeof window !== 'undefined') {
+        window.__APP_VERSION__ = cleanVersion;
+      }
       if (data.lastUpdatedDate) {
         currentRuntimeLastUpdated = data.lastUpdatedDate;
         APP_VERSION_INFO.deployedDate = data.lastUpdatedDate;
         APP_VERSION_INFO.releaseDate = data.lastUpdatedDate;
+        if (typeof window !== 'undefined') {
+          window.__APP_BUILD_DATE__ = data.lastUpdatedDate;
+        }
       }
       try {
         localStorage.setItem(CUSTOM_APP_VERSION_KEY, cleanVersion);
@@ -228,68 +249,11 @@ export async function updatePackageJsonVersion(
           })
         );
       }
-      return {
-        success: true,
-        buildSuccess: data.buildSuccess,
-        buildOutput: data.buildOutput,
-      };
+      return { success: true };
     }
-    return { success: false, error: data.error || 'バージョン設定の更新に失敗しました。' };
+    return { success: false, error: data.error || 'package.jsonの更新に失敗しました。' };
   } catch (err: any) {
     return { success: false, error: err.message || '通信エラーにより更新に失敗しました。' };
-  }
-}
-
-/**
- * 本番ビルド (npm run build) をサーバー側で実行し、成果物（dist/）へ最新バージョンを反映
- */
-export async function triggerAppBuild(): Promise<{
-  success: boolean;
-  error?: string;
-  version?: string;
-  lastUpdatedDate?: string;
-  output?: string;
-}> {
-  try {
-    const res = await fetch('/api/admin/build', {
-      method: 'POST',
-      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.success) {
-      if (data.version) {
-        currentRuntimeVersion = data.version;
-        APP_VERSION_INFO.version = data.version;
-      }
-      if (data.lastUpdatedDate) {
-        currentRuntimeLastUpdated = data.lastUpdatedDate;
-        APP_VERSION_INFO.deployedDate = data.lastUpdatedDate;
-        APP_VERSION_INFO.releaseDate = data.lastUpdatedDate;
-      }
-      try {
-        if (data.version) localStorage.setItem(CUSTOM_APP_VERSION_KEY, data.version);
-        if (data.lastUpdatedDate) localStorage.setItem(CUSTOM_APP_LAST_UPDATED_KEY, data.lastUpdatedDate);
-      } catch {}
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('crosspost_version_changed', {
-            detail: {
-              version: data.version || currentRuntimeVersion,
-              lastUpdatedDate: data.lastUpdatedDate || currentRuntimeLastUpdated,
-            },
-          })
-        );
-      }
-      return {
-        success: true,
-        version: data.version,
-        lastUpdatedDate: data.lastUpdatedDate,
-        output: data.output,
-      };
-    }
-    return { success: false, error: data.error || '本番ビルドの実行に失敗しました。' };
-  } catch (err: any) {
-    return { success: false, error: err.message || '通信エラーによりビルド実行に失敗しました。' };
   }
 }
 
@@ -297,6 +261,9 @@ export function setAppVersion(newVersion: string): boolean {
   try {
     if (!newVersion || !newVersion.trim()) return false;
     currentRuntimeVersion = newVersion.trim();
+    if (typeof window !== 'undefined') {
+      window.__APP_VERSION__ = newVersion.trim();
+    }
     localStorage.setItem(CUSTOM_APP_VERSION_KEY, newVersion.trim());
     return true;
   } catch {

@@ -81,71 +81,32 @@ function aistudioMediaPlugin(): Plugin {
 }
 // LINT.ThenChange(//depot/google3/java/com/google/alkali/boq/makersuite/applet_dev_service/templates/initializers/react_theme/vite.config.ts:aistudio_media_plugin)
 
-function versionManifestPlugin(): Plugin {
+// index.html へのバージョン動的注入プラグイン
+function htmlVersionInjectPlugin(): Plugin {
   return {
-    name: 'vite-plugin-version-manifest',
-    closeBundle() {
+    name: 'vite-plugin-html-version-inject',
+    transformIndexHtml(html) {
+      let version = '1.0.5';
       try {
-        const pkgPath = path.resolve(__dirname, 'package.json');
-        let version = '1.1.0';
-        if (fs.existsSync(pkgPath)) {
-          const data = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-          if (data.version) version = data.version;
-        }
-        const buildDate = getBuildDateTime();
-        const manifest = {
-          version,
-          buildDate,
-          builtAt: new Date().toISOString(),
-        };
-        const manifestJson = JSON.stringify(manifest, null, 2) + '\n';
-
-        const distDir = path.resolve(__dirname, 'dist');
-        if (fs.existsSync(distDir)) {
-          fs.writeFileSync(path.join(distDir, 'version.json'), manifestJson, 'utf-8');
-          const distPkg = {
-            name: 'react-example',
-            version,
-            type: 'module',
-          };
-          fs.writeFileSync(path.join(distDir, 'package.json'), JSON.stringify(distPkg, null, 2) + '\n', 'utf-8');
-        }
-
-        const publicDir = path.resolve(__dirname, 'public');
-        if (fs.existsSync(publicDir)) {
-          fs.writeFileSync(path.join(publicDir, 'version.json'), manifestJson, 'utf-8');
-        }
-      } catch (e) {
-        console.error('[VersionManifestPlugin] Failed to write version manifest:', e);
+        const pkgContent = fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8');
+        version = JSON.parse(pkgContent).version || version;
+      } catch {}
+      const script = `<script id="__APP_ENV__">\n      window.__APP_VERSION__ = ${JSON.stringify(version)};\n      window.__APP_BUILD_DATE__ = ${JSON.stringify(getBuildDateTime())};\n    </script>`;
+      if (html.includes('id="__APP_ENV__"')) {
+        return html.replace(/<script id="__APP_ENV__">[\s\S]*?<\/script>/, script);
       }
+      return html.replace('</head>', `    ${script}\n  </head>`);
     },
   };
 }
 
-const getPackageVersion = (): string => {
-  try {
-    const pkgPath = path.resolve(__dirname, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      const data = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      if (data.version) return data.version;
-    }
-  } catch {}
-  return '1.1.0';
-};
-
 export default defineConfig(() => {
-  const currentVersion = getPackageVersion();
-  const buildDate = getBuildDateTime();
   return {
-    plugins: [react(), tailwindcss(), aistudioMediaPlugin(), versionManifestPlugin()],
+    plugins: [react(), tailwindcss(), aistudioMediaPlugin(), htmlVersionInjectPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
-    },
-    define: {
-      __APP_VERSION__: JSON.stringify(currentVersion),
-      __APP_BUILD_DATE__: JSON.stringify(buildDate),
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

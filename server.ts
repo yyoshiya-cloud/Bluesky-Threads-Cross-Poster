@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import crypto from 'crypto';
 import net from 'net';
@@ -1436,16 +1435,6 @@ async function startServer() {
 
   const getServerDeployDateJst = (): string => {
     try {
-      const distVersionFile = path.join(process.cwd(), 'dist', 'version.json');
-      if (fs.existsSync(distVersionFile)) {
-        const vData = JSON.parse(fs.readFileSync(distVersionFile, 'utf-8'));
-        if (vData.buildDate) return vData.buildDate;
-      }
-      const rootVersionFile = path.join(process.cwd(), 'version.json');
-      if (fs.existsSync(rootVersionFile)) {
-        const vData = JSON.parse(fs.readFileSync(rootVersionFile, 'utf-8'));
-        if (vData.buildDate) return vData.buildDate;
-      }
       const distIndex = path.join(process.cwd(), 'dist', 'index.html');
       if (fs.existsSync(distIndex)) {
         const stat = fs.statSync(distIndex);
@@ -1455,163 +1444,91 @@ async function startServer() {
     return formatDateJstYmd(SERVER_DEPLOYED_AT);
   };
 
-  const getAppVersionFromServer = (): string => {
+  app.get('/api/admin/version', (_req, res) => {
+    const deployedDate = getServerDeployDateJst();
     try {
-      const distVersionFile = path.join(process.cwd(), 'dist', 'version.json');
-      if (fs.existsSync(distVersionFile)) {
-        const vData = JSON.parse(fs.readFileSync(distVersionFile, 'utf-8'));
-        if (vData.version) return vData.version;
-      }
-      const rootVersionFile = path.join(process.cwd(), 'version.json');
-      if (fs.existsSync(rootVersionFile)) {
-        const vData = JSON.parse(fs.readFileSync(rootVersionFile, 'utf-8'));
-        if (vData.version) return vData.version;
-      }
       const pkgPath = path.join(process.cwd(), 'package.json');
       if (fs.existsSync(pkgPath)) {
         const rawContent = fs.readFileSync(pkgPath, 'utf-8');
         const pkgData = JSON.parse(rawContent);
-        if (pkgData.version) return pkgData.version;
+        res.json({
+          success: true,
+          version: pkgData.version || '1.1.0',
+          lastUpdatedDate: deployedDate,
+        });
+        return;
       }
     } catch (err) {
-      console.error('[Admin] Error reading version:', err);
+      console.error('[Admin] Error reading package.json version:', err);
     }
-    return '1.1.0';
-  };
-
-  app.get('/api/admin/version', (_req, res) => {
-    const deployedDate = getServerDeployDateJst();
-    const version = getAppVersionFromServer();
     res.json({
       success: true,
-      version,
+      version: '1.1.0',
       lastUpdatedDate: deployedDate,
     });
   });
 
   // -------------------------------------------------------------
-  // バージョン情報更新エンドポイント (package.json / version.json / appInfo.ts 同期 - 管理者認証必須)
+  // バージョン情報更新エンドポイント (package.json書き換え - 管理者認証必須)
   // -------------------------------------------------------------
   app.post('/api/admin/update-version', requireAdminAuth, express.json(), (req, res) => {
     try {
-      const { version, autoBuild } = req.body || {};
-      const rawVersion = typeof version === 'string' ? version.trim() : '';
-      const cleanVersion = rawVersion.replace(/^v/i, '');
+      const { version } = req.body || {};
+      const cleanVersion = typeof version === 'string' ? version.trim() : '';
 
       if (!cleanVersion || !/^[0-9a-zA-Z._-]+$/.test(cleanVersion)) {
-        res.status(400).json({ success: false, error: '有効なバージョン番号を入力してください（例: 1.2.0）。' });
+        res.status(400).json({ success: false, error: '有効なバージョン番号を入力してください。' });
         return;
       }
 
-      const todayJst = formatDateJstYmd(new Date());
-
-      // 1. package.json の version を更新
       const pkgPath = path.join(process.cwd(), 'package.json');
-      if (fs.existsSync(pkgPath)) {
-        const rawContent = fs.readFileSync(pkgPath, 'utf-8');
-        const pkgData = JSON.parse(rawContent);
-        pkgData.version = cleanVersion;
-        fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\n', 'utf-8');
+      if (!fs.existsSync(pkgPath)) {
+        res.status(404).json({ success: false, error: 'package.json が見つかりませんでした。' });
+        return;
       }
 
-      // 2. version.json & public/version.json を更新
-      const manifest = {
-        version: cleanVersion,
-        buildDate: todayJst,
-        updatedAt: new Date().toISOString(),
-      };
-      const manifestStr = JSON.stringify(manifest, null, 2) + '\n';
-      fs.writeFileSync(path.join(process.cwd(), 'version.json'), manifestStr, 'utf-8');
-      const publicDir = path.join(process.cwd(), 'public');
-      if (fs.existsSync(publicDir)) {
-        fs.writeFileSync(path.join(publicDir, 'version.json'), manifestStr, 'utf-8');
-      }
+      const rawContent = fs.readFileSync(pkgPath, 'utf-8');
+      const pkgData = JSON.parse(rawContent);
 
-      // 3. dist/ 配下が存在する場合は dist/version.json & dist/package.json も更新
-      const distDir = path.join(process.cwd(), 'dist');
-      if (fs.existsSync(distDir)) {
-        fs.writeFileSync(path.join(distDir, 'version.json'), manifestStr, 'utf-8');
-        const distPkg = {
-          name: 'react-example',
-          version: cleanVersion,
-          type: 'module',
-        };
-        fs.writeFileSync(path.join(distDir, 'package.json'), JSON.stringify(distPkg, null, 2) + '\n', 'utf-8');
-      }
+      pkgData.version = cleanVersion;
 
-      // 4. src/config/appInfo.ts のフォールバック定数を同期書き換え
-      const appInfoPath = path.join(process.cwd(), 'src', 'config', 'appInfo.ts');
-      if (fs.existsSync(appInfoPath)) {
-        let appInfoCode = fs.readFileSync(appInfoPath, 'utf-8');
-        appInfoCode = appInfoCode.replace(
-          /packageJson\.version\s*\|\|\s*'[^']+'/,
-          `packageJson.version || '${cleanVersion}'`
-        );
-        appInfoCode = appInfoCode.replace(/return\s*'20\d\d-\d\d-\d\d';/, `return '${todayJst}';`);
-        appInfoCode = appInfoCode.replace(/\|\|\s*'20\d\d-\d\d-\d\d'/, `|| '${todayJst}'`);
-        fs.writeFileSync(appInfoPath, appInfoCode, 'utf-8');
-      }
+      fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\n', 'utf-8');
+      console.log(`[Admin] Successfully updated package.json version to "${cleanVersion}".`);
 
-      console.log(`[Admin] Successfully updated version to "${cleanVersion}" across package.json, version.json, and appInfo.ts.`);
+      // index.html への動的注入: root の index.html および dist/index.html 内の __APP_ENV__ スクリプトを直接更新・保持
+      const rootIndexHtml = path.join(process.cwd(), 'index.html');
+      const distIndexHtml = path.join(process.cwd(), 'dist', 'index.html');
+      const currentDate = getServerDeployDateJst();
 
-      // 5. autoBuild が要求された場合は npm run build を実行
-      let buildOutput = '';
-      let buildSuccess = false;
-      if (autoBuild) {
+      const updateHtmlFile = (filePath: string) => {
         try {
-          buildOutput = execSync('npm run build', {
-            cwd: process.cwd(),
-            encoding: 'utf-8',
-            timeout: 60000,
-          });
-          buildSuccess = true;
-          console.log('[Admin] Production build completed successfully after version update.');
-        } catch (bErr: any) {
-          console.error('[Admin] Build failed during autoBuild:', bErr);
-          buildOutput = bErr.message || 'Build failed';
+          if (fs.existsSync(filePath)) {
+            let html = fs.readFileSync(filePath, 'utf-8');
+            const scriptTag = `<script id="__APP_ENV__">\n      window.__APP_VERSION__ = ${JSON.stringify(cleanVersion)};\n      window.__APP_BUILD_DATE__ = ${JSON.stringify(currentDate)};\n    </script>`;
+            if (html.includes('id="__APP_ENV__"')) {
+              html = html.replace(/<script id="__APP_ENV__">[\s\S]*?<\/script>/, scriptTag);
+            } else if (html.includes('</head>')) {
+              html = html.replace('</head>', `    ${scriptTag}\n  </head>`);
+            }
+            fs.writeFileSync(filePath, html, 'utf-8');
+            console.log(`[Admin] Successfully injected dynamic version "${cleanVersion}" into ${filePath}`);
+          }
+        } catch (e) {
+          console.warn(`[Admin] Failed to inject dynamic version into ${filePath}:`, e);
         }
-      }
+      };
+
+      updateHtmlFile(rootIndexHtml);
+      updateHtmlFile(distIndexHtml);
 
       res.json({
         success: true,
         version: cleanVersion,
-        lastUpdatedDate: todayJst,
-        buildTriggered: !!autoBuild,
-        buildSuccess,
-        buildOutput: buildOutput ? buildOutput.slice(-300) : undefined,
+        lastUpdatedDate: currentDate,
       });
     } catch (err: any) {
-      console.error('[Admin] Error updating version:', err);
-      res.status(500).json({ success: false, error: err.message || 'バージョン情報の書き換えに失敗しました。' });
-    }
-  });
-
-  // -------------------------------------------------------------
-  // 本番ビルド実行エンドポイント (npm run build をサーバー側で実行 - 管理者認証必須)
-  // -------------------------------------------------------------
-  app.post('/api/admin/build', requireAdminAuth, express.json(), (_req, res) => {
-    try {
-      const todayJst = formatDateJstYmd(new Date());
-      const buildOutput = execSync('npm run build', {
-        cwd: process.cwd(),
-        encoding: 'utf-8',
-        timeout: 90000,
-      });
-      const version = getAppVersionFromServer();
-      console.log(`[Admin] Manual build triggered and succeeded. Version: ${version}`);
-      res.json({
-        success: true,
-        version,
-        lastUpdatedDate: todayJst,
-        message: '本番ビルドが正常に完了しました。成果物（dist）に新しいバージョンが反映されました。',
-        output: buildOutput ? buildOutput.slice(-300) : undefined,
-      });
-    } catch (err: any) {
-      console.error('[Admin] Manual build execution error:', err);
-      res.status(500).json({
-        success: false,
-        error: err.message || 'ビルドの実行中にエラーが発生しました。',
-      });
+      console.error('[Admin] Error updating package.json version:', err);
+      res.status(500).json({ success: false, error: err.message || 'package.json の書き換えに失敗しました。' });
     }
   });
 
@@ -4973,7 +4890,24 @@ ${cleanText}
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
-      res.sendFile(indexHtmlPath);
+      try {
+        let html = fs.readFileSync(indexHtmlPath, 'utf-8');
+        let currentVersion = '1.0.5';
+        try {
+          const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'));
+          if (pkg.version) currentVersion = pkg.version;
+        } catch {}
+        const scriptTag = `<script id="__APP_ENV__">\n      window.__APP_VERSION__ = ${JSON.stringify(currentVersion)};\n      window.__APP_BUILD_DATE__ = ${JSON.stringify(getServerDeployDateJst())};\n    </script>`;
+        if (html.includes('id="__APP_ENV__"')) {
+          html = html.replace(/<script id="__APP_ENV__">[\s\S]*?<\/script>/, scriptTag);
+        } else if (html.includes('</head>')) {
+          html = html.replace('</head>', `    ${scriptTag}\n  </head>`);
+        }
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(html);
+      } catch {
+        res.sendFile(indexHtmlPath);
+      }
     });
   } else {
     const vite = await createViteServer({
