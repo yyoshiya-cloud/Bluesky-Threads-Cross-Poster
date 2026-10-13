@@ -14,8 +14,6 @@ import {
   Sliders,
   Eye,
   EyeOff,
-  Hammer,
-  Loader2,
 } from 'lucide-react';
 import {
   verifyAdminPassword,
@@ -65,9 +63,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [currentVersion, setCurrentVersion] = useState<string>(getAppVersion());
   const [versionInput, setVersionInput] = useState('');
   const [versionMessage, setVersionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [autoBuild, setAutoBuild] = useState<boolean>(true);
-  const [isUpdatingVersion, setIsUpdatingVersion] = useState<boolean>(false);
-  const [isBuilding, setIsBuilding] = useState<boolean>(false);
 
   // モード切替クリック回数設定用
   const [clickCountInput, setClickCountInput] = useState<number>(3);
@@ -148,7 +143,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  // バージョン更新処理 (package.json / version.json / appInfo.ts 同期書き換え ＆ ビルド反映)
+  // バージョン更新処理 (package.jsonを直接書き換え)
   const handleUpdateVersion = async (e: React.FormEvent) => {
     e.preventDefault();
     setVersionMessage(null);
@@ -159,43 +154,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       return;
     }
 
-    setIsUpdatingVersion(true);
-    const res = await updatePackageJsonVersion(trimmed, { autoBuild });
-    setIsUpdatingVersion(false);
+    const res = await updatePackageJsonVersion(trimmed);
     if (res.success) {
-      const cleanVer = trimmed.replace(/^v/i, '');
-      setCurrentVersion(cleanVer);
-      const successText = autoBuild && res.buildSuccess
-        ? `バージョンを "Ver ${cleanVer}" に更新し、本番ビルド（npm run build）を実行して成果物（dist/）へ反映しました。`
-        : `バージョンを "Ver ${cleanVer}" に保存しました（package.json / appInfo.ts / version.json 同期済）。`;
-      setVersionMessage({ type: 'success', text: successText });
+      setCurrentVersion(trimmed);
+      triggerAppBuild().catch(() => {});
+      setVersionMessage({ type: 'success', text: `package.json の Version を "Ver ${trimmed}" に書き換え保存しました。` });
       if (onVersionChanged) {
-        onVersionChanged(cleanVer);
+        onVersionChanged(trimmed);
       }
     } else {
-      setVersionMessage({ type: 'error', text: res.error || 'バージョンの更新に失敗しました。' });
-    }
-  };
-
-  // 本番ビルド手動実行
-  const handleRunBuild = async () => {
-    setIsBuilding(true);
-    setVersionMessage(null);
-    const res = await triggerAppBuild();
-    setIsBuilding(false);
-    if (res.success) {
-      if (res.version) {
-        setCurrentVersion(res.version);
-      }
-      setVersionMessage({
-        type: 'success',
-        text: `本番ビルド（npm run build）が正常に完了しました。最新バージョン (Ver ${res.version || currentVersion}) およびビルド日付が成果物（dist/）に反映されました。`,
-      });
-    } else {
-      setVersionMessage({
-        type: 'error',
-        text: res.error || '本番ビルドの実行に失敗しました。',
-      });
+      setVersionMessage({ type: 'error', text: res.error || 'package.json の書き換えに失敗しました。' });
     }
   };
 
@@ -378,94 +346,40 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </div>
               </div>
 
-              {/* 1. アプリバージョンの変更 ＆ ビルド反映 */}
-              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2.5">
-                <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5 flex-wrap gap-2">
+              {/* 1. アプリバージョンの変更 */}
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
                     <Tag className="w-3.5 h-3.5 text-sky-400" />
-                    <span>アプリバージョンの変更 ＆ ビルド反映</span>
+                    <span>アプリバージョンの変更</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                      現在: Ver {currentVersion}
-                    </span>
-                  </div>
+                  <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                    現在: Ver {currentVersion}
+                  </span>
                 </div>
 
-                <p className="text-[11px] text-slate-400 leading-tight">
-                  変更したバージョン番号は <code className="text-sky-300 font-mono">package.json</code>、<code className="text-sky-300 font-mono">appInfo.ts</code>、<code className="text-sky-300 font-mono">version.json</code> に即座に同期保存されます。ビルド（<code className="text-sky-300 font-mono">npm run build</code>）を実行すると成果物（<code className="text-sky-300 font-mono">dist/</code>）の静的配信ファイルにも完全に反映されます。
-                </p>
-
-                <form onSubmit={handleUpdateVersion} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={versionInput}
-                      onChange={(e) => setVersionInput(e.target.value)}
-                      placeholder="例: 1.2.0"
-                      disabled={isUpdatingVersion || isBuilding}
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 font-mono disabled:opacity-60"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isUpdatingVersion || isBuilding}
-                      className="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition cursor-pointer shrink-0 disabled:opacity-60 flex items-center gap-1.5"
-                    >
-                      {isUpdatingVersion ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>更新処理中...</span>
-                        </>
-                      ) : (
-                        <span>バージョン更新</span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRunBuild}
-                      disabled={isUpdatingVersion || isBuilding}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-white border border-slate-700 text-xs font-semibold transition cursor-pointer shrink-0 disabled:opacity-60 flex items-center gap-1.5"
-                      title="npm run build を手動で実行し、dist/ 配下の静的ファイルを再生成します"
-                    >
-                      {isBuilding ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
-                          <span>ビルド中...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Hammer className="w-3.5 h-3.5 text-sky-400" />
-                          <span>本番ビルド実行</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <label className="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer select-none pt-0.5">
-                    <input
-                      type="checkbox"
-                      checked={autoBuild}
-                      onChange={(e) => setAutoBuild(e.target.checked)}
-                      disabled={isUpdatingVersion || isBuilding}
-                      className="rounded border-slate-700 text-sky-600 focus:ring-sky-500 w-3.5 h-3.5 bg-slate-900"
-                    />
-                    <span>バージョン更新時に自動で本番ビルド（npm run build）も実行して反映する</span>
-                  </label>
+                <form onSubmit={handleUpdateVersion} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={versionInput}
+                    onChange={(e) => setVersionInput(e.target.value)}
+                    placeholder="例: 1.0.4"
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 font-mono"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition cursor-pointer shrink-0"
+                  >
+                    バージョン更新
+                  </button>
                 </form>
-
                 {versionMessage && (
-                  <div className={`text-[11px] p-2 rounded-lg border flex items-start gap-1.5 ${
-                    versionMessage.type === 'success'
-                      ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
-                      : 'bg-rose-950/40 text-rose-300 border-rose-800/60'
+                  <p className={`text-[11px] flex items-center gap-1 ${
+                    versionMessage.type === 'success' ? 'text-emerald-400' : 'text-rose-400'
                   }`}>
-                    {versionMessage.type === 'success' ? (
-                      <Check className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-400" />
-                    ) : (
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-400" />
-                    )}
-                    <span className="leading-relaxed">{versionMessage.text}</span>
-                  </div>
+                    {versionMessage.type === 'success' ? <Check className="w-3 h-3 shrink-0" /> : <AlertTriangle className="w-3 h-3 shrink-0" />}
+                    <span>{versionMessage.text}</span>
+                  </p>
                 )}
               </div>
 

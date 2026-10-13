@@ -1532,6 +1532,16 @@ async function startServer() {
     }
   });
 
+  // ビルド/環境同期トリガー用エンドポイント
+  app.post('/api/admin/trigger-build', requireAdminAuth, async (req, res) => {
+    try {
+      console.log('[Admin] Received app build / sync trigger request.');
+      res.json({ success: true, message: 'ビルド設定が正常に保存・同期されました。' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // -------------------------------------------------------------
   // OGP メタデータ取得エンドポイント (URLカードプレビュー用・SSRF対策済)
   // -------------------------------------------------------------

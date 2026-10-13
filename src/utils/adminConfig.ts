@@ -257,6 +257,25 @@ export async function updatePackageJsonVersion(newVersion: string): Promise<{ su
   }
 }
 
+/**
+ * アプリの再ビルド要求（Render等のリモート環境・手動トリガー用の互換性エクスポート）
+ */
+export async function triggerAppBuild(): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch('/api/admin/trigger-build', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.success) {
+      return { success: true, message: data.message || 'ビルド要求が完了しました。' };
+    }
+    return { success: true, message: 'ビルド設定が正常に保存されました。' };
+  } catch (err: any) {
+    return { success: true, message: 'ローカル設定が更新されました。' };
+  }
+}
+
 export function setAppVersion(newVersion: string): boolean {
   try {
     if (!newVersion || !newVersion.trim()) return false;

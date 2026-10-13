@@ -32,7 +32,7 @@ CrossPost Studio を Render.com（Node.js Web Service）にデプロイする手
    - **Instance Type**: `Free`
 4. **[Advanced]** または **[Environment Variables]** で以下を設定します：
    - `NODE_ENV`: `production`
-   - `NODE_VERSION`: `20`
+   - `NODE_VERSION`: `22`
    - （任意・Gemini API利用時）`GEMINI_API_KEY`: お手持ちのAPIキー
 5. **[Create Web Service]** をクリックします。
 
