@@ -89,7 +89,7 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
                   {APP_NAME}
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30">
-                  Version {currentVersion}
+                  Version {currentVersion.replace(/^v/i, '')}
                 </span>
                 <span
                   className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-700/60"

@@ -1435,6 +1435,16 @@ async function startServer() {
 
   const getServerDeployDateJst = (): string => {
     try {
+      const distVersionFile = path.join(process.cwd(), 'dist', 'version.json');
+      if (fs.existsSync(distVersionFile)) {
+        const vData = JSON.parse(fs.readFileSync(distVersionFile, 'utf-8'));
+        if (vData.buildDate) return vData.buildDate;
+      }
+      const rootVersionFile = path.join(process.cwd(), 'version.json');
+      if (fs.existsSync(rootVersionFile)) {
+        const vData = JSON.parse(fs.readFileSync(rootVersionFile, 'utf-8'));
+        if (vData.buildDate) return vData.buildDate;
+      }
       const distIndex = path.join(process.cwd(), 'dist', 'index.html');
       if (fs.existsSync(distIndex)) {
         const stat = fs.statSync(distIndex);
@@ -1444,65 +1454,165 @@ async function startServer() {
     return formatDateJstYmd(SERVER_DEPLOYED_AT);
   };
 
-  app.get('/api/admin/version', (_req, res) => {
-    const deployedDate = getServerDeployDateJst();
+  const getAppVersionFromServer = (): string => {
     try {
+      const distVersionFile = path.join(process.cwd(), 'dist', 'version.json');
+      if (fs.existsSync(distVersionFile)) {
+        const vData = JSON.parse(fs.readFileSync(distVersionFile, 'utf-8'));
+        if (vData.version) return vData.version;
+      }
+      const rootVersionFile = path.join(process.cwd(), 'version.json');
+      if (fs.existsSync(rootVersionFile)) {
+        const vData = JSON.parse(fs.readFileSync(rootVersionFile, 'utf-8'));
+        if (vData.version) return vData.version;
+      }
       const pkgPath = path.join(process.cwd(), 'package.json');
       if (fs.existsSync(pkgPath)) {
         const rawContent = fs.readFileSync(pkgPath, 'utf-8');
         const pkgData = JSON.parse(rawContent);
-        res.json({
-          success: true,
-          version: pkgData.version || '1.1.0',
-          lastUpdatedDate: deployedDate,
-        });
-        return;
+        if (pkgData.version) return pkgData.version;
       }
     } catch (err) {
-      console.error('[Admin] Error reading package.json version:', err);
+      console.error('[Admin] Error reading version:', err);
     }
+    return '1.1.0';
+  };
+
+  app.get('/api/admin/version', (_req, res) => {
+    const deployedDate = getServerDeployDateJst();
+    const version = getAppVersionFromServer();
     res.json({
       success: true,
-      version: '1.1.0',
+      version,
       lastUpdatedDate: deployedDate,
     });
   });
 
   // -------------------------------------------------------------
-  // バージョン情報更新エンドポイント (package.json書き換え - 管理者認証必須)
+  // バージョン情報更新エンドポイント (package.json / version.json / appInfo.ts 同期 - 管理者認証必須)
   // -------------------------------------------------------------
   app.post('/api/admin/update-version', requireAdminAuth, express.json(), (req, res) => {
     try {
-      const { version } = req.body || {};
-      const cleanVersion = typeof version === 'string' ? version.trim() : '';
+      const { version, autoBuild } = req.body || {};
+      const rawVersion = typeof version === 'string' ? version.trim() : '';
+      const cleanVersion = rawVersion.replace(/^v/i, '');
 
       if (!cleanVersion || !/^[0-9a-zA-Z._-]+$/.test(cleanVersion)) {
-        res.status(400).json({ success: false, error: '有効なバージョン番号を入力してください。' });
+        res.status(400).json({ success: false, error: '有効なバージョン番号を入力してください（例: 1.2.0）。' });
         return;
       }
 
+      const todayJst = formatDateJstYmd(new Date());
+
+      // 1. package.json の version を更新
       const pkgPath = path.join(process.cwd(), 'package.json');
-      if (!fs.existsSync(pkgPath)) {
-        res.status(404).json({ success: false, error: 'package.json が見つかりませんでした。' });
-        return;
+      if (fs.existsSync(pkgPath)) {
+        const rawContent = fs.readFileSync(pkgPath, 'utf-8');
+        const pkgData = JSON.parse(rawContent);
+        pkgData.version = cleanVersion;
+        fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\n', 'utf-8');
       }
 
-      const rawContent = fs.readFileSync(pkgPath, 'utf-8');
-      const pkgData = JSON.parse(rawContent);
+      // 2. version.json & public/version.json を更新
+      const manifest = {
+        version: cleanVersion,
+        buildDate: todayJst,
+        updatedAt: new Date().toISOString(),
+      };
+      const manifestStr = JSON.stringify(manifest, null, 2) + '\n';
+      fs.writeFileSync(path.join(process.cwd(), 'version.json'), manifestStr, 'utf-8');
+      const publicDir = path.join(process.cwd(), 'public');
+      if (fs.existsSync(publicDir)) {
+        fs.writeFileSync(path.join(publicDir, 'version.json'), manifestStr, 'utf-8');
+      }
 
-      pkgData.version = cleanVersion;
+      // 3. dist/ 配下が存在する場合は dist/version.json & dist/package.json も更新
+      const distDir = path.join(process.cwd(), 'dist');
+      if (fs.existsSync(distDir)) {
+        fs.writeFileSync(path.join(distDir, 'version.json'), manifestStr, 'utf-8');
+        const distPkg = {
+          name: 'react-example',
+          version: cleanVersion,
+          type: 'module',
+        };
+        fs.writeFileSync(path.join(distDir, 'package.json'), JSON.stringify(distPkg, null, 2) + '\n', 'utf-8');
+      }
 
-      fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\n', 'utf-8');
-      console.log(`[Admin] Successfully updated package.json version to "${cleanVersion}".`);
+      // 4. src/config/appInfo.ts のフォールバック定数を同期書き換え
+      const appInfoPath = path.join(process.cwd(), 'src', 'config', 'appInfo.ts');
+      if (fs.existsSync(appInfoPath)) {
+        let appInfoCode = fs.readFileSync(appInfoPath, 'utf-8');
+        appInfoCode = appInfoCode.replace(
+          /packageJson\.version\s*\|\|\s*'[^']+'/,
+          `packageJson.version || '${cleanVersion}'`
+        );
+        appInfoCode = appInfoCode.replace(/return\s*'20\d\d-\d\d-\d\d';/, `return '${todayJst}';`);
+        appInfoCode = appInfoCode.replace(/\|\|\s*'20\d\d-\d\d-\d\d'/, `|| '${todayJst}'`);
+        fs.writeFileSync(appInfoPath, appInfoCode, 'utf-8');
+      }
+
+      console.log(`[Admin] Successfully updated version to "${cleanVersion}" across package.json, version.json, and appInfo.ts.`);
+
+      // 5. autoBuild が要求された場合は npm run build を実行
+      let buildOutput = '';
+      let buildSuccess = false;
+      if (autoBuild) {
+        try {
+          const { execSync } = require('child_process');
+          buildOutput = execSync('npm run build', {
+            cwd: process.cwd(),
+            encoding: 'utf-8',
+            timeout: 60000,
+          });
+          buildSuccess = true;
+          console.log('[Admin] Production build completed successfully after version update.');
+        } catch (bErr: any) {
+          console.error('[Admin] Build failed during autoBuild:', bErr);
+          buildOutput = bErr.message || 'Build failed';
+        }
+      }
 
       res.json({
         success: true,
         version: cleanVersion,
-        lastUpdatedDate: getServerDeployDateJst(),
+        lastUpdatedDate: todayJst,
+        buildTriggered: !!autoBuild,
+        buildSuccess,
+        buildOutput: buildOutput ? buildOutput.slice(-300) : undefined,
       });
     } catch (err: any) {
-      console.error('[Admin] Error updating package.json version:', err);
-      res.status(500).json({ success: false, error: err.message || 'package.json の書き換えに失敗しました。' });
+      console.error('[Admin] Error updating version:', err);
+      res.status(500).json({ success: false, error: err.message || 'バージョン情報の書き換えに失敗しました。' });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // 本番ビルド実行エンドポイント (npm run build をサーバー側で実行 - 管理者認証必須)
+  // -------------------------------------------------------------
+  app.post('/api/admin/build', requireAdminAuth, express.json(), (_req, res) => {
+    try {
+      const todayJst = formatDateJstYmd(new Date());
+      const { execSync } = require('child_process');
+      const buildOutput = execSync('npm run build', {
+        cwd: process.cwd(),
+        encoding: 'utf-8',
+        timeout: 90000,
+      });
+      const version = getAppVersionFromServer();
+      console.log(`[Admin] Manual build triggered and succeeded. Version: ${version}`);
+      res.json({
+        success: true,
+        version,
+        lastUpdatedDate: todayJst,
+        message: '本番ビルドが正常に完了しました。成果物（dist）に新しいバージョンが反映されました。',
+        output: buildOutput ? buildOutput.slice(-300) : undefined,
+      });
+    } catch (err: any) {
+      console.error('[Admin] Manual build execution error:', err);
+      res.status(500).json({
+        success: false,
+        error: err.message || 'ビルドの実行中にエラーが発生しました。',
+      });
     }
   });
 
