@@ -86,11 +86,16 @@ function htmlVersionInjectPlugin(): Plugin {
   return {
     name: 'vite-plugin-html-version-inject',
     transformIndexHtml(html) {
-      let version = '1.0.5';
+      let version = '1.1.0';
       try {
         const pkgContent = fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8');
         version = JSON.parse(pkgContent).version || version;
       } catch {}
+      // index.html への動的注入方式で変更されたバージョンを最優先で保持
+      const existingMatch = html.match(/window\.__APP_VERSION__\s*=\s*["']([^"']+)["']/);
+      if (existingMatch && existingMatch[1]) {
+        version = existingMatch[1].trim();
+      }
       const script = `<script id="__APP_ENV__">\n      window.__APP_VERSION__ = ${JSON.stringify(version)};\n      window.__APP_BUILD_DATE__ = ${JSON.stringify(getBuildDateTime())};\n    </script>`;
       if (html.includes('id="__APP_ENV__"')) {
         return html.replace(/<script id="__APP_ENV__">[\s\S]*?<\/script>/, script);

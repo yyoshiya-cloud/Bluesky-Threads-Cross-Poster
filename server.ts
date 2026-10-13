@@ -4872,9 +4872,10 @@ ${cleanText}
   const indexHtmlPath = path.join(distPath, 'index.html');
   const hasDistIndexHtml = fs.existsSync(indexHtmlPath);
 
-  // 本番ビルドファイル(dist/index.html)が存在し、かつ本番モードの場合のみ静的配信。
-  // それ以外（開発モードまたはdist未生成時）は Vite ミドルウェアを使用。
-  const isProduction = process.env.NODE_ENV === 'production' && hasDistIndexHtml;
+  // 本番ビルドファイル(dist/index.html)が存在し、開発モード実行でない場合は静的配信。
+  // 開発時（npm run dev 実行時、または dist 未生成時）のみ Vite ミドルウェアを使用。
+  const isDev = process.env.NODE_ENV === 'development' || process.env.npm_lifecycle_event === 'dev';
+  const isProduction = (process.env.NODE_ENV === 'production' || !isDev) && hasDistIndexHtml;
 
   if (isProduction) {
     app.use(express.static(distPath, {
@@ -4892,11 +4893,16 @@ ${cleanText}
       res.setHeader('Expires', '0');
       try {
         let html = fs.readFileSync(indexHtmlPath, 'utf-8');
-        let currentVersion = '1.0.5';
+        let currentVersion = '1.1.0';
         try {
           const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'));
           if (pkg.version) currentVersion = pkg.version;
         } catch {}
+        // index.html への動的注入方式で変更されたバージョンを最優先で保持
+        const existingMatch = html.match(/window\.__APP_VERSION__\s*=\s*["']([^"']+)["']/);
+        if (existingMatch && existingMatch[1]) {
+          currentVersion = existingMatch[1].trim();
+        }
         const scriptTag = `<script id="__APP_ENV__">\n      window.__APP_VERSION__ = ${JSON.stringify(currentVersion)};\n      window.__APP_BUILD_DATE__ = ${JSON.stringify(getServerDeployDateJst())};\n    </script>`;
         if (html.includes('id="__APP_ENV__"')) {
           html = html.replace(/<script id="__APP_ENV__">[\s\S]*?<\/script>/, scriptTag);

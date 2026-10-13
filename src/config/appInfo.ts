@@ -67,7 +67,7 @@ function resolveInitialVersion(): string {
     } catch {}
   }
   // 3. package.json またはフォールバック
-  return packageJson.version || '1.0.5';
+  return packageJson.version || '1.1.0';
 }
 
 /**
