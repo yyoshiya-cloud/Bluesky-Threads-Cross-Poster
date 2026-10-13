@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { execSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import crypto from 'crypto';
 import net from 'net';
@@ -1558,7 +1559,6 @@ async function startServer() {
       let buildSuccess = false;
       if (autoBuild) {
         try {
-          const { execSync } = require('child_process');
           buildOutput = execSync('npm run build', {
             cwd: process.cwd(),
             encoding: 'utf-8',
@@ -1592,7 +1592,6 @@ async function startServer() {
   app.post('/api/admin/build', requireAdminAuth, express.json(), (_req, res) => {
     try {
       const todayJst = formatDateJstYmd(new Date());
-      const { execSync } = require('child_process');
       const buildOutput = execSync('npm run build', {
         cwd: process.cwd(),
         encoding: 'utf-8',
