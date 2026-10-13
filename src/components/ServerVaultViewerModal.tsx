@@ -43,6 +43,7 @@ interface ServerVaultViewerModalProps {
   isThreadsLoggedIn?: boolean;
   isDemoMode?: boolean;
   isModal?: boolean;
+  isPanel?: boolean;
 }
 
 export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
@@ -53,6 +54,7 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
   isThreadsLoggedIn = false,
   isDemoMode = false,
   isModal = false,
+  isPanel = false,
 }) => {
   const [serverVault, setServerVault] = useState<SavedAccountVault | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -305,14 +307,14 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-400' : ''}`} />
           </button>
+          {/* 画面切替／閉じるボタン (右上の✕ボタンは削除) */}
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition cursor-pointer flex items-center justify-center shrink-0"
-            aria-label="閉じる"
-            title="閉じる (Esc)"
+            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            title="投稿画面へ戻る"
           >
-            <X className="w-5 h-5" />
+            <span>{isPanel ? '← 投稿画面へ' : '← 閉じる'}</span>
           </button>
         </div>
       </div>
@@ -889,6 +891,19 @@ export const ServerVaultViewerModal: React.FC<ServerVaultViewerModalProps> = ({
         </div>
     </>
   );
+
+  if (isPanel) {
+    return (
+      <div
+        id="server-vault-panel"
+        role="region"
+        aria-labelledby="server-vault-drawer-title"
+        className="bg-[#0B0F19] border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col w-full max-w-5xl mx-auto overflow-hidden text-slate-200 relative animate-in fade-in duration-150"
+      >
+        {innerContent}
+      </div>
+    );
+  }
 
   if (isModal) {
     if (!isOpen) return null;

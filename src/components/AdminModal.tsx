@@ -5,7 +5,6 @@ import {
   KeyRound,
   RefreshCw,
   Tag,
-  X,
   Check,
   Lock,
   Unlock,
@@ -265,17 +264,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               </p>
             </div>
           </div>
-
-          <button
-            id="close-admin-modal-button"
-            type="button"
-            onClick={onClose}
-            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition cursor-pointer flex items-center justify-center shrink-0"
-            title="閉じる (Esc)"
-            aria-label="閉じる"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* モーダルコンテンツ */}

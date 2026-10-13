@@ -22,6 +22,11 @@ export type AppMachineState =
   | 'TERMINATED';      // アプリケーション終了画面
 
 /**
+ * メイン画面ビュー識別子（タブ切り替え: 投稿画面 / 履歴 / 設定 / サーバー登録情報）
+ */
+export type AppViewId = 'composer' | 'history' | 'settings' | 'serverVault';
+
+/**
  * モーダルの識別子
  */
 export type ModalType =
@@ -41,6 +46,9 @@ export type ModalType =
  * Chain of Responsibility でバブリングされるイベント群
  */
 export type AppEvent =
+  // 画面・ビュー切り替え
+  | { type: 'SWITCH_VIEW'; payload: AppViewId }
+
   // テキスト・入力系
   | { type: 'UPDATE_TEXT'; payload: string }
   | { type: 'UPDATE_BLUESKY_TEXT'; payload: string }
@@ -175,6 +183,9 @@ export interface RootViewModel {
   // ステートマシン状態
   machineState: AppMachineState;
   isAppTerminated: boolean;
+
+  // アクティブビュー (タブ切り替え: 投稿画面 / 履歴 / 設定)
+  activeView: AppViewId;
 
   // テーマ
   theme: ThemeAccentId;

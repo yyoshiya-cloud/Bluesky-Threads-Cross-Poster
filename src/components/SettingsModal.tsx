@@ -73,6 +73,7 @@ interface SettingsModalProps {
   isAdminMode?: boolean;
   onNotify?: (toast: { type: 'success' | 'error' | 'warning' | 'info'; title: string; message: string }) => void;
   isModal?: boolean;
+  isPanel?: boolean;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -90,6 +91,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onOpenAdminModal,
   isAdminMode = false,
   isModal = false,
+  isPanel = false,
 }) => {
   const [form, setForm] = useState<ApiCredentials>({ ...credentials });
   const [vault, setVault] = useState<SavedAccountVault>(() => getSavedAccountVault());
@@ -483,10 +485,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const innerContent = (
     <>
       {/* モーダルヘッダー */}
-      <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-950/80 shrink-0">
+      <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3 border-b border-slate-800 bg-slate-950/80 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-accent-subtle text-accent-light border border-accent shadow-sm flex items-center justify-center shrink-0">
-              <Settings className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-accent-subtle text-accent-light border border-accent shadow-sm flex items-center justify-center shrink-0">
+              <Settings className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -509,7 +511,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClose();
                   onOpenServerVault();
                 }}
-                className="px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 text-emerald-300 hover:text-white border border-emerald-800/80 transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-xs"
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 text-emerald-300 hover:text-white border border-emerald-800/80 transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-xs"
                 title="サーバー登録情報（他PC移行用ダウンロード・アップロード）を開く"
               >
                 <Database className="w-3.5 h-3.5 text-emerald-400" />
@@ -530,7 +532,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     setIsCommLogModalOpen(true);
                   }
                 }}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-xs"
+                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-xs"
                 title="通信ログ（接続試行・成功・エラー経緯）を画面に表示"
               >
                 <FileText className="w-3.5 h-3.5 text-purple-400" />
@@ -543,21 +545,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </button>
             )}
 
+            {/* 画面切替／閉じるボタン (右上の✕ボタンは削除し、明確なボタンで閉じる) */}
             <button
-              id="close-settings-modal-button"
+              id="settings-back-to-composer-button"
               type="button"
               onClick={onClose}
-              className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition cursor-pointer flex items-center justify-center shrink-0"
-              title="閉じる (Esc)"
-              aria-label="閉じる"
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title="投稿画面へ戻る"
             >
-              <CloseIcon className="w-5 h-5" />
+              <span>{isPanel ? '← 投稿画面へ' : '← 閉じる'}</span>
             </button>
           </div>
         </div>
 
         {/* プラットフォーム切り替えタブ (横スクロール無しで全タブを表示) */}
-        <div className="flex flex-wrap border-b border-slate-800 bg-slate-950/40 px-3 sm:px-4 pt-2 shrink-0 gap-x-0.5 gap-y-1">
+        <div className="flex flex-wrap border-b border-slate-800 bg-slate-950/40 px-3 sm:px-4 pt-1.5 shrink-0 gap-x-0.5 gap-y-1">
           <button
             type="button"
             onClick={() => setPlatformTab('bluesky')}
@@ -649,10 +651,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* フォーム本体 */}
-        <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+        <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3 scrollbar-thin">
           {/* テスト結果メッセージ (Bluesky / Threadsタブのみ表示) */}
           {(platformTab === 'bluesky' || platformTab === 'threads') && testResult && (
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-700/80 text-xs text-slate-200 flex flex-wrap items-center justify-between gap-2 animate-in fade-in duration-200">
+            <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-700/80 text-xs text-slate-200 flex flex-wrap items-center justify-between gap-2 animate-in fade-in duration-200">
               <span className="flex-1 min-w-[200px]">{testResult}</span>
               <div className="flex items-center gap-2 shrink-0">
                 {!isEffectiveDemoMode && (testResult.includes('❌') || testResult.includes('⚠️') || testResult.includes('失敗')) && (
@@ -665,7 +667,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         setIsCommLogModalOpen(true);
                       }
                     }}
-                    className="px-2.5 py-1 rounded bg-purple-950/70 hover:bg-purple-900 text-purple-200 border border-purple-800/80 text-[11px] font-medium flex items-center gap-1 transition cursor-pointer"
+                    className="px-2 py-1 rounded bg-purple-950/70 hover:bg-purple-900 text-purple-200 border border-purple-800/80 text-[11px] font-medium flex items-center gap-1 transition cursor-pointer"
                     title="通信ログを画面に表示"
                   >
                     <FileText className="w-3 h-3 text-purple-400" />
@@ -687,10 +689,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* 🦋 BLUESKY タブ */}
           {/* ======================================================== */}
           {platformTab === 'bluesky' && (
-            <div className="space-y-5">
+            <div className="space-y-3">
               {/* DEMOモード保護ロックバナー */}
               {isEffectiveDemoMode && (
-                <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs flex items-center gap-2.5 shadow-xs">
+                <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs flex items-center gap-2.5 shadow-xs">
                   <Shield className="w-4 h-4 text-amber-400 shrink-0" />
                   <div>
                     <span className="font-bold text-amber-300">DEMOモード制限適用中</span>
@@ -701,120 +703,106 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              {/* Bluesky 連携状態ステータスバー */}
-              <div className="flex flex-wrap items-center justify-between p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#0085ff]/10 text-[#0085ff] flex items-center justify-center font-bold text-base border border-[#0085ff]/30 shadow-inner">
+              {/* Bluesky 連携状態・記憶アカウント 統合ステータスバー (画面に収めるため高さを最適化) */}
+              <div className="flex flex-wrap items-center justify-between p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-[#0085ff]/10 text-[#0085ff] flex items-center justify-center font-bold text-base border border-[#0085ff]/30 shadow-inner shrink-0">
                     🦋
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-xs font-bold text-slate-200">Bluesky (AT Protocol) 連携</h3>
                       {isBlueskyLoggedIn ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          連携済み
-                        </span>
+                        <>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            連携済み
+                          </span>
+                          <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/40 flex items-center gap-1">
+                            <Shield className="w-2.5 h-2.5" />
+                            AES-256 暗号化保管
+                          </span>
+                        </>
                       ) : (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
                           未接続
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      {isBlueskyLoggedIn
-                        ? `ログイン中: @${form.blueskyHandle || form.blueskyIdentifier}`
-                        : 'アプリパスワードを使ってBlueskyアカウントに安全に接続します'}
+                    <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                      {isBlueskyLoggedIn ? (
+                        <>
+                          ログイン中: <span className="text-sky-400 font-mono font-medium">@{form.blueskyHandle || form.blueskyIdentifier}</span>
+                          {vault.bluesky?.savedAt && (
+                            <span className="text-[10px] text-slate-500 ml-2 font-mono">({formatSavedDate(vault.bluesky.savedAt)} 保存)</span>
+                          )}
+                        </>
+                      ) : (
+                        'アプリパスワードを使ってBlueskyアカウントに安全に接続します'
+                      )}
                     </p>
                   </div>
                 </div>
 
-                {isBlueskyLoggedIn && !isEffectiveDemoMode && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onLogout) onLogout('bluesky');
-                      setForm((prev) => ({
-                        ...prev,
-                        blueskyConnected: false,
-                        blueskyIdentifier: '',
-                        blueskyAppPassword: '',
-                        blueskyHandle: '',
-                        blueskyDid: '',
-                        blueskyAccessJwt: '',
-                      }));
-                      recordCommInfo({
-                        platform: 'Bluesky',
-                        action: 'Blueskyログアウト',
-                        message: 'Blueskyアカウントからログアウトしました（接続解除）',
-                      });
-                      setTestResult('Blueskyからログアウトしました。（※保存されたアカウント記憶からいつでも再ログイン可能です）');
-                    }}
-                    className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 px-3 py-1.5 rounded-lg border border-rose-900/40 transition cursor-pointer flex items-center gap-1.5"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Blueskyからログアウト
-                  </button>
-                )}
-              </div>
-
-              {/* 保存済みBlueskyアカウント表示カード (実用モード時のみ表示) */}
-              {!isEffectiveDemoMode && vault.bluesky && (
-                <div className="p-3.5 rounded-xl bg-blue-950/20 border border-blue-800/40 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <BookmarkCheck className="w-4 h-4 text-[#0085ff] shrink-0" />
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-slate-200">記憶されたアカウント</span>
-                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40 flex items-center gap-1">
-                          <Shield className="w-2.5 h-2.5" />
-                          AES-256 暗号化
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          {formatSavedDate(vault.bluesky.savedAt)} 保存
-                        </span>
-                      </div>
-                      <p className="text-xs text-sky-400 font-mono mt-0.5">@{vault.bluesky.handle}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 ml-auto">
-                    {isBlueskyLoggedIn && (form.blueskyHandle === vault.bluesky.handle || form.blueskyIdentifier === vault.bluesky.identifier) ? (
-                      <span className="px-2.5 py-1.5 rounded-lg bg-emerald-950/70 border border-emerald-800/60 text-emerald-400 text-xs font-semibold flex items-center gap-1.5 shadow-xs">
-                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                        現在ログイン中
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={isEffectiveDemoMode}
-                        onClick={handleRestoreBluesky}
-                        className="px-2.5 py-1.5 rounded-lg bg-[#0085ff]/20 hover:bg-[#0085ff]/30 disabled:opacity-40 disabled:cursor-not-allowed text-[#0085ff] border border-[#0085ff]/40 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                        title={isEffectiveDemoMode ? 'DEMOモード中は再ログインできません' : '記憶されたアカウント情報で再ログインします（AES-256復号）'}
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        このアカウントで再ログイン
-                      </button>
-                    )}
+                <div className="flex items-center gap-2 ml-auto shrink-0">
+                  {!isBlueskyLoggedIn && !isEffectiveDemoMode && vault.bluesky && (
                     <button
                       type="button"
-                      disabled={isEffectiveDemoMode}
+                      onClick={handleRestoreBluesky}
+                      className="px-2.5 py-1 rounded-lg bg-[#0085ff]/20 hover:bg-[#0085ff]/30 text-[#0085ff] border border-[#0085ff]/40 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                      title="記憶されたアカウント情報で再ログインします（AES-256復号）"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      再ログイン
+                    </button>
+                  )}
+                  {!isEffectiveDemoMode && vault.bluesky && (
+                    <button
+                      type="button"
                       onClick={() => handleDeleteVaultAccount('bluesky')}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-                      title={isEffectiveDemoMode ? 'DEMOモード中は削除できません' : '保存されたBlueskyアカウント記憶を削除'}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition cursor-pointer"
+                      title="保存されたBlueskyアカウント記憶を削除"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
-                  </div>
+                  )}
+                  {isBlueskyLoggedIn && !isEffectiveDemoMode && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onLogout) onLogout('bluesky');
+                        setForm((prev) => ({
+                          ...prev,
+                          blueskyConnected: false,
+                          blueskyIdentifier: '',
+                          blueskyAppPassword: '',
+                          blueskyHandle: '',
+                          blueskyDid: '',
+                          blueskyAccessJwt: '',
+                        }));
+                        recordCommInfo({
+                          platform: 'Bluesky',
+                          action: 'Blueskyログアウト',
+                          message: 'Blueskyアカウントからログアウトしました（接続解除）',
+                        });
+                        setTestResult('Blueskyからログアウトしました。（※保存されたアカウント記憶からいつでも再ログイン可能です）');
+                      }}
+                      className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 px-2.5 py-1 rounded-lg border border-rose-900/40 transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      ログアウト
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
 
-              {/* Bluesky 認証入力カード */}
-              <div className="bg-slate-950/50 rounded-xl p-4 sm:p-5 border border-slate-800/80 space-y-4">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800/60">
+              {/* Bluesky 認証入力カード (2列グリッドで画面に収める) */}
+              <div className="bg-slate-950/50 rounded-xl p-3 sm:p-3.5 border border-slate-800/80 space-y-2.5">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/60">
                   <div className="flex items-center gap-2">
-                    <Key className="w-4 h-4 text-[#0085ff]" />
+                    <Key className="w-3.5 h-3.5 text-[#0085ff]" />
                     <span className="text-xs font-bold text-slate-200">アカウント接続情報</span>
-                    <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40 flex items-center gap-1">
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/40 flex items-center gap-1">
                       <Shield className="w-2.5 h-2.5" />
                       AES-256 暗号化保管
                     </span>
@@ -832,9 +820,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {/* ハンドル / メール */}
-                  <div data-context-target="true" className="space-y-1.5">
+                  <div data-context-target="true" className="space-y-1">
                     <label className="block text-xs font-medium text-slate-300">
                       Bluesky ハンドル / ユーザー名 <span className="text-rose-400">*</span>
                     </label>
@@ -846,18 +834,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         readOnly={isEffectiveDemoMode}
                         value={form.blueskyIdentifier || ''}
                         onChange={(e) => setForm({ ...form, blueskyIdentifier: e.target.value })}
-                        placeholder="例: yourname.bsky.social または customdomain.com"
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-900/60"
+                        placeholder="例: yourname.bsky.social"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff] disabled:opacity-60 disabled:cursor-not-allowed"
                         title={isEffectiveDemoMode ? 'DEMOモード中はアカウント情報の変更はできません' : undefined}
                       />
                     </div>
                     <p className="text-[10px] text-slate-400">
-                      Blueskyのアカウント名（@は不要、末尾の.bsky.socialまで入力）
+                      末尾の .bsky.social まで入力（@は不要）
                     </p>
                   </div>
 
                   {/* アプリパスワード */}
-                  <div data-context-target="true" className="space-y-1.5">
+                  <div data-context-target="true" className="space-y-1">
                     <label className="block text-xs font-medium text-slate-300">
                       アプリパスワード (App Password) <span className="text-rose-400">*</span>
                     </label>
@@ -870,7 +858,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         value={form.blueskyAppPassword || ''}
                         onChange={(e) => setForm({ ...form, blueskyAppPassword: e.target.value })}
                         placeholder="例: abcd-efgh-ijkl-mnop"
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-900/60"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-9 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-[#0085ff] focus:ring-1 focus:ring-[#0085ff] disabled:opacity-60 disabled:cursor-not-allowed"
                         title={isEffectiveDemoMode ? 'DEMOモード中はアプリパスワードの変更はできません' : undefined}
                       />
                       <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -879,95 +867,87 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           type="button"
                           onClick={() => setShowBlueskyPassword(!showBlueskyPassword)}
                           className="p-1 text-slate-400 hover:text-slate-200 rounded hover:bg-slate-800 transition cursor-pointer"
-                          title={showBlueskyPassword ? "パスワードを非表示" : "パスワードを表示（覗き見）"}
+                          title={showBlueskyPassword ? "パスワードを非表示" : "パスワードを表示"}
                         >
                           {showBlueskyPassword ? <EyeOff className="w-3.5 h-3.5 text-sky-400" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
                       </div>
                     </div>
                     <p className="text-[10px] text-slate-400">
-                      Bluesky設定画面で発行された専用アプリパスワード（AES-256-GCM暗号化保管）
+                      発行された専用アプリパスワード（AES-256保管）
                     </p>
                   </div>
-
-                  {/* 高度な設定 (カスタムPDS / Service URL) */}
-                  <div data-context-target="true">
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvancedPds(!showAdvancedPds)}
-                      className="text-[11px] text-slate-400 hover:text-slate-300 flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>{showAdvancedPds ? '▼' : '▶'} PDSサービスURLのカスタム設定 (通常は変更不要)</span>
-                    </button>
-                    {showAdvancedPds && (
-                      <div className="mt-2 pl-3 border-l-2 border-slate-800 space-y-1">
-                        <label className="block text-[11px] text-slate-400">PDS Service URL</label>
-                        <input
-                          type="text"
-                          disabled={isEffectiveDemoMode}
-                          readOnly={isEffectiveDemoMode}
-                          value={form.blueskyServiceUrl || 'https://bsky.social'}
-                          onChange={(e) => setForm({ ...form, blueskyServiceUrl: e.target.value })}
-                          placeholder="https://bsky.social"
-                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 font-mono disabled:opacity-60 disabled:cursor-not-allowed"
-                        />
-                        <p className="text-[10px] text-slate-500">
-                          公式PDS以外（自前ホストサーバーなど）を利用する場合のみ変更してください。
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 接続・ログインボタン */}
-                  <div className="pt-2 flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={handleBlueskyLogin}
-                      disabled={isEffectiveDemoMode || isBlueskyLoggingIn || !form.blueskyIdentifier || !form.blueskyAppPassword}
-                      className="px-4 py-2 rounded-xl bg-[#0085ff] hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-md shadow-blue-600/20"
-                      title={isEffectiveDemoMode ? 'DEMOモード中はBluesky接続変更はできません' : undefined}
-                    >
-                      {isBlueskyLoggingIn ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          認証中...
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Blueskyに接続・暗号化保存</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
                 </div>
+
+                {/* 接続ボタン & PDS展開 */}
+                <div className="pt-1 flex flex-wrap items-center justify-between gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleBlueskyLogin}
+                    disabled={isEffectiveDemoMode || isBlueskyLoggingIn || !form.blueskyIdentifier || !form.blueskyAppPassword}
+                    className="px-4 py-1.5 rounded-xl bg-[#0085ff] hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-md shadow-blue-600/20"
+                    title={isEffectiveDemoMode ? 'DEMOモード中はBluesky接続変更はできません' : undefined}
+                  >
+                    {isBlueskyLoggingIn ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        認証中...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Blueskyに接続・暗号化保存</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedPds(!showAdvancedPds)}
+                    className="text-[11px] text-slate-400 hover:text-slate-300 flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{showAdvancedPds ? '▼' : '▶'} PDSカスタムURL</span>
+                  </button>
+                </div>
+
+                {showAdvancedPds && (
+                  <div className="mt-2 pl-3 border-l-2 border-slate-800 space-y-1">
+                    <label className="block text-[11px] text-slate-400">PDS Service URL</label>
+                    <input
+                      type="text"
+                      disabled={isEffectiveDemoMode}
+                      readOnly={isEffectiveDemoMode}
+                      value={form.blueskyServiceUrl || 'https://bsky.social'}
+                      onChange={(e) => setForm({ ...form, blueskyServiceUrl: e.target.value })}
+                      placeholder="https://bsky.social"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 font-mono disabled:opacity-60 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                )}
               </div>
 
-              {/* アプリパスワード発行手順ガイド */}
-              <div className="bg-slate-950/40 rounded-xl p-4 border border-slate-800/60 text-xs space-y-2">
-                <div className="flex items-center gap-2 text-slate-200 font-bold">
-                  <HelpCircle className="w-4 h-4 text-[#0085ff]" />
-                  <span>Blueskyのアプリパスワード（App Password）取得手順</span>
-                </div>
-                <ol className="list-decimal list-inside space-y-1 text-slate-400 text-[11px] leading-relaxed">
+              {/* アプリパスワード発行手順ガイド (アコーディオン開閉式にして画面に収める) */}
+              <details className="group bg-slate-950/40 rounded-xl p-2.5 border border-slate-800/60 text-xs">
+                <summary className="cursor-pointer font-bold text-slate-300 flex items-center justify-between text-[11px] select-none">
+                  <div className="flex items-center gap-2">
+                    <HelpCircle className="w-3.5 h-3.5 text-[#0085ff]" />
+                    <span>Blueskyのアプリパスワード（App Password）取得手順（クリックで開閉）</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 group-open:hidden">表示する ▼</span>
+                  <span className="text-[10px] text-slate-500 hidden group-open:inline">閉じる ▲</span>
+                </summary>
+                <ol className="list-decimal list-inside space-y-1 text-slate-400 text-[11px] leading-relaxed pt-2 mt-2 border-t border-slate-800/60">
                   <li>
                     {isEffectiveDemoMode ? (
-                      <span
-                        className="text-slate-500 inline-flex items-center gap-0.5 opacity-60 cursor-not-allowed select-none font-medium"
-                        title="DEMOモード中はBlueskyへの外部リンクは無効化されています"
-                      >
-                        <span>Bluesky (bsky.app)</span>
-                        <ExternalLink className="w-2.5 h-2.5 text-slate-500" />
-                      </span>
+                      <span className="text-slate-500 font-medium">Bluesky (bsky.app)</span>
                     ) : (
                       <a
                         href="https://bsky.app"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[#0085ff] hover:underline inline-flex items-center gap-0.5 font-medium"
+                        className="text-[#0085ff] hover:underline font-medium"
                       >
-                        <span>Bluesky (bsky.app)</span>
-                        <ExternalLink className="w-2.5 h-2.5" />
+                        Bluesky (bsky.app)
                       </a>
                     )} にログインします。
                   </li>
@@ -976,7 +956,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <li>「<strong>アプリパスワードを追加</strong>」を押し、名前に「<code>CrossPost Studio</code>」と入力して生成します。</li>
                   <li>画面に表示された <code>xxxx-xxxx-xxxx-xxxx</code> 形式のパスワードをコピーし、上記フォームに貼り付けて「接続」を押してください。</li>
                 </ol>
-              </div>
+              </details>
             </div>
           )}
 
@@ -998,160 +978,121 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              {/* Threads 連携状態ステータスバー */}
-              <div className="flex flex-wrap items-center justify-between p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-950/80 text-purple-400 flex items-center justify-center font-bold text-base border border-purple-800/40 shadow-inner">
-                    🌀
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xs font-bold text-slate-200">Threads API 連携</h3>
-                      {isThreadsLoggedIn ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          連携済み
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
-                          未接続
-                        </span>
-                      )}
+              {/* Threads 連携状態・記憶キー 統合ステータスバー (画面に収めるため高さを最適化) */}
+              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-purple-950/80 text-purple-400 flex items-center justify-center font-bold text-base border border-purple-800/40 shadow-inner shrink-0">
+                      🌀
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      {isThreadsLoggedIn
-                        ? `ログイン中: ${form.threadsUsername || form.threadsUserId}`
-                        : 'Threads (Meta Graph API) のアクセストークンを設定します'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {isThreadsLoggedIn && !isEffectiveDemoMode && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onLogout) onLogout('threads');
-                        setForm((prev) => ({
-                          ...prev,
-                          threadsConnected: false,
-                          threadsUserId: '',
-                          threadsAccessToken: '',
-                          threadsUsername: '',
-                        }));
-                        recordCommInfo({
-                          platform: 'Threads',
-                          action: 'Threadsログアウト',
-                          message: 'Threadsアカウントからログアウトしました（接続解除）',
-                        });
-                        setTestResult('Threadsからログアウトしました。（※保存された認証キー記憶からいつでも再ログイン可能です）');
-                      }}
-                      className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 px-3 py-1.5 rounded-lg border border-rose-900/40 transition cursor-pointer flex items-center gap-1.5"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      Threadsからログアウト
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* アカウント確実永続化ステータスバナー */}
-              <div className="p-3.5 rounded-xl bg-purple-950/30 border border-purple-800/50 flex flex-wrap items-center justify-between gap-3 text-purple-200 text-xs">
-                <div className="flex items-center gap-2.5">
-                  <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
-                  <div>
-                    <span className="font-bold text-purple-300">Threadsアカウント情報の確実な永続化対応</span>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      アクセストークンはAES-256暗号化とサーバー保管に対応。リロードや再デプロイ後も維持されます。
-                    </p>
-                  </div>
-                </div>
-                {!isEffectiveDemoMode && vault.threads && (
-                  <button
-                    type="button"
-                    onClick={handleRestoreThreads}
-                    className="px-2.5 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 text-[11px] text-purple-200 font-medium transition shrink-0 cursor-pointer flex items-center gap-1 shadow-sm"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    保存済み認証キーを読込
-                  </button>
-                )}
-              </div>
-
-              {/* 保存済みThreadsキー表示カード (実用モード時のみ表示) */}
-              {!isEffectiveDemoMode && vault.threads && (() => {
-                const vaultExpiryInfo = calculateTokenExpiryInfo(vault.threads.tokenExpiresAt);
-                return (
-                  <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-800/40 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <BookmarkCheck className="w-4 h-4 text-purple-400 shrink-0" />
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-bold text-slate-200">記憶されたMeta Graph APIキー</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-xs font-bold text-slate-200">Threads API 連携</h3>
+                        {isThreadsLoggedIn ? (
+                          <>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" />
+                              連携済み
+                            </span>
                             <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40 flex items-center gap-1">
                               <Shield className="w-2.5 h-2.5" />
-                              AES-256 暗号化
+                              AES-256
                             </span>
-                            <span className="text-[10px] text-slate-500">
-                              {formatSavedDate(vault.threads.savedAt)} 保存
-                            </span>
-                          </div>
-                          <p className="text-xs text-purple-300 font-mono mt-0.5">
-                            {vault.threads.username || `User ID: ${vault.threads.userId}`}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 ml-auto flex-wrap">
-                        {isThreadsLoggedIn && (form.threadsUserId === vault.threads.userId || form.threadsUsername === vault.threads.username) ? (
-                          <span className="px-2.5 py-1.5 rounded-lg bg-emerald-950/70 border border-emerald-800/60 text-emerald-400 text-xs font-semibold flex items-center gap-1.5 shadow-xs">
-                            <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                            現在連携中
-                          </span>
+                          </>
                         ) : (
-                          <button
-                            type="button"
-                            disabled={isEffectiveDemoMode}
-                            onClick={handleRestoreThreads}
-                            className="px-2.5 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-40 disabled:cursor-not-allowed text-purple-300 border border-purple-500/40 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                            title={isEffectiveDemoMode ? 'DEMOモード中は再ログインできません' : '記憶された認証キーで再ログインします'}
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            このキーで再ログイン
-                          </button>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                            未接続
+                          </span>
                         )}
-                        <button
-                          type="button"
-                          disabled={isEffectiveDemoMode}
-                          onClick={() => handleDeleteVaultAccount('threads')}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-                          title={isEffectiveDemoMode ? 'DEMOモード中は削除できません' : '保存されたThreads認証キー記憶を削除'}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                        {isThreadsLoggedIn ? (
+                          <>
+                            ログイン中: <span className="text-purple-300 font-mono font-medium">{form.threadsUsername || form.threadsUserId}</span>
+                            {vault.threads?.savedAt && (
+                              <span className="text-[10px] text-slate-500 ml-2 font-mono">({formatSavedDate(vault.threads.savedAt)} 保存)</span>
+                            )}
+                          </>
+                        ) : (
+                          'Threads (Meta Graph API) のアクセストークンを設定します'
+                        )}
+                      </p>
                     </div>
+                  </div>
 
-                    {/* 有効期限 & 更新バー */}
-                    <div className="pt-2 border-t border-purple-900/40 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 ml-auto shrink-0">
+                    {!isThreadsLoggedIn && !isEffectiveDemoMode && vault.threads && (
+                      <button
+                        type="button"
+                        onClick={handleRestoreThreads}
+                        className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                        title="記憶された認証キーで再ログインします"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        再ログイン
+                      </button>
+                    )}
+                    {!isEffectiveDemoMode && vault.threads && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteVaultAccount('threads')}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition cursor-pointer"
+                        title="保存されたThreads認証キー記憶を削除"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {isThreadsLoggedIn && !isEffectiveDemoMode && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onLogout) onLogout('threads');
+                          setForm((prev) => ({
+                            ...prev,
+                            threadsConnected: false,
+                            threadsUserId: '',
+                            threadsAccessToken: '',
+                            threadsUsername: '',
+                          }));
+                          recordCommInfo({
+                            platform: 'Threads',
+                            action: 'Threadsログアウト',
+                            message: 'Threadsアカウントからログアウトしました（接続解除）',
+                          });
+                          setTestResult('Threadsからログアウトしました。（※保存された認証キー記憶からいつでも再ログイン可能です）');
+                        }}
+                        className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 px-2.5 py-1 rounded-lg border border-rose-900/40 transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        ログアウト
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 有効期限バー (保存キーが存在する場合) */}
+                {!isEffectiveDemoMode && vault.threads && (() => {
+                  const vaultExpiryInfo = calculateTokenExpiryInfo(vault.threads.tokenExpiresAt);
+                  return (
+                    <div className="pt-1.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-purple-400" />
-                        <span className="text-[11px] text-slate-300">有効期限:</span>
+                        <Calendar className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        <span className="text-[11px] text-slate-400">有効期限:</span>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 ${vaultExpiryInfo.badgeColor.bg} ${vaultExpiryInfo.badgeColor.text} ${vaultExpiryInfo.badgeColor.border}`}
+                          className={`px-2 py-0.2 rounded-full text-[10px] font-bold border flex items-center gap-1 ${vaultExpiryInfo.badgeColor.bg} ${vaultExpiryInfo.badgeColor.text} ${vaultExpiryInfo.badgeColor.border}`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full ${vaultExpiryInfo.badgeColor.dot}`} />
                           {vaultExpiryInfo.formattedRelative}
                         </span>
-                        <span className="text-[10px] text-slate-400">({vaultExpiryInfo.formattedDate})</span>
+                        <span className="text-[10px] text-slate-500 font-mono">({vaultExpiryInfo.formattedDate})</span>
                       </div>
 
                       <button
                         type="button"
                         onClick={handleThreadsTokenRefresh}
                         disabled={isEffectiveDemoMode || isRefreshingThreadsToken}
-                        className="text-[11px] font-semibold text-purple-300 hover:text-purple-200 hover:bg-purple-900/40 px-2.5 py-1 rounded-lg border border-purple-700/50 transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={isEffectiveDemoMode ? 'DEMOモード中は更新できません' : 'Meta Graph APIを呼び出してLong-Lived Tokenの有効期限を60日間延長します'}
+                        className="text-[10px] font-semibold text-purple-300 hover:text-purple-200 hover:bg-purple-900/40 px-2 py-0.5 rounded border border-purple-700/50 transition cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                        title="Meta Graph APIを呼び出してLong-Lived Tokenの有効期限を60日間延長します"
                       >
                         {isRefreshingThreadsToken ? (
                           <Loader2 className="w-3 h-3 animate-spin text-purple-400" />
@@ -1161,17 +1102,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span>有効期限を更新</span>
                       </button>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
+              </div>
 
-              {/* Threads フォーム */}
-              <div className="bg-slate-950/50 rounded-xl p-4 sm:p-5 border border-slate-800/80 space-y-4">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800/60">
+              {/* Threads フォーム (2列グリッドで高さを抑制) */}
+              <div className="bg-slate-950/50 rounded-xl p-3 sm:p-3.5 border border-slate-800/80 space-y-2.5">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/60">
                   <div className="flex items-center gap-2">
-                    <Key className="w-4 h-4 text-purple-400" />
+                    <Key className="w-3.5 h-3.5 text-purple-400" />
                     <span className="text-xs font-bold text-slate-200">Meta Graph API 認証キー</span>
-                    <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40 flex items-center gap-1">
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/40 flex items-center gap-1">
                       <Shield className="w-2.5 h-2.5" />
                       AES-256 暗号化保管
                     </span>
@@ -1189,8 +1130,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
-                <div className="space-y-4">
-                  <div data-context-target="true" className="space-y-1.5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div data-context-target="true" className="space-y-1">
                     <label className="block text-xs font-medium text-slate-300">
                       Threads User ID (または "me")
                     </label>
@@ -1203,15 +1144,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         value={form.threadsUserId || ''}
                         onChange={(e) => setForm({ ...form, threadsUserId: e.target.value })}
                         placeholder="me または 17841400000000000"
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-900/60"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-60 disabled:cursor-not-allowed"
                         title={isEffectiveDemoMode ? 'DEMOモード中はアカウント情報の変更はできません' : undefined}
                       />
                     </div>
                   </div>
 
-                  <div data-context-target="true" className="space-y-1.5">
+                  <div data-context-target="true" className="space-y-1">
                     <label className="block text-xs font-medium text-slate-300">
-                      Threads User Access Token (Long-Lived Token) <span className="text-rose-400">*</span>
+                      Threads User Access Token (Long-Lived) <span className="text-rose-400">*</span>
                     </label>
                     <div className="relative flex items-center">
                       <input
@@ -1228,7 +1169,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           })
                         }
                         placeholder="TH..."
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-900/60"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-9 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-60 disabled:cursor-not-allowed"
                         title={isEffectiveDemoMode ? 'DEMOモード中はアクセストークンの変更はできません' : undefined}
                       />
                       <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -1237,96 +1178,84 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           type="button"
                           onClick={() => setShowThreadsToken(!showThreadsToken)}
                           className="p-1 text-slate-400 hover:text-slate-200 rounded hover:bg-slate-800 transition cursor-pointer"
-                          title={showThreadsToken ? "アクセストークンを非表示" : "アクセストークンを表示（覗き見）"}
+                          title={showThreadsToken ? "アクセストークンを非表示" : "アクセストークンを表示"}
                         >
                           {showThreadsToken ? <EyeOff className="w-3.5 h-3.5 text-purple-400" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
                       </div>
                     </div>
-                    <p className="text-[10px] text-slate-400">
-                      Meta for Developersで発行されたThreadsアクセストークン（AES-256-GCM暗号化保管）
-                    </p>
                   </div>
+                </div>
 
-                  <div data-context-target="true" className="space-y-1.5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 items-end">
+                  <div data-context-target="true" className="space-y-1">
                     <label className="block text-xs font-medium text-slate-300">
                       表示用Threadsアカウント名 (任意)
                     </label>
-                    <div className="relative flex items-center">
-                      <input
-                        id="settings-threads-username-input"
-                        type="text"
-                        disabled={isEffectiveDemoMode}
-                        readOnly={isEffectiveDemoMode}
-                        value={form.threadsUsername || ''}
-                        onChange={(e) => setForm({ ...form, threadsUsername: e.target.value })}
-                        placeholder="@your_threads_id"
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-900/60"
-                        title={isEffectiveDemoMode ? 'DEMOモード中はアカウント名の変更はできません' : undefined}
-                      />
-                    </div>
+                    <input
+                      id="settings-threads-username-input"
+                      type="text"
+                      disabled={isEffectiveDemoMode}
+                      readOnly={isEffectiveDemoMode}
+                      value={form.threadsUsername || ''}
+                      onChange={(e) => setForm({ ...form, threadsUsername: e.target.value })}
+                      placeholder="@your_threads_id"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono shadow-inner focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                      title={isEffectiveDemoMode ? 'DEMOモード中はアカウント名の変更はできません' : undefined}
+                    />
                   </div>
 
-                  <div className="pt-2 space-y-2">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        id="connect-threads-button"
-                        type="button"
-                        onClick={handleThreadsVerify}
-                        disabled={isEffectiveDemoMode || isThreadsVerifying || !form.threadsAccessToken}
-                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs transition flex items-center gap-2 cursor-pointer shadow-md shadow-purple-950/50"
-                        title={isEffectiveDemoMode ? 'DEMOモード中はThreads接続変更はできません' : 'Threads (Meta Graph API) に接続し、アカウント連携と暗号化保管を行います'}
-                      >
-                        {isThreadsVerifying ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Threadsに接続中...</span>
-                          </>
-                        ) : (
-                          <>
-                            <LinkIcon className="w-3.5 h-3.5 text-purple-200" />
-                            <span>Threadsに接続する</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
-                      <span>※ 「Threadsに接続する」を押すとアクセストークンが検証され、AES-256で安全に保管されます。</span>
-                      {isEffectiveDemoMode ? (
-                        <span
-                          className="text-slate-500 flex items-center gap-1 shrink-0 ml-2 opacity-50 cursor-not-allowed select-none"
-                          title="DEMOモード中はMeta開発者ポータルへのリンクは無効化されています"
-                        >
-                          <span>Meta開発者ポータル</span>
-                          <ExternalLink className="w-3 h-3 text-slate-500" />
-                        </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      id="connect-threads-button"
+                      type="button"
+                      onClick={handleThreadsVerify}
+                      disabled={isEffectiveDemoMode || isThreadsVerifying || !form.threadsAccessToken}
+                      className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-purple-950/40"
+                      title={isEffectiveDemoMode ? 'DEMOモード中はThreads接続変更はできません' : 'Threads (Meta Graph API) に接続し、アカウント連携と暗号化保管を行います'}
+                    >
+                      {isThreadsVerifying ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>接続中...</span>
+                        </>
                       ) : (
-                        <a
-                          href="https://developers.facebook.com/apps"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-purple-400 hover:text-purple-300 underline flex items-center gap-1 shrink-0 ml-2"
-                        >
-                          <span>Meta開発者ポータル</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
+                        <>
+                          <LinkIcon className="w-3.5 h-3.5 text-purple-200" />
+                          <span>Threadsに接続・暗号化保存</span>
+                        </>
                       )}
-                    </div>
+                    </button>
+
+                    {!isEffectiveDemoMode && (
+                      <a
+                        href="https://developers.facebook.com/apps"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-purple-400 hover:text-purple-300 underline flex items-center gap-1"
+                      >
+                        <span>Meta開発者ポータル</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Threads ガイド */}
-              <div className="bg-slate-950/40 rounded-xl p-4 border border-slate-800/60 text-xs space-y-2">
-                <div className="flex items-center gap-2 text-slate-200 font-bold">
-                  <HelpCircle className="w-4 h-4 text-purple-400" />
-                  <span>Threads API トークン取得の概要</span>
-                </div>
-                <p className="text-slate-400 text-[11px] leading-relaxed">
-                  Meta for Developers にて Threads App を登録後、<code>threads_basic</code>, <code>threads_content_publish</code> スコープを付与したユーザーアクセストークンを生成してください。
+              {/* Threads ガイド (アコーディオン開閉式にして画面に収める) */}
+              <details className="group bg-slate-950/40 rounded-xl p-2.5 border border-slate-800/60 text-xs">
+                <summary className="cursor-pointer font-bold text-slate-300 flex items-center justify-between text-[11px] select-none">
+                  <div className="flex items-center gap-2">
+                    <HelpCircle className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Threads API トークン取得の概要手順（クリックで開閉）</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 group-open:hidden">表示する ▼</span>
+                  <span className="text-[10px] text-slate-500 hidden group-open:inline">閉じる ▲</span>
+                </summary>
+                <p className="text-slate-400 text-[11px] leading-relaxed pt-2 mt-2 border-t border-slate-800/60">
+                  Meta for Developers にて Threads App を登録後、<code>threads_basic</code>, <code>threads_content_publish</code> スコープを付与したユーザーアクセストークン（Long-Lived Token）を生成し、上記フォームに入力してください。
                 </p>
-              </div>
+              </details>
             </div>
           )}
 
@@ -1647,6 +1576,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         />
     </>
   );
+
+  if (isPanel) {
+    return (
+      <div
+        id="settings-panel"
+        role="region"
+        aria-label="Bluesky & Threads 設定メニュー"
+        className="bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col w-full max-w-5xl mx-auto overflow-hidden text-slate-200 relative animate-in fade-in duration-150"
+      >
+        {innerContent}
+      </div>
+    );
+  }
 
   if (isModal) {
     if (!isOpen) return null;

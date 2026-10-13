@@ -3,6 +3,7 @@ import {
   AppEvent,
   RootViewModel,
   ModalType,
+  AppViewId,
 } from '../types';
 import { IMediatorArbitrator } from '../chain/MediatorTerminalHandler';
 import {
@@ -76,6 +77,9 @@ export class AppMediator implements IMediatorArbitrator {
   // ステートマシンの現在状態
   private machineState: AppMachineState = 'READY';
   private isAppTerminated: boolean = false;
+
+  // アクティブビュー (タブ切り替え: 投稿画面 / 履歴 / 設定)
+  private activeView: AppViewId = 'composer';
 
   // テーマ
   private theme: ThemeAccentId = getSavedThemeAccent();
@@ -265,6 +269,7 @@ export class AppMediator implements IMediatorArbitrator {
     return {
       machineState: this.machineState,
       isAppTerminated: this.isAppTerminated,
+      activeView: this.activeView,
       theme: this.theme,
       text: this.text,
       blueskyText: this.blueskyText,
@@ -322,6 +327,18 @@ export class AppMediator implements IMediatorArbitrator {
 
     // 2. イベント種別ごとのステートマシン遷移と調停
     switch (event.type) {
+      case 'SWITCH_VIEW':
+        this.activeView = event.payload;
+        if (event.payload === 'history') {
+          this.modals.history = false;
+        } else if (event.payload === 'settings') {
+          this.modals.settings = false;
+        } else if (event.payload === 'serverVault') {
+          this.modals.serverVault = false;
+        }
+        this.notifyListeners();
+        break;
+
       case 'UPDATE_TEXT':
         this.text = event.payload;
         this.scheduleDraftSave();
@@ -445,6 +462,15 @@ export class AppMediator implements IMediatorArbitrator {
         break;
 
       case 'TOGGLE_DEMO_MODE':
+        if (
+          this.activeView !== 'composer' ||
+          this.modals.settings ||
+          this.modals.serverVault ||
+          this.modals.history
+        ) {
+          // 履歴、設定、サーバー登録情報画面の時はモード変更処理を無効にする
+          return;
+        }
         this.handleToggleDemoMode();
         break;
 
@@ -1025,12 +1051,30 @@ export class AppMediator implements IMediatorArbitrator {
         break;
 
       case 'OPEN_MODAL':
-        this.modals[event.payload] = true;
+        if (event.payload === 'history') {
+          this.activeView = 'history';
+          this.modals.history = false;
+        } else if (event.payload === 'settings') {
+          this.activeView = 'settings';
+          this.modals.settings = false;
+        } else if (event.payload === 'serverVault') {
+          this.activeView = 'serverVault';
+          this.modals.serverVault = false;
+        } else {
+          this.modals[event.payload] = true;
+        }
         this.notifyListeners();
         break;
 
       case 'CLOSE_MODAL':
         this.modals[event.payload] = false;
+        if (event.payload === 'history' && this.activeView === 'history') {
+          this.activeView = 'composer';
+        } else if (event.payload === 'settings' && this.activeView === 'settings') {
+          this.activeView = 'composer';
+        } else if (event.payload === 'serverVault' && this.activeView === 'serverVault') {
+          this.activeView = 'composer';
+        }
         if (event.payload === 'posting') {
           this.machineState = 'READY';
         }

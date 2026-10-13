@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ApiCredentials, ThemeAccentId } from '../types';
-import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3, Info, Database, ShieldAlert, KeyRound, Lock, Unlock, Smartphone } from 'lucide-react';
+import { AppViewId } from '../core/types';
+import { Settings, History, LogOut, RotateCcw, Clock, BookOpen, Sparkles, Power, BarChart3, Info, Database, KeyRound, Lock, Unlock, Smartphone, PenSquare } from 'lucide-react';
 import { hasSavedAccountInVault } from '../utils/accountVault';
 import { calculateTokenExpiryInfo } from '../utils/tokenExpiry';
-import { ThemeSelector } from './ThemeSelector';
 import { getModeSecurityConfig } from '../utils/modeSecurity';
 import { getAppVersion, getModeSwitchClickCount, syncVersionWithServer } from '../utils/adminConfig';
 
@@ -35,6 +35,8 @@ interface HeaderProps {
   onDeactivateAdminMode?: () => void;
   onToggleViewMode?: () => void;
   isMobileUserAgent?: boolean;
+  activeView?: AppViewId;
+  onSwitchView?: (view: AppViewId) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -65,6 +67,8 @@ export const Header: React.FC<HeaderProps> = ({
   onDeactivateAdminMode,
   onToggleViewMode,
   isMobileUserAgent = false,
+  activeView = 'composer',
+  onSwitchView,
 }) => {
   const [showQuickLogout, setShowQuickLogout] = useState(false);
   const [displayVersion, setDisplayVersion] = useState<string>(getAppVersion());
@@ -90,6 +94,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   // パスワード設定（オン/オフ）に応じたモード切替トリガー
   const triggerModeSwitch = () => {
+    // 履歴、設定、サーバー登録情報画面の時はモード変更処理を無効にする
+    if (isPanelLocked) return;
+
     // ライブモードからデモモードへの切替はパスワード入力を求めず即時切替
     if (!isDemoMode) {
       if (onToggleDemoMode) {
@@ -127,6 +134,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   // タイトルの場所を左クリック指定回数検知（管理者設定値、初期値: 3回）
   const handleTitleClick = (e: React.MouseEvent) => {
+    // 履歴、設定、サーバー登録情報画面の時はモード変更処理を無効にする
+    if (isPanelLocked) return;
+
     // 左クリック（e.button === 0）のみを検知（undefinedも許容）
     if (e.button !== 0 && e.button !== undefined) return;
 
@@ -165,55 +175,38 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  // 履歴・設定・サーバー登録情報画面の判定（ヘッダーボタンをモーダル状態／操作不可にし、モード変更を無効化）
+  const isPanelLocked = Boolean(
+    activeView === 'history' ||
+    activeView === 'settings' ||
+    activeView === 'serverVault' ||
+    isSettingsOpen ||
+    isServerVaultOpen
+  );
+  const panelLockReason =
+    activeView === 'history'
+      ? '履歴画面表示中のため操作不可'
+      : activeView === 'settings' || isSettingsOpen
+      ? '設定画面表示中のため操作不可'
+      : activeView === 'serverVault' || isServerVaultOpen
+      ? 'サーバー登録情報画面表示中のため操作不可'
+      : '画面表示中のため操作不可';
+
   useEffect(() => {
-    if (isSettingsOpen || isServerVaultOpen) {
+    if (isPanelLocked) {
       setShowQuickLogout(false);
     }
-  }, [isSettingsOpen, isServerVaultOpen]);
+  }, [isPanelLocked]);
 
   const isBlueskyLoggedIn = Boolean(
     credentials.blueskyConnected || (credentials.blueskyIdentifier && credentials.blueskyAppPassword)
   );
   const isThreadsLoggedIn = Boolean(credentials.threadsConnected || credentials.threadsAccessToken);
-  const isPanelLocked = Boolean(isSettingsOpen || isServerVaultOpen);
-  const panelLockReason = isSettingsOpen
-    ? '設定画面を開いているため操作不可'
-    : 'サーバー登録情報画面を開いているため操作不可';
 
   return (
     <div className="flex flex-col w-full shrink-0">
-      {/* 管理者モード起動中バー */}
-      {isAdminMode && (
-        <div className="w-full bg-amber-950/90 border-b border-amber-500/50 px-4 py-1.5 flex items-center justify-between text-xs text-amber-200 shadow-md z-40">
-          <div className="flex items-center gap-2 font-bold">
-            <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-            <span>🔒 ADMIN MODE 起動中 — 投稿処理およびヘッダーボタンの操作はロックされています</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {onOpenAdminModal && (
-              <button
-                type="button"
-                onClick={onOpenAdminModal}
-                className="px-2.5 py-0.5 rounded-lg bg-amber-500/30 hover:bg-amber-500/50 text-amber-100 border border-amber-400/40 font-bold transition cursor-pointer text-[11px]"
-              >
-                ⚙️ 管理者設定
-              </button>
-            )}
-            {onDeactivateAdminMode && (
-              <button
-                type="button"
-                onClick={onDeactivateAdminMode}
-                className="px-2.5 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold transition cursor-pointer text-[11px] border border-slate-700"
-              >
-                🔓 管理者モード終了
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       <header className="bg-[#0E1320]/95 backdrop-blur-md border-b border-slate-700/80 sticky top-0 z-30 px-3 sm:px-4 lg:px-5 min-h-13 py-1.5 flex items-center justify-between gap-2 shrink-0 shadow-sm">
-      {/* ロゴ & タイトル（左クリック3回でモード切替） */}
+      {/* ロゴ & タイトル（左クリック3回でモード切替: 履歴/設定/サーバー登録情報時は無効） */}
       <div
         id="app-logo-button"
         onClick={(e) => {
@@ -222,9 +215,10 @@ export const Header: React.FC<HeaderProps> = ({
         }}
         className={`flex items-center gap-2 select-none py-1 px-1.5 -ml-1.5 rounded-xl transition relative shrink-0 ${
           isPanelLocked
-            ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none'
+            ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none select-none'
             : 'cursor-pointer group hover:bg-slate-800/60'
         }`}
+        title={isPanelLocked ? panelLockReason : undefined}
       >
         <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden shadow-md shadow-blue-950/40 border border-slate-600/70 flex items-center justify-center bg-slate-900 shrink-0 group-hover:scale-105 group-hover:border-accent transition duration-200">
           <img
@@ -253,7 +247,11 @@ export const Header: React.FC<HeaderProps> = ({
                   triggerModeSwitch();
                 }}
                 title={isPanelLocked ? panelLockReason : 'クリックしてLIVE（本番）モードに切り替え'}
-                className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/40 flex items-center gap-1 shadow-sm hover:bg-sky-500/30 hover:text-white transition cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
+                className={`px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/40 flex items-center gap-1 shadow-sm transition whitespace-nowrap ${
+                  isPanelLocked
+                    ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none select-none'
+                    : 'hover:bg-sky-500/30 hover:text-white cursor-pointer'
+                }`}
               >
                 <Sparkles className="w-2.5 h-2.5 text-sky-300" />
                 <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
@@ -269,7 +267,11 @@ export const Header: React.FC<HeaderProps> = ({
                   triggerModeSwitch();
                 }}
                 title={isPanelLocked ? panelLockReason : 'クリックして安全なDEMOモードに切り替え'}
-                className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-sm hover:bg-emerald-500/30 hover:text-white transition cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
+                className={`px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-sm transition whitespace-nowrap ${
+                  isPanelLocked
+                    ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none select-none'
+                    : 'hover:bg-emerald-500/30 hover:text-white cursor-pointer'
+                }`}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 LIVE MODE
@@ -281,6 +283,88 @@ export const Header: React.FC<HeaderProps> = ({
           </p>
         </div>
       </div>
+
+      {/* メインタブナビゲーション（アプローチ1: 投稿画面 / 履歴 / 設定） */}
+      <nav
+        aria-label="メイン画面ナビゲーション"
+        className="flex items-center gap-1 p-1 bg-slate-950/90 border border-slate-700/80 rounded-xl shadow-inner shrink-0"
+      >
+        <button
+          id="tab-composer"
+          type="button"
+          onClick={() => onSwitchView?.('composer')}
+          disabled={isAdminMode}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+            activeView === 'composer'
+              ? 'btn-accent text-white shadow-sm ring-1 ring-accent/50'
+              : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/70'
+          }`}
+          title="投稿作成画面を表示"
+        >
+          <PenSquare className="w-3.5 h-3.5 shrink-0" />
+          <span>投稿</span>
+        </button>
+
+        <button
+          id="tab-history"
+          type="button"
+          onClick={() => onSwitchView?.('history')}
+          disabled={isAdminMode}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+            activeView === 'history'
+              ? 'btn-accent text-white shadow-sm ring-1 ring-accent/50'
+              : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/70'
+          }`}
+          title="投稿履歴ログを表示"
+        >
+          <History className="w-3.5 h-3.5 shrink-0" />
+          <span>履歴</span>
+          {historyCount > 0 && (
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                activeView === 'history' ? 'bg-white/25 text-white' : 'bg-slate-800 text-slate-300'
+              }`}
+            >
+              {historyCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          id="tab-settings"
+          type="button"
+          onClick={() => onSwitchView?.('settings')}
+          disabled={isAdminMode}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+            activeView === 'settings'
+              ? 'btn-accent text-white shadow-sm ring-1 ring-accent/50'
+              : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/70'
+          }`}
+          title="API・認証・各種設定を表示"
+        >
+          <Settings className="w-3.5 h-3.5 shrink-0" />
+          <span>設定</span>
+        </button>
+
+        {/* LIVEモード限定: サーバー登録情報タブ */}
+        {!isDemoMode && (
+          <button
+            id="tab-server-vault"
+            type="button"
+            onClick={() => onSwitchView?.('serverVault')}
+            disabled={isAdminMode}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+              activeView === 'serverVault'
+                ? 'btn-accent text-white shadow-sm ring-1 ring-accent/50'
+                : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/70'
+            }`}
+            title="サーバー登録情報（保管庫・移行）を表示"
+          >
+            <Database className="w-3.5 h-3.5 shrink-0" />
+            <span>サーバー登録情報</span>
+          </button>
+        )}
+      </nav>
 
       {/* ナビゲーション & アクション */}
       <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -494,7 +578,7 @@ export const Header: React.FC<HeaderProps> = ({
             disabled={isAdminMode || isPanelLocked}
             className={`relative bg-gradient-to-r from-blue-600/10 to-purple-600/10 text-sky-300 px-2.5 py-1.5 rounded-lg border border-sky-500/30 transition flex items-center gap-1.5 text-xs font-semibold shadow-xs whitespace-nowrap shrink-0 ${
               isAdminMode || isPanelLocked
-                ? 'opacity-40 grayscale cursor-not-allowed'
+                ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none select-none'
                 : 'hover:from-blue-600/20 hover:to-purple-600/20 hover:text-sky-200 hover:border-sky-500/50 cursor-pointer'
             }`}
             title={
@@ -519,7 +603,7 @@ export const Header: React.FC<HeaderProps> = ({
             disabled={isAdminMode || isPanelLocked}
             className={`relative bg-slate-900 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
               isAdminMode || isPanelLocked
-                ? 'opacity-40 grayscale cursor-not-allowed'
+                ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none select-none'
                 : 'hover:bg-slate-800 hover:text-white cursor-pointer'
             }`}
             title={
@@ -544,7 +628,7 @@ export const Header: React.FC<HeaderProps> = ({
             disabled={isAdminMode || isPanelLocked}
             className={`relative bg-slate-900 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
               isAdminMode || isPanelLocked
-                ? 'opacity-40 grayscale cursor-not-allowed'
+                ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none select-none'
                 : 'hover:bg-slate-800 hover:text-white cursor-pointer'
             }`}
             title={
@@ -565,97 +649,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* 履歴ボタン */}
-        <button
-          id="header-history-button"
-          type="button"
-          onClick={onOpenHistory}
-          disabled={isAdminMode || isPanelLocked}
-          className={`relative bg-slate-900 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
-            isAdminMode || isPanelLocked
-              ? 'opacity-40 grayscale cursor-not-allowed'
-              : 'hover:bg-slate-800 hover:text-white cursor-pointer'
-          }`}
-          title={
-            isAdminMode
-              ? '管理者モード起動中のため操作不可'
-              : isPanelLocked
-              ? panelLockReason
-              : '投稿履歴を表示'
-          }
-        >
-          <History className="w-4 h-4 shrink-0" />
-          <span className="hidden sm:inline">履歴</span>
-          {historyCount > 0 && (
-            <span className="bg-accent-primary text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full shadow-sm">
-              {historyCount}
-            </span>
-          )}
-        </button>
 
-        {/* カラー切り替え */}
-        <ThemeSelector
-          currentTheme={currentTheme}
-          onSelectTheme={onSelectTheme}
-          variant="header-dropdown"
-          disabled={isAdminMode || isPanelLocked}
-        />
-
-        {/* 設定ボタン (開閉トグル対応・開いている時はアクティブ表示、サーバー登録情報オープン時はグレーアウト) */}
-        <button
-          id="header-settings-button"
-          type="button"
-          onClick={onToggleSettings || onOpenSettings}
-          disabled={isAdminMode || isServerVaultOpen}
-          className={`px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-bold shadow-sm whitespace-nowrap shrink-0 ${
-            isAdminMode || isServerVaultOpen
-              ? 'opacity-40 grayscale cursor-not-allowed bg-accent-subtle text-accent-light border-accent'
-              : isSettingsOpen
-              ? 'btn-accent text-white border-accent shadow-accent/30 cursor-pointer ring-2 ring-accent/40'
-              : 'bg-accent-subtle text-accent-light border-accent hover:brightness-110 cursor-pointer'
-          }`}
-          title={
-            isAdminMode
-              ? '管理者モード起動中のため操作不可'
-              : isServerVaultOpen
-              ? 'サーバー登録情報画面を開いているため操作不可'
-              : isSettingsOpen
-              ? '設定メニューを閉じる'
-              : 'API・アカウント認証設定 & テーマ変更'
-          }
-        >
-          <Settings className={`w-4 h-4 shrink-0 transition-transform duration-200 ${isSettingsOpen ? 'rotate-90' : ''}`} />
-          <span className="hidden sm:inline">{isSettingsOpen ? '設定を閉じる' : '設定'}</span>
-        </button>
-
-        {/* LIVEモード限定: サーバー登録情報一覧ボタン（設定の右に配置） */}
-        {!isDemoMode && (onOpenServerVault || onToggleServerVault) && (
-          <button
-            id="header-server-vault-button"
-            type="button"
-            onClick={onToggleServerVault || onOpenServerVault}
-            disabled={isAdminMode || isSettingsOpen}
-            className={`relative px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-semibold shadow-xs whitespace-nowrap shrink-0 ${
-              isAdminMode || isSettingsOpen
-                ? 'opacity-40 grayscale cursor-not-allowed bg-emerald-950/40 text-emerald-300 border-emerald-500/40'
-                : isServerVaultOpen
-                  ? 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-900/30 cursor-pointer ring-2 ring-emerald-400/40'
-                  : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 border-emerald-500/40 hover:border-emerald-500/60 cursor-pointer'
-            }`}
-            title={
-              isAdminMode
-                ? '管理者モード起動中のため操作不可'
-                : isSettingsOpen
-                ? '設定画面を開いているため操作不可'
-                : isServerVaultOpen
-                ? 'サーバー登録情報一覧を閉じる'
-                : 'LIVEモードでサーバー（/data/account_vault.json）に登録されているBluesky・Threadsのアカウント情報を一覧で確認'
-            }
-          >
-            <Database className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="hidden sm:inline">{isServerVaultOpen ? '登録情報を閉じる' : 'サーバー登録情報'}</span>
-          </button>
-        )}
 
         {/* アプリ情報ボタン */}
         {onOpenAboutApp && (
@@ -666,7 +660,7 @@ export const Header: React.FC<HeaderProps> = ({
             disabled={isAdminMode || isPanelLocked}
             className={`relative bg-slate-900 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-800 transition flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
               isAdminMode || isPanelLocked
-                ? 'opacity-40 grayscale cursor-not-allowed'
+                ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none select-none'
                 : 'hover:bg-slate-800 hover:text-sky-300 hover:border-sky-500/50 cursor-pointer'
             }`}
             title={
@@ -691,7 +685,7 @@ export const Header: React.FC<HeaderProps> = ({
             disabled={isAdminMode || isPanelLocked}
             className={`bg-slate-900 text-slate-300 border border-slate-800 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1.5 text-xs font-medium shadow-sm whitespace-nowrap shrink-0 ${
               isAdminMode || isPanelLocked
-                ? 'opacity-40 grayscale cursor-not-allowed'
+                ? 'opacity-40 grayscale cursor-not-allowed pointer-events-none select-none'
                 : 'hover:bg-slate-800 hover:text-sky-300 hover:border-sky-500/50 cursor-pointer'
             }`}
             title={

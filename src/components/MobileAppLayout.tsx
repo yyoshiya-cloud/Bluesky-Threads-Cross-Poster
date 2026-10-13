@@ -21,7 +21,6 @@ import {
   HelpCircle,
   BarChart3,
   Info,
-  ShieldAlert,
   FolderLock,
   ArrowRight,
   Globe,
@@ -348,32 +347,6 @@ export const MobileAppLayout: React.FC<MobileAppLayoutProps> = ({
         showBottomActionBar ? 'pb-24' : 'pb-6'
       }`}
     >
-      {/* 1. ADMIN MODE 警告バー */}
-      {isAdminMode && (
-        <div className="w-full bg-amber-950/95 border-b border-amber-500/50 px-3 py-1.5 flex items-center justify-between text-[11px] text-amber-200 sticky top-0 z-50">
-          <div className="flex items-center gap-1.5 font-bold truncate">
-            <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
-            <span className="truncate">🔒 ADMIN MODE 起動中</span>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={onOpenAdminModal}
-              className="px-2 py-0.5 rounded bg-amber-500/30 text-amber-100 text-[10px] font-bold"
-            >
-              設定
-            </button>
-            <button
-              type="button"
-              onClick={onDeactivateAdminMode}
-              className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 text-[10px] font-bold"
-            >
-              終了
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 2. モバイル用コンパクトヘッダー */}
       <header
         className={`sticky top-0 z-40 bg-[#0C101A]/95 backdrop-blur-md border-b border-slate-800 px-3 py-2 flex items-center justify-between gap-2 shadow-sm transition-all duration-200 ${

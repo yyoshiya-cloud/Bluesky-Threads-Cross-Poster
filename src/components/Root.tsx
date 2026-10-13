@@ -78,7 +78,9 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
   return (
     <div
       id="app-root"
-      className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans selection:bg-sky-500 selection:text-white"
+      className={`min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans selection:bg-sky-500 selection:text-white ${
+        viewModel.activeView !== 'composer' && !isMobile ? 'h-screen overflow-hidden' : ''
+      }`}
     >
       {/* モバイルUI判定: スマホからの接続またはモバイル表示が選択されている場合 */}
       {isMobile ? (
@@ -99,22 +101,15 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
             isDemoMode={viewModel.isDemoMode}
             onToggleDemoMode={() => dispatch({ type: 'TOGGLE_DEMO_MODE' })}
             onOpenModePasswordModal={() => dispatch({ type: 'OPEN_MODAL', payload: 'modePassword' })}
-            isSettingsOpen={viewModel.modals.settings}
-            onToggleSettings={() => {
-              if (viewModel.modals.settings) {
-                dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
-              } else {
-                dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
-                dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
-                document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              }
-            }}
-            onOpenSettings={() => {
-              dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
-              dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
-              document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }}
-            onOpenHistory={() => dispatch({ type: 'OPEN_MODAL', payload: 'history' })}
+            isSettingsOpen={viewModel.activeView === 'settings' || viewModel.modals.settings}
+            onToggleSettings={() =>
+              dispatch({
+                type: 'SWITCH_VIEW',
+                payload: viewModel.activeView === 'settings' ? 'composer' : 'settings',
+              })
+            }
+            onOpenSettings={() => dispatch({ type: 'SWITCH_VIEW', payload: 'settings' })}
+            onOpenHistory={() => dispatch({ type: 'SWITCH_VIEW', payload: 'history' })}
             historyCount={viewModel.history.length}
             onOpenAnalytics={() => dispatch({ type: 'OPEN_MODAL', payload: 'analytics' })}
             onOpenScheduledPosts={() => dispatch({ type: 'OPEN_MODAL', payload: 'scheduled' })}
@@ -122,21 +117,14 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
             onOpenUserGuide={() => dispatch({ type: 'OPEN_MODAL', payload: 'userGuide' })}
             onOpenQuitConfirm={() => dispatch({ type: 'OPEN_MODAL', payload: 'quitConfirm' })}
             onOpenAboutApp={() => dispatch({ type: 'OPEN_MODAL', payload: 'aboutApp' })}
-            isServerVaultOpen={viewModel.modals.serverVault}
-            onToggleServerVault={() => {
-              if (viewModel.modals.serverVault) {
-                dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
-              } else {
-                dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
-                dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' });
-                document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              }
-            }}
-            onOpenServerVault={() => {
-              dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
-              dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' });
-              document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }}
+            isServerVaultOpen={viewModel.activeView === 'serverVault' || viewModel.modals.serverVault}
+            onToggleServerVault={() =>
+              dispatch({
+                type: 'SWITCH_VIEW',
+                payload: viewModel.activeView === 'serverVault' ? 'composer' : 'serverVault',
+              })
+            }
+            onOpenServerVault={() => dispatch({ type: 'SWITCH_VIEW', payload: 'serverVault' })}
             currentTheme={viewModel.theme}
             onSelectTheme={(theme) => dispatch({ type: 'SELECT_THEME', payload: theme })}
             onLogout={(platform) => dispatch({ type: 'LOGOUT', payload: platform })}
@@ -146,102 +134,172 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
             onDeactivateAdminMode={() => setIsAdminMode(false)}
             onToggleViewMode={toggleViewMode}
             isMobileUserAgent={isMobileUserAgent}
+            activeView={viewModel.activeView}
+            onSwitchView={(view) => dispatch({ type: 'SWITCH_VIEW', payload: view })}
           />
 
-          {/* 2. メインコンテンツ領域 (Passive View: EditorSection) */}
-          <main className="flex-1 max-w-[1700px] w-full mx-auto px-3 sm:px-5 lg:px-6 py-3 sm:py-4">
-            <EditorSection
-              text={viewModel.text}
-              onChangeText={(val) => dispatch({ type: 'UPDATE_TEXT', payload: val })}
-              blueskyText={viewModel.blueskyText}
-              onChangeBlueskyText={(val) => dispatch({ type: 'UPDATE_BLUESKY_TEXT', payload: val })}
-              threadsText={viewModel.threadsText}
-              onChangeThreadsText={(val) => dispatch({ type: 'UPDATE_THREADS_TEXT', payload: val })}
-              customPlatformText={viewModel.customPlatformText}
-              onToggleCustomPlatformText={(val) => dispatch({ type: 'TOGGLE_CUSTOM_PLATFORM_TEXT', payload: val })}
-              images={viewModel.images}
-              onAddImages={(imgs) => dispatch({ type: 'ADD_IMAGES', payload: imgs })}
-              onReorderImages={(newImages) => dispatch({ type: 'SET_IMAGES', payload: newImages })}
-              onRemoveImage={(id) => dispatch({ type: 'REMOVE_IMAGE', payload: id })}
-              onClearImages={() => dispatch({ type: 'CLEAR_IMAGES' })}
-              onUpdateImageAlt={(id, alt) => dispatch({ type: 'UPDATE_IMAGE_ALT', payload: { id, alt } })}
-              postToBluesky={viewModel.postToBluesky}
-              onTogglePostToBluesky={(val) => dispatch({ type: 'TOGGLE_POST_TO_BLUESKY', payload: val })}
-              postToThreads={viewModel.postToThreads}
-              onTogglePostToThreads={(val) => dispatch({ type: 'TOGGLE_POST_TO_THREADS', payload: val })}
-              threadsTopic={viewModel.threadsTopic}
-              onChangeThreadsTopic={(val) => dispatch({ type: 'UPDATE_THREADS_TOPIC', payload: val })}
-              autoSplit={viewModel.autoSplit}
-              onToggleAutoSplit={(val) => dispatch({ type: 'TOGGLE_AUTO_SPLIT', payload: val })}
-              includeNumbering={viewModel.includeNumbering}
-              onToggleIncludeNumbering={(val) => dispatch({ type: 'TOGGLE_INCLUDE_NUMBERING', payload: val })}
-              blueskySplits={viewModel.blueskySplits}
-              threadsSplits={viewModel.threadsSplits}
-              credentials={viewModel.credentials}
-              isDemoMode={viewModel.isDemoMode}
-              onSubmitPost={() => dispatch({ type: 'SUBMIT_POST_REQUEST' })}
-              onSchedulePost={(scheduledAt) =>
-                dispatch({ type: 'SCHEDULE_POST_REQUEST', payload: { scheduledAt } })
-              }
-              onOpenScheduledPosts={() => dispatch({ type: 'OPEN_MODAL', payload: 'scheduled' })}
-              scheduledPostsCount={viewModel.scheduledPosts.filter((p) => p.status === 'pending').length}
-              onOpenSettings={() => {
-                dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
-                dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
-                document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              }}
-              isSettingsOpen={viewModel.modals.settings}
-              onToggleSettings={() => {
-                if (viewModel.modals.settings) {
-                  dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
-                } else {
-                  dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
-                  dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
-                  document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          {/* 2. メインコンテンツ領域 (Passive View: activeView によるタブ画面切り替え) */}
+          <main
+            className={`flex-1 max-w-[1700px] w-full mx-auto px-3 sm:px-5 lg:px-6 ${
+              viewModel.activeView === 'composer'
+                ? 'py-3 sm:py-4'
+                : 'py-2 flex flex-col overflow-hidden'
+            }`}
+          >
+            {viewModel.activeView === 'composer' && (
+              <EditorSection
+                text={viewModel.text}
+                onChangeText={(val) => dispatch({ type: 'UPDATE_TEXT', payload: val })}
+                blueskyText={viewModel.blueskyText}
+                onChangeBlueskyText={(val) => dispatch({ type: 'UPDATE_BLUESKY_TEXT', payload: val })}
+                threadsText={viewModel.threadsText}
+                onChangeThreadsText={(val) => dispatch({ type: 'UPDATE_THREADS_TEXT', payload: val })}
+                customPlatformText={viewModel.customPlatformText}
+                onToggleCustomPlatformText={(val) => dispatch({ type: 'TOGGLE_CUSTOM_PLATFORM_TEXT', payload: val })}
+                images={viewModel.images}
+                onAddImages={(imgs) => dispatch({ type: 'ADD_IMAGES', payload: imgs })}
+                onReorderImages={(newImages) => dispatch({ type: 'SET_IMAGES', payload: newImages })}
+                onRemoveImage={(id) => dispatch({ type: 'REMOVE_IMAGE', payload: id })}
+                onClearImages={() => dispatch({ type: 'CLEAR_IMAGES' })}
+                onUpdateImageAlt={(id, alt) => dispatch({ type: 'UPDATE_IMAGE_ALT', payload: { id, alt } })}
+                postToBluesky={viewModel.postToBluesky}
+                onTogglePostToBluesky={(val) => dispatch({ type: 'TOGGLE_POST_TO_BLUESKY', payload: val })}
+                postToThreads={viewModel.postToThreads}
+                onTogglePostToThreads={(val) => dispatch({ type: 'TOGGLE_POST_TO_THREADS', payload: val })}
+                threadsTopic={viewModel.threadsTopic}
+                onChangeThreadsTopic={(val) => dispatch({ type: 'UPDATE_THREADS_TOPIC', payload: val })}
+                autoSplit={viewModel.autoSplit}
+                onToggleAutoSplit={(val) => dispatch({ type: 'TOGGLE_AUTO_SPLIT', payload: val })}
+                includeNumbering={viewModel.includeNumbering}
+                onToggleIncludeNumbering={(val) => dispatch({ type: 'TOGGLE_INCLUDE_NUMBERING', payload: val })}
+                blueskySplits={viewModel.blueskySplits}
+                threadsSplits={viewModel.threadsSplits}
+                credentials={viewModel.credentials}
+                isDemoMode={viewModel.isDemoMode}
+                onSubmitPost={() => dispatch({ type: 'SUBMIT_POST_REQUEST' })}
+                onSchedulePost={(scheduledAt) =>
+                  dispatch({ type: 'SCHEDULE_POST_REQUEST', payload: { scheduledAt } })
                 }
-              }}
-              onCloseSettings={() => dispatch({ type: 'CLOSE_MODAL', payload: 'settings' })}
-              onSaveCredentials={(creds) => dispatch({ type: 'SAVE_CREDENTIALS', payload: creds })}
-              currentTheme={viewModel.theme}
-              onSelectTheme={(theme) => dispatch({ type: 'SELECT_THEME', payload: theme })}
-              onLogout={(platform) => dispatch({ type: 'LOGOUT', payload: platform })}
-              onDeleteSavedAccount={(platform) => dispatch({ type: 'DELETE_SAVED_ACCOUNT', payload: platform })}
-              onOpenUserGuide={() => dispatch({ type: 'OPEN_MODAL', payload: 'userGuide' })}
-              onOpenCommErrors={() => setIsCommErrorModalOpen(true)}
-              onOpenServerVault={() => {
-                dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
-                dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' });
-                document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              }}
-              isServerVaultOpen={viewModel.modals.serverVault}
-              onToggleServerVault={() => {
-                if (viewModel.modals.serverVault) {
-                  dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
-                } else {
+                onOpenScheduledPosts={() => dispatch({ type: 'OPEN_MODAL', payload: 'scheduled' })}
+                scheduledPostsCount={viewModel.scheduledPosts.filter((p) => p.status === 'pending').length}
+                onOpenSettings={() => dispatch({ type: 'SWITCH_VIEW', payload: 'settings' })}
+                isSettingsOpen={viewModel.modals.settings}
+                onToggleSettings={() => dispatch({ type: 'SWITCH_VIEW', payload: 'settings' })}
+                onCloseSettings={() => dispatch({ type: 'CLOSE_MODAL', payload: 'settings' })}
+                onSaveCredentials={(creds) => dispatch({ type: 'SAVE_CREDENTIALS', payload: creds })}
+                currentTheme={viewModel.theme}
+                onSelectTheme={(theme) => dispatch({ type: 'SELECT_THEME', payload: theme })}
+                onLogout={(platform) => dispatch({ type: 'LOGOUT', payload: platform })}
+                onDeleteSavedAccount={(platform) => dispatch({ type: 'DELETE_SAVED_ACCOUNT', payload: platform })}
+                onOpenUserGuide={() => dispatch({ type: 'OPEN_MODAL', payload: 'userGuide' })}
+                onOpenCommErrors={() => setIsCommErrorModalOpen(true)}
+                onOpenServerVault={() => {
                   dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
                   dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' });
                   document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }}
+                isServerVaultOpen={viewModel.modals.serverVault}
+                onToggleServerVault={() => {
+                  if (viewModel.modals.serverVault) {
+                    dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' });
+                  } else {
+                    dispatch({ type: 'CLOSE_MODAL', payload: 'settings' });
+                    dispatch({ type: 'OPEN_MODAL', payload: 'serverVault' });
+                    document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                  }
+                }}
+                onCloseServerVault={() => dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' })}
+                onNotify={(toast) => dispatch({ type: 'NOTIFY', payload: toast })}
+                lastSavedAt={viewModel.lastSavedAt}
+                draftStatus={viewModel.draftStatus}
+                draftError={viewModel.draftError}
+                onClearDraft={() => dispatch({ type: 'CLEAR_DRAFT' })}
+                replySettings={viewModel.replySettings}
+                onUpdateReplySettings={(settings) =>
+                  dispatch({ type: 'UPDATE_REPLY_SETTINGS', payload: settings })
                 }
-              }}
-              onCloseServerVault={() => dispatch({ type: 'CLOSE_MODAL', payload: 'serverVault' })}
-              onNotify={(toast) => dispatch({ type: 'NOTIFY', payload: toast })}
-              lastSavedAt={viewModel.lastSavedAt}
-              draftStatus={viewModel.draftStatus}
-              draftError={viewModel.draftError}
-              onClearDraft={() => dispatch({ type: 'CLEAR_DRAFT' })}
-              replySettings={viewModel.replySettings}
-              onUpdateReplySettings={(settings) =>
-                dispatch({ type: 'UPDATE_REPLY_SETTINGS', payload: settings })
-              }
-              onSetResolvedReplyTarget={(platform, target) =>
-                dispatch({ type: 'SET_RESOLVED_REPLY_TARGET', payload: { platform, target } })
-              }
-              onClearReplyTarget={(platform) =>
-                dispatch({ type: 'CLEAR_REPLY_TARGET', payload: platform || 'all' })
-              }
-              isAdminMode={isAdminMode}
-              onOpenAdminModal={() => setIsAdminModalOpen(true)}
-            />
+                onSetResolvedReplyTarget={(platform, target) =>
+                  dispatch({ type: 'SET_RESOLVED_REPLY_TARGET', payload: { platform, target } })
+                }
+                onClearReplyTarget={(platform) =>
+                  dispatch({ type: 'CLEAR_REPLY_TARGET', payload: platform || 'all' })
+                }
+                isAdminMode={isAdminMode}
+                onOpenAdminModal={() => setIsAdminModalOpen(true)}
+              />
+            )}
+
+            {viewModel.activeView === 'history' && (
+              <div className="w-full flex-1 flex flex-col items-center justify-start animate-in fade-in duration-150 py-1 overflow-hidden">
+                <HistoryModal
+                  isOpen={true}
+                  isPanel={true}
+                  onClose={() => dispatch({ type: 'SWITCH_VIEW', payload: 'composer' })}
+                  history={viewModel.history}
+                  onClearHistory={() => dispatch({ type: 'CLEAR_HISTORY' })}
+                  onDeleteItem={(id) => dispatch({ type: 'DELETE_HISTORY_ITEM', payload: id })}
+                  onReuseText={(reusedText) => {
+                    dispatch({ type: 'REUSE_TEXT', payload: reusedText });
+                    dispatch({ type: 'SWITCH_VIEW', payload: 'composer' });
+                    dispatch({
+                      type: 'NOTIFY',
+                      payload: {
+                        type: 'info',
+                        title: '📝 本文を読み込みました',
+                        message: '投稿画面に切り替えました。編集して再送信できます。',
+                      },
+                    });
+                  }}
+                  onOpenAnalytics={() => dispatch({ type: 'OPEN_MODAL', payload: 'analytics' })}
+                  onOpenCommErrors={() => setIsCommErrorModalOpen(true)}
+                  onRetryPost={(item, targetPlatform) =>
+                    dispatch({ type: 'RETRY_HISTORY_POST', payload: { item, targetPlatform } })
+                  }
+                />
+              </div>
+            )}
+
+            {viewModel.activeView === 'settings' && (
+              <div className="w-full flex-1 flex flex-col items-center justify-start animate-in fade-in duration-150 py-1 overflow-hidden">
+                <SettingsModal
+                  isOpen={true}
+                  isPanel={true}
+                  onClose={() => dispatch({ type: 'SWITCH_VIEW', payload: 'composer' })}
+                  credentials={viewModel.credentials}
+                  onSaveCredentials={(creds) => dispatch({ type: 'SAVE_CREDENTIALS', payload: creds })}
+                  isDemoMode={viewModel.isDemoMode}
+                  currentTheme={viewModel.theme}
+                  onSelectTheme={(theme) => dispatch({ type: 'SELECT_THEME', payload: theme })}
+                  onLogout={(platform) => dispatch({ type: 'LOGOUT', payload: platform })}
+                  onDeleteSavedAccount={(platform) => dispatch({ type: 'DELETE_SAVED_ACCOUNT', payload: platform })}
+                  onOpenUserGuide={() => dispatch({ type: 'OPEN_MODAL', payload: 'userGuide' })}
+                  onOpenCommErrors={() => setIsCommErrorModalOpen(true)}
+                  onOpenServerVault={() => dispatch({ type: 'SWITCH_VIEW', payload: 'serverVault' })}
+                  onNotify={(toast) => dispatch({ type: 'NOTIFY', payload: toast })}
+                  isAdminMode={isAdminMode}
+                  onOpenAdminModal={() => setIsAdminModalOpen(true)}
+                />
+              </div>
+            )}
+
+            {viewModel.activeView === 'serverVault' && (
+              <div className="w-full flex-1 flex flex-col items-center justify-start animate-in fade-in duration-150 py-1 overflow-hidden">
+                <ServerVaultViewerModal
+                  isOpen={true}
+                  isPanel={true}
+                  onClose={() => dispatch({ type: 'SWITCH_VIEW', payload: 'composer' })}
+                  onOpenSettings={() => dispatch({ type: 'SWITCH_VIEW', payload: 'settings' })}
+                  isBlueskyLoggedIn={Boolean(
+                    viewModel.credentials.blueskyConnected ||
+                    (viewModel.credentials.blueskyIdentifier && viewModel.credentials.blueskyAppPassword)
+                  )}
+                  isThreadsLoggedIn={Boolean(
+                    viewModel.credentials.threadsConnected || viewModel.credentials.threadsAccessToken
+                  )}
+                  isDemoMode={viewModel.isDemoMode}
+                />
+              </div>
+            )}
           </main>
 
           {/* 3. フッター */}
@@ -263,8 +321,7 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
         isOpen={viewModel.modals.userGuide}
         onClose={() => dispatch({ type: 'CLOSE_MODAL', payload: 'userGuide' })}
         onOpenSettings={() => {
-          dispatch({ type: 'OPEN_MODAL', payload: 'settings' });
-          document.getElementById('realtime-preview-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          dispatch({ type: 'SWITCH_VIEW', payload: 'settings' });
         }}
       />
 
@@ -280,7 +337,7 @@ export const Root: React.FC<RootProps> = ({ viewModel }) => {
       />
 
       <HistoryModal
-        isOpen={viewModel.modals.history}
+        isOpen={viewModel.modals.history && viewModel.activeView !== 'history'}
         onClose={() => dispatch({ type: 'CLOSE_MODAL', payload: 'history' })}
         history={viewModel.history}
         onClearHistory={() => dispatch({ type: 'CLEAR_HISTORY' })}
